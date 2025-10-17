@@ -19,7 +19,19 @@ import com.example.helloworld.{GreeterServiceClient, HelloRequest, HelloReply}
 object GreeterClient {
 
   def main(args: Array[String]): Unit = {
-    implicit val sys: ActorSystem[Nothing] = ActorSystem[Nothing](Behaviors.empty[Nothing], "GreeterClient")
+    // Use minimal config without clustering
+    val config = com.typesafe.config.ConfigFactory.parseString(
+      """
+      pekko.http.server.preview.enable-http2 = on
+      pekko.grpc.client."helloworld.GreeterService" {
+        host = 127.0.0.1
+        port = 8080
+        use-tls = false
+      }
+      """
+    ).withFallback(com.typesafe.config.ConfigFactory.defaultReference())
+
+    implicit val sys: ActorSystem[Nothing] = ActorSystem[Nothing](Behaviors.empty[Nothing], "GreeterClient", config)
     implicit val ec: ExecutionContext = sys.executionContext
 
     val client = GreeterServiceClient(GrpcClientSettings.fromConfig("helloworld.GreeterService"))
