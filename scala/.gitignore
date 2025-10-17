@@ -1,0 +1,50 @@
+# Scala & SBT
+*.class
+*.log
+*.jar
+*.war
+*.ear
+.cache
+.classpath
+.project
+.settings/
+bin/
+target/
+lib_managed/
+src_managed/
+project/boot/
+project/plugins/project/
+.history
+.lib/
+dist/
+.cache-main
+.cache-tests
+
+# sbt specific
+.bsp/
+project/target/
+project/project/
+
+# IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.metals/
+.bloop/
+metals.sbt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+spring-boot-logger.log
+
+# Build outputs
+out/
+build/
+classes/
