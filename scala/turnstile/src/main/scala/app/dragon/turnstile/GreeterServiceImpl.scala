@@ -1,4 +1,4 @@
-package com.example.helloworld
+package app.dragon.turnstile
 
 //#import
 import scala.concurrent.Future
@@ -11,6 +11,7 @@ import pekko.stream.scaladsl.Keep
 import pekko.stream.scaladsl.MergeHub
 import pekko.stream.scaladsl.Sink
 import pekko.stream.scaladsl.Source
+import com.example.helloworld.{GreeterService, HelloRequest, HelloReply}
 
 //#import
 

@@ -1,4 +1,4 @@
-package com.example.helloworld
+package app.dragon.turnstile
 
 //#import
 import scala.concurrent.duration._
@@ -11,6 +11,7 @@ import pekko.actor.typed.ActorSystem
 import pekko.actor.typed.scaladsl.Behaviors
 import pekko.grpc.GrpcClientSettings
 import pekko.stream.scaladsl.Source
+import com.example.helloworld.{GreeterServiceClient, HelloRequest, HelloReply}
 
 //#import
 

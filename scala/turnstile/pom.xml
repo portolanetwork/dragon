@@ -165,7 +165,7 @@
               <arguments>
                 <argument>-classpath</argument>
                 <classpath />
-                <argument>com.example.helloworld.GreeterServer</argument>
+                <argument>app.dragon.turnstile.GreeterServer</argument>
               </arguments>
             </configuration>
           </execution>

@@ -1,5 +1,5 @@
 //#full-example
-package com.example.helloworld
+package app.dragon.turnstile
 
 import org.apache.pekko
 import pekko.actor.testkit.typed.scaladsl.ActorTestKit
