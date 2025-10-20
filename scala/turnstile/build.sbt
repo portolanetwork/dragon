@@ -1,7 +1,7 @@
 import app.dragon.turnstile.{BuildInfo, TurnstileBuild}
 import com.typesafe.sbt.packager.docker.*
 
-ThisBuild / scalaVersion := "3.3.4"
+ThisBuild / scalaVersion := "3.7.3"
 ThisBuild / organization := "app.dragon.turnstile"
 ThisBuild / organizationName := "Turnstile"
 ThisBuild / dynverSeparator := "-"
