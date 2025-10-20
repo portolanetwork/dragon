@@ -1,4 +1,4 @@
-package app.dragon.turnstile.controller
+package app.dragon.turnstile.config
 
 import com.typesafe.config.{Config, ConfigFactory}
 import org.slf4j.{Logger, LoggerFactory}

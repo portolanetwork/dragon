@@ -15,6 +15,7 @@ object Dependencies {
   val apacheCommonsIoVersion = "2.18.0"
   val jwtScalaVersion = "10.0.1"
   val protobufJavaUtilVersion = "3.25.6"
+  val mcpSdkVersion = "0.14.1"
 
   val dependencies = Seq(
     "org.apache.pekko" %% "pekko-actor" % pekkoVersion,
@@ -60,6 +61,8 @@ object Dependencies {
     "com.github.jwt-scala" %% "jwt-core" % jwtScalaVersion,
     "com.github.jwt-scala" %% "jwt-play" % jwtScalaVersion,
     "com.google.protobuf" % "protobuf-java-util" % protobufJavaUtilVersion,
+    // MCP (Model Context Protocol)
+    "io.modelcontextprotocol.sdk" % "mcp" % mcpSdkVersion,
     // Test
     "org.apache.pekko" %% "pekko-actor-testkit-typed" % pekkoVersion % Test,
     "org.scalamock" %% "scalamock" % scalaMockVersion % Test,

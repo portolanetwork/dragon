@@ -1,7 +1,7 @@
 package app.dragon.turnstile.controller
 
+import app.dragon.turnstile.service.GreeterServiceImpl
 import com.example.helloworld.{GreeterService, GreeterServiceHandler}
-import app.dragon.turnstile.GreeterServiceImpl
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.grpc.scaladsl.{ServerReflection, ServiceHandler}
 import org.apache.pekko.http.scaladsl.Http

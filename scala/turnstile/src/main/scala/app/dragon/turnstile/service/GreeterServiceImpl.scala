@@ -1,17 +1,13 @@
-package app.dragon.turnstile
+package app.dragon.turnstile.service
 
 //#import
-import scala.concurrent.Future
-
+import com.example.helloworld.{GreeterService, HelloReply, HelloRequest}
 import org.apache.pekko
-import pekko.NotUsed
-import pekko.actor.typed.ActorSystem
-import pekko.stream.scaladsl.BroadcastHub
-import pekko.stream.scaladsl.Keep
-import pekko.stream.scaladsl.MergeHub
-import pekko.stream.scaladsl.Sink
-import pekko.stream.scaladsl.Source
-import com.example.helloworld.{GreeterService, HelloRequest, HelloReply}
+import org.apache.pekko.NotUsed
+import org.apache.pekko.actor.typed.ActorSystem
+import org.apache.pekko.stream.scaladsl.{BroadcastHub, Keep, MergeHub, Sink, Source}
+
+import scala.concurrent.Future
 
 //#import
 

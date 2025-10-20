@@ -1,16 +1,17 @@
 //#full-example
 package app.dragon.turnstile
 
+import app.dragon.turnstile.service.GreeterServiceImpl
+import com.example.helloworld.{HelloReply, HelloRequest}
 import org.apache.pekko
 import pekko.actor.testkit.typed.scaladsl.ActorTestKit
 import pekko.actor.typed.ActorSystem
-
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 
 class GreeterServiceImplSpec
   extends AnyWordSpec
