@@ -1,9 +1,8 @@
 package app.dragon.turnstile.mcp
 
+import app.dragon.turnstile.service.McpService
 import com.typesafe.config.Config
-import io.modelcontextprotocol.common.McpTransportContext
 import io.modelcontextprotocol.server.{McpServer, McpStatelessSyncServer}
-import io.modelcontextprotocol.spec.McpSchema
 import org.apache.pekko.actor.typed.ActorSystem
 import org.slf4j.{Logger, LoggerFactory}
 import scala.jdk.CollectionConverters.*
@@ -16,15 +15,17 @@ import scala.jdk.CollectionConverters.*
  * - io.modelcontextprotocol.sdk for MCP protocol handling
  * - Custom Pekko HTTP transport (PekkoHttpStatelessServerTransport)
  * - McpServer.sync() builder for stateless, horizontally scalable design
+ * - McpService for tool definitions and handlers (separation of concerns)
  *
  * Implements HTTP transport for internet accessibility:
  * - Single /mcp endpoint supporting POST for JSON-RPC
  * - Stateless request handling
  * - Compliant with MCP specification
  *
- * Currently implements:
- * - echo: Simple message echo for testing
- * - system_info: Return server system information
+ * Architecture:
+ * - TurnstileMcpServer: Transport and server lifecycle management
+ * - McpService: Business logic for tool definitions and handlers
+ * - PekkoHttpStatelessServerTransport: HTTP protocol adapter
  */
 class TurnstileMcpServer(config: Config)(implicit system: ActorSystem[?]) {
   private val logger: Logger = LoggerFactory.getLogger(classOf[TurnstileMcpServer])
@@ -34,115 +35,22 @@ class TurnstileMcpServer(config: Config)(implicit system: ActorSystem[?]) {
   private val host = config.getString("host")
   private val port = config.getInt("port")
 
+  // Create the service layer for tool handlers
+  private val mcpService = McpService(config)
+
   // Create the Pekko HTTP transport
   private val transport = new PekkoHttpStatelessServerTransport(host, port, "/mcp")(system)
 
-  // Define tool handlers BEFORE using them in the builder
-  private val echoToolHandler: java.util.function.BiFunction[McpTransportContext, McpSchema.CallToolRequest, McpSchema.CallToolResult] =
-    (ctx: McpTransportContext, request: McpSchema.CallToolRequest) => {
-      val arguments = request.arguments()
-      val message = if (arguments != null && arguments.containsKey("message")) {
-        arguments.get("message").toString
-      } else {
-        ""
-      }
+  // Build the stateless sync server using the SDK builder pattern
+  private val mcpServer: McpStatelessSyncServer = {
+    var builder = McpServer.sync(transport).serverInfo(serverName, serverVersion)
 
-      logger.debug(s"Echo tool called with message: $message")
-
-      val content: java.util.List[McpSchema.Content] = List(
-        new McpSchema.TextContent(s"Echo: $message")
-      ).asJava.asInstanceOf[java.util.List[McpSchema.Content]]
-
-      McpSchema.CallToolResult.builder()
-        .content(content)
-        .isError(false)
-        .build()
+    // Register all tools from the service
+    mcpService.getToolsWithHandlers.foreach { case (tool, handler) =>
+      builder = builder.toolCall(tool, handler)
     }
 
-  private val systemInfoToolHandler: java.util.function.BiFunction[McpTransportContext, McpSchema.CallToolRequest, McpSchema.CallToolResult] =
-    (ctx: McpTransportContext, request: McpSchema.CallToolRequest) => {
-      val runtime = Runtime.getRuntime
-      val totalMemory = runtime.totalMemory()
-      val freeMemory = runtime.freeMemory()
-      val usedMemory = totalMemory - freeMemory
-      val maxMemory = runtime.maxMemory()
-
-      val info = s"""System Information:
-                    |Server: $serverName v$serverVersion
-                    |Java Version: ${System.getProperty("java.version")}
-                    |Java Vendor: ${System.getProperty("java.vendor")}
-                    |OS Name: ${System.getProperty("os.name")}
-                    |OS Architecture: ${System.getProperty("os.arch")}
-                    |OS Version: ${System.getProperty("os.version")}
-                    |Available Processors: ${runtime.availableProcessors()}
-                    |Total Memory: ${totalMemory / 1024 / 1024} MB
-                    |Used Memory: ${usedMemory / 1024 / 1024} MB
-                    |Free Memory: ${freeMemory / 1024 / 1024} MB
-                    |Max Memory: ${maxMemory / 1024 / 1024} MB
-                    |""".stripMargin
-
-      logger.debug("System info tool called")
-
-      val content: java.util.List[McpSchema.Content] = List(
-        new McpSchema.TextContent(info)
-      ).asJava.asInstanceOf[java.util.List[McpSchema.Content]]
-
-      McpSchema.CallToolResult.builder()
-        .content(content)
-        .isError(false)
-        .build()
-    }
-
-  // Create the stateless sync server using the builder pattern
-  private val mcpServer: McpStatelessSyncServer = McpServer.sync(transport)
-    .serverInfo(serverName, serverVersion)
-    .toolCall(createEchoTool(), echoToolHandler)
-    .toolCall(createSystemInfoTool(), systemInfoToolHandler)
-    .build()
-
-  /**
-   * Create the echo tool definition
-   */
-  private def createEchoTool(): McpSchema.Tool = {
-    val inputSchema = new McpSchema.JsonSchema(
-      "object",
-      Map[String, Object](
-        "message" -> Map[String, Object](
-          "type" -> "string",
-          "description" -> "The message to echo back"
-        ).asJava
-      ).asJava,
-      List("message").asJava,
-      null, // additionalProperties
-      null, // defs
-      null  // definitions
-    )
-
-    McpSchema.Tool.builder()
-      .name("echo")
-      .description("Echoes back the provided message")
-      .inputSchema(inputSchema)
-      .build()
-  }
-
-  /**
-   * Create the system_info tool definition
-   */
-  private def createSystemInfoTool(): McpSchema.Tool = {
-    val inputSchema = new McpSchema.JsonSchema(
-      "object",
-      Map.empty[String, Object].asJava,
-      List.empty[String].asJava,
-      null, // additionalProperties
-      null, // defs
-      null  // definitions
-    )
-
-    McpSchema.Tool.builder()
-      .name("system_info")
-      .description("Returns system information about the Turnstile server")
-      .inputSchema(inputSchema)
-      .build()
+    builder.build()
   }
 
   /**

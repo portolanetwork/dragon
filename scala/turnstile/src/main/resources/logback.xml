@@ -16,7 +16,7 @@
         <appender-ref ref="STDOUT" />
     </appender>
 
-    <logger name="app.dragon.turnstile.mcp" level="DEBUG" />
+    <logger name="app.dragon.turnstile" level="DEBUG" />
 
     <root level="INFO">
         <appender-ref ref="ASYNC"/>
