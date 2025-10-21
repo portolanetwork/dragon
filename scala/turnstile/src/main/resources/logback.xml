@@ -4,7 +4,9 @@
         logging config, see the Pekko docs: https://pekko.apache.org/docs/pekko/current/typed/logging.html#logback -->
     <appender name="STDOUT" target="System.out" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>[%date{ISO8601}] [%level] [%logger] [%thread] [%X{pekkoSource}] - %msg%n</pattern>
+            <!-- pattern>[%date{ISO8601}] [%level] [%logger] [%thread] [%X{pekkoSource}] - %msg%n</pattern -->
+            <pattern>  [%date{ISO8601}] %highlight([%level]) %magenta([%thread]) %cyan([%X{akkaSource}])  %yellow(%logger{40}.%M\(%class{0}.scala:%line\)) - %msg%throwable%n</pattern>
+
         </encoder>
     </appender>
 
@@ -13,6 +15,8 @@
         <neverBlock>true</neverBlock>
         <appender-ref ref="STDOUT" />
     </appender>
+
+    <logger name="app.dragon.turnstile.mcp" level="DEBUG" />
 
     <root level="INFO">
         <appender-ref ref="ASYNC"/>
