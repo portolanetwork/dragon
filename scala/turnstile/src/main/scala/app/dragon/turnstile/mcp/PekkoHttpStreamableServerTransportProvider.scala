@@ -68,6 +68,9 @@ class PekkoHttpStreamableServerTransportProvider(
   // Active sessions
   private val sessions = new ConcurrentHashMap[String, McpStreamableServerSession]()
 
+  // Listening transports for each session (used to send responses)
+  private val listeningTransports = new ConcurrentHashMap[String, PekkoHttpStreamableMcpSessionTransport]()
+
   // Server binding
   @volatile private var binding: Option[Http.ServerBinding] = None
 
@@ -234,8 +237,9 @@ class PekkoHttpStreamableServerTransportProvider(
       }
 
       if (lastEventIdOpt.isEmpty) {
-        // Establish new listening stream
+        // Establish new listening stream and store transport for later use
         session.listeningStream(sessionTransport)
+        listeningTransports.put(sessionId, sessionTransport)
       }
 
       val eventStream = source.map(event => ByteString(event.toString))
@@ -342,29 +346,45 @@ class PekkoHttpStreamableServerTransportProvider(
         complete(StatusCodes.Accepted)
 
       case request: McpSchema.JSONRPCRequest =>
-        // For streaming responses, return SSE
-        val (queue, source) = Source.queue[ServerSentEvent](bufferSize = 100, OverflowStrategy.backpressure)
-          .toMat(BroadcastHub.sink)(Keep.both)
-          .run()
+        // Use the listening transport if available, otherwise create per-request stream
+        val transport = listeningTransports.get(sessionId)
+        if (transport != null) {
+          // Send response via the listening stream
+          try {
+            session.responseStream(request, transport)
+              .contextWrite(ctx => ctx.put(McpTransportContext.KEY, transportContext))
+              .block()
+            complete(StatusCodes.Accepted)
+          } catch {
+            case ex: Exception =>
+              logger.error(s"Failed to handle request: ${ex.getMessage}", ex)
+              complete(StatusCodes.InternalServerError -> ex.getMessage)
+          }
+        } else {
+          // No listening stream - create per-request SSE stream
+          val (queue, source) = Source.queue[ServerSentEvent](bufferSize = 100, OverflowStrategy.backpressure)
+            .toMat(BroadcastHub.sink)(Keep.both)
+            .run()
 
-        val sessionTransport = new PekkoHttpStreamableMcpSessionTransport(sessionId, queue, jsonMapper)
+          val sessionTransport = new PekkoHttpStreamableMcpSessionTransport(sessionId, queue, jsonMapper)
 
-        try {
-          session.responseStream(request, sessionTransport)
-            .contextWrite(ctx => ctx.put(McpTransportContext.KEY, transportContext))
-            .block()
-        } catch {
-          case ex: Exception =>
-            logger.error(s"Failed to handle request stream: ${ex.getMessage}")
-        }
+          try {
+            session.responseStream(request, sessionTransport)
+              .contextWrite(ctx => ctx.put(McpTransportContext.KEY, transportContext))
+              .block()
+          } catch {
+            case ex: Exception =>
+              logger.error(s"Failed to handle request stream: ${ex.getMessage}")
+          }
 
-        val eventStream = source.map(event => ByteString(event.toString))
-        complete(
-          HttpEntity.Chunked.fromData(
-            MediaTypes.`text/event-stream`.toContentType,
-            eventStream
+          val eventStream = source.map(event => ByteString(event.toString))
+          complete(
+            HttpEntity.Chunked.fromData(
+              MediaTypes.`text/event-stream`.toContentType,
+              eventStream
+            )
           )
-        )
+        }
     }
   }
 
@@ -388,6 +408,7 @@ class PekkoHttpStreamableServerTransportProvider(
                 try {
                   session.delete().contextWrite(ctx => ctx.put(McpTransportContext.KEY, transportContext)).block()
                   sessions.remove(sessionId)
+                  listeningTransports.remove(sessionId)
                   complete(StatusCodes.OK)
                 } catch {
                   case ex: Exception =>
