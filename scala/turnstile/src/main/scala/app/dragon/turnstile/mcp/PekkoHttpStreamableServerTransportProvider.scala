@@ -23,7 +23,20 @@ import java.util.concurrent.{ConcurrentHashMap, locks}
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
+import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
+import java.security.{KeyStore, SecureRandom}
+import java.io.{FileInputStream, InputStream}
+
+/**
+ * SSL/TLS Configuration for HTTPS support
+ */
+case class SslConfig(
+  enabled: Boolean,
+  keyStorePath: String,
+  keyStorePassword: String,
+  keyStoreType: String = "PKCS12"
+)
 
 /**
  * Pekko HTTP implementation of MCP streamable transport using Server-Sent Events (SSE).
@@ -34,18 +47,36 @@ import scala.util.{Failure, Success}
  * - HTTP POST for client-to-server messages
  * - Session-based communication with mcp-session-id headers
  * - Message replay support using Last-Event-ID
+ * - Optional HTTPS/TLS support for secure communication
  *
  * Architecture:
  * - GET /mcp: Establish SSE connection for receiving server messages
  * - POST /mcp: Send client messages (initialize, requests, responses, notifications)
  * - DELETE /mcp: Delete session (optional)
+ * - GET /messages: Alternative SSE endpoint (cloud connector compatibility)
+ * - POST /messages: Alternative message endpoint (cloud connector compatibility)
  *
  * The transport manages multiple concurrent sessions, each with its own SSE stream.
+ *
+ * Cloud Connector Compatibility:
+ * - /messages endpoint provides compatibility with cloud-based MCP connectors
+ * - Both /mcp and /messages endpoints support the same operations
+ * - Session management works identically across both endpoints
+ *
+ * HTTPS Support:
+ * - Optional SSL/TLS encryption using Java KeyStore
+ * - Configurable via SslConfig
+ * - Supports PKCS12, JKS, and other KeyStore formats
  *
  * @param jsonMapper The JSON mapper for MCP message serialization
  * @param mcpEndpoint The endpoint path (default: "/mcp")
  * @param disallowDelete Whether to disallow DELETE requests
  * @param contextExtractor Extractor for transport context from HTTP requests
+ * @param host Bind host address
+ * @param port Bind port
+ * @param baseUrl Optional base URL for endpoint announcements
+ * @param keepAliveInterval Optional keep-alive ping interval
+ * @param sslConfig Optional SSL/TLS configuration for HTTPS
  * @param system The Pekko ActorSystem
  */
 class PekkoHttpStreamableServerTransportProvider(
@@ -56,7 +87,8 @@ class PekkoHttpStreamableServerTransportProvider(
   host: String,
   port: Int,
   baseUrl: Option[String],
-  keepAliveInterval: Option[FiniteDuration]
+  keepAliveInterval: Option[FiniteDuration],
+  sslConfig: Option[SslConfig]
 )(implicit system: ActorSystem[?]) extends McpStreamableServerTransportProvider {
 
   private val logger: Logger = LoggerFactory.getLogger(classOf[PekkoHttpStreamableServerTransportProvider])
@@ -213,18 +245,77 @@ class PekkoHttpStreamableServerTransportProvider(
   }
 
   /**
-   * Start the HTTP server
+   * Create SSL context from KeyStore for HTTPS support
+   */
+  private def createSslContext(config: SslConfig): Try[SSLContext] = Try {
+    logger.info(s"Loading SSL certificate from: ${config.keyStorePath}")
+
+    // Load KeyStore
+    val keyStore = KeyStore.getInstance(config.keyStoreType)
+    val keyStoreStream: InputStream = new FileInputStream(config.keyStorePath)
+    try {
+      keyStore.load(keyStoreStream, config.keyStorePassword.toCharArray)
+    } finally {
+      keyStoreStream.close()
+    }
+
+    // Initialize KeyManagerFactory
+    val keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm)
+    keyManagerFactory.init(keyStore, config.keyStorePassword.toCharArray)
+
+    // Initialize TrustManagerFactory
+    val trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm)
+    trustManagerFactory.init(keyStore)
+
+    // Create SSLContext
+    val sslContext = SSLContext.getInstance("TLS")
+    sslContext.init(
+      keyManagerFactory.getKeyManagers,
+      trustManagerFactory.getTrustManagers,
+      new SecureRandom
+    )
+
+    logger.info("SSL context initialized successfully")
+    sslContext
+  }
+
+  /**
+   * Start the HTTP/HTTPS server
    */
   def start(): Future[Http.ServerBinding] = {
     val route = createRoute()
-    val bindingFuture = Http()(system).newServerAt(host, port).bind(route)
+
+    val bindingFuture = sslConfig match {
+      case Some(config) if config.enabled =>
+        // HTTPS mode
+        createSslContext(config) match {
+          case Success(sslContext) =>
+            logger.info(s"Starting HTTPS Streaming MCP Server on https://$host:$port$mcpEndpoint")
+            val httpsConnectionContext = org.apache.pekko.http.scaladsl.ConnectionContext.httpsServer(sslContext)
+            Http()(system)
+              .newServerAt(host, port)
+              .enableHttps(httpsConnectionContext)
+              .bind(route)
+
+          case Failure(ex) =>
+            logger.error("Failed to create SSL context, falling back to HTTP", ex)
+            // Fallback to HTTP
+            Http()(system).newServerAt(host, port).bind(route)
+        }
+
+      case _ =>
+        // HTTP mode
+        logger.info(s"Starting HTTP Streaming MCP Server on http://$host:$port$mcpEndpoint")
+        Http()(system).newServerAt(host, port).bind(route)
+    }
 
     bindingFuture.onComplete {
       case Success(b) =>
         binding = Some(b)
-        logger.info(s"HTTP Streaming MCP Server bound to http://$host:$port$mcpEndpoint")
+        val protocol = if (sslConfig.exists(_.enabled)) "https" else "http"
+        logger.info(s"Streaming MCP Server bound to $protocol://$host:$port$mcpEndpoint")
       case Failure(ex) =>
-        logger.error(s"Failed to bind HTTP Streaming MCP Server to $host:$port", ex)
+        logger.error(s"Failed to bind Streaming MCP Server to $host:$port", ex)
     }
 
     bindingFuture
@@ -243,6 +334,17 @@ class PekkoHttpStreamableServerTransportProvider(
       } ~
       delete {
         handleDelete()
+      }
+    } ~
+    path("messages") {
+      // Cloud connector compatibility endpoint
+      // POST /messages is equivalent to POST /mcp for message sending
+      post {
+        handlePost()
+      } ~
+      // GET /messages can be used for SSE streaming
+      get {
+        handleGet()
       }
     }
   }
@@ -659,6 +761,7 @@ object PekkoHttpStreamableServerTransportProvider {
     private var port: Int = 8082
     private var baseUrl: Option[String] = None
     private var keepAliveInterval: Option[FiniteDuration] = Some(30.seconds)
+    private var sslConfig: Option[SslConfig] = None
 
     def jsonMapper(mapper: McpJsonMapper): Builder = {
       this.jsonMapper = mapper
@@ -705,6 +808,35 @@ object PekkoHttpStreamableServerTransportProvider {
       this
     }
 
+    /**
+     * Enable HTTPS with SSL/TLS configuration
+     *
+     * @param keyStorePath Path to the KeyStore file (PKCS12, JKS, etc.)
+     * @param keyStorePassword Password for the KeyStore
+     * @param keyStoreType KeyStore type (default: PKCS12)
+     */
+    def enableHttps(
+      keyStorePath: String,
+      keyStorePassword: String,
+      keyStoreType: String = "PKCS12"
+    ): Builder = {
+      this.sslConfig = Some(SslConfig(
+        enabled = true,
+        keyStorePath = keyStorePath,
+        keyStorePassword = keyStorePassword,
+        keyStoreType = keyStoreType
+      ))
+      this
+    }
+
+    /**
+     * Enable HTTPS with SSL configuration object
+     */
+    def withSslConfig(config: SslConfig): Builder = {
+      this.sslConfig = Some(config)
+      this
+    }
+
     def build()(implicit system: ActorSystem[?]): PekkoHttpStreamableServerTransportProvider = {
       val mapper = if (jsonMapper == null) McpJsonMapper.getDefault else jsonMapper
       new PekkoHttpStreamableServerTransportProvider(
@@ -715,7 +847,8 @@ object PekkoHttpStreamableServerTransportProvider {
         host,
         port,
         baseUrl,
-        keepAliveInterval
+        keepAliveInterval,
+        sslConfig
       )
     }
   }

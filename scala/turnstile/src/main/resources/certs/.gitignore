@@ -1,0 +1,10 @@
+# Ignore SSL certificates and keystores
+*.p12
+*.jks
+*.pem
+*.key
+*.crt
+*.cer
+
+# Allow README
+!README.md

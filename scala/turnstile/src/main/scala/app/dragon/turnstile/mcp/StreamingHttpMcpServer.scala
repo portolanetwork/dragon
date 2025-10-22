@@ -7,6 +7,7 @@ import io.modelcontextprotocol.server.{McpServer, McpSyncServer}
 import org.apache.pekko.actor.typed.ActorSystem
 import org.slf4j.{Logger, LoggerFactory}
 import scala.jdk.CollectionConverters.*
+import scala.util.Try
 
 /**
  * MCP Server implementation using HTTP streaming with Server-Sent Events (SSE).
@@ -56,14 +57,37 @@ class StreamingHttpMcpServer(config: Config)(implicit system: ActorSystem[?]) {
   // Create the JSON mapper
   private val jsonMapper = McpJsonMapper.getDefault
 
+  // Read SSL configuration if present
+  private val sslConfig = if (config.hasPath("ssl") && config.getBoolean("ssl.enabled")) {
+    Some(SslConfig(
+      enabled = true,
+      keyStorePath = config.getString("ssl.keystore-path"),
+      keyStorePassword = config.getString("ssl.keystore-password"),
+      keyStoreType = if (config.hasPath("ssl.keystore-type"))
+        config.getString("ssl.keystore-type")
+      else "PKCS12"
+    ))
+  } else {
+    None
+  }
+
   // Create the streaming HTTP transport provider
-  private val transportProvider = PekkoHttpStreamableServerTransportProvider.builder()
-    .jsonMapper(jsonMapper)
-    .mcpEndpoint("/mcp")
-    .host(host)
-    .port(port)
-    .disallowDelete(false)
-    .build()
+  private val transportProvider = {
+    val builder = PekkoHttpStreamableServerTransportProvider.builder()
+      .jsonMapper(jsonMapper)
+      .mcpEndpoint("/mcp")
+      .host(host)
+      .port(port)
+      .disallowDelete(false)
+
+    // Add SSL configuration if present
+    val builderWithSsl = sslConfig match {
+      case Some(ssl) => builder.withSslConfig(ssl)
+      case None => builder
+    }
+
+    builderWithSsl.build()
+  }
 
   // Build the sync server using the SDK builder pattern
   private val mcpServer: McpSyncServer = {
@@ -100,12 +124,23 @@ class StreamingHttpMcpServer(config: Config)(implicit system: ActorSystem[?]) {
   def start(): Unit = {
     logger.info(s"Starting MCP Streaming HTTP Server: $serverName v$serverVersion")
     logger.info("Using HTTP streaming with Server-Sent Events (SSE)")
-    logger.info(s"Server will be available at http://$host:$port/mcp")
+
+    val protocol = if (sslConfig.exists(_.enabled)) "https" else "http"
+    logger.info(s"Server will be available at $protocol://$host:$port/mcp")
+
+    if (sslConfig.exists(_.enabled)) {
+      logger.info(s"HTTPS/TLS enabled")
+      logger.info(s"  KeyStore: ${sslConfig.get.keyStorePath}")
+      logger.info(s"  KeyStore Type: ${sslConfig.get.keyStoreType}")
+    }
+
     logger.info("Client should:")
-    logger.info("  1. POST to /mcp with initialize request")
+    logger.info("  1. POST to /mcp (or /messages) with initialize request")
     logger.info("  2. Receive mcp-session-id in response header")
-    logger.info("  3. GET /mcp with mcp-session-id header to establish SSE stream")
-    logger.info("  4. POST to /mcp with mcp-session-id header to send requests")
+    logger.info("  3. GET /mcp (or /messages) with mcp-session-id header to establish SSE stream")
+    logger.info("  4. POST to /mcp (or /messages) with mcp-session-id header to send requests")
+    logger.info("")
+    logger.info("Note: Both /mcp and /messages endpoints are supported for cloud connector compatibility")
 
     transportProvider.start()
 
