@@ -1,7 +1,7 @@
 package app.dragon.turnstile.controller
 
 import app.dragon.turnstile.config.ApplicationConfig
-import app.dragon.turnstile.mcp.TurnstileMcpServer
+import app.dragon.turnstile.mcp.{StdioMcpServer, StreamingHttpMcpServer, TurnstileMcpServer}
 import com.typesafe.config.Config
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorSystem, Behavior}
@@ -12,6 +12,8 @@ object Guardian {
 
   val grpcConfig: Config = ApplicationConfig.grpcConfig
   val mcpConfig: Config = ApplicationConfig.rootConfig.getConfig("turnstile.mcp")
+  val mcpStdioConfig: Config = ApplicationConfig.rootConfig.getConfig("turnstile.mcp-stdio")
+  val mcpStreamingConfig: Config = ApplicationConfig.rootConfig.getConfig("turnstile.mcp-streaming")
 
   def apply(): Behavior[Nothing] =
     Behaviors.setup[Nothing] { context =>
@@ -29,18 +31,46 @@ object Guardian {
       // Start GRPC server
       GreeterServer.start(grpcHost, grpcPort, context.system)
 
-      // Start MCP server if enabled
+      // Start MCP HTTP server if enabled
       if (mcpConfig.getBoolean("enabled")) {
         try {
           val mcpServer = TurnstileMcpServer(mcpConfig)
           mcpServer.start()
-          context.log.info("MCP Server started successfully")
+          context.log.info("MCP HTTP Server started successfully")
         } catch {
           case e: Exception =>
-            context.log.error("Failed to start MCP Server", e)
+            context.log.error("Failed to start MCP HTTP Server", e)
         }
       } else {
-        context.log.info("MCP Server is disabled")
+        context.log.info("MCP HTTP Server is disabled")
+      }
+
+      // Start MCP Stdio server if enabled
+      if (mcpStdioConfig.getBoolean("enabled")) {
+        try {
+          val mcpStdioServer = StdioMcpServer(mcpStdioConfig)
+          mcpStdioServer.start()
+          context.log.info("MCP Stdio Server started successfully")
+        } catch {
+          case e: Exception =>
+            context.log.error("Failed to start MCP Stdio Server", e)
+        }
+      } else {
+        context.log.info("MCP Stdio Server is disabled")
+      }
+
+      // Start MCP Streaming HTTP server if enabled
+      if (mcpStreamingConfig.getBoolean("enabled")) {
+        try {
+          val mcpStreamingServer = StreamingHttpMcpServer(mcpStreamingConfig)
+          mcpStreamingServer.start()
+          context.log.info("MCP Streaming HTTP Server started successfully")
+        } catch {
+          case e: Exception =>
+            context.log.error("Failed to start MCP Streaming HTTP Server", e)
+        }
+      } else {
+        context.log.info("MCP Streaming HTTP Server is disabled")
       }
 
       Behaviors.empty
