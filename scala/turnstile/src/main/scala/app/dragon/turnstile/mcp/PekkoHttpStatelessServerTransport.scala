@@ -74,30 +74,40 @@ class PekkoHttpStatelessServerTransport(
    * Create the HTTP route for the MCP endpoint
    */
   private def createMcpRoute(): Route = {
-    path(endpoint.stripPrefix("/")) {
-      post {
-        entity(as[String]) { requestBody =>
-          complete {
-            if (isClosing) {
-              HttpResponse(
-                status = StatusCodes.ServiceUnavailable,
-                entity = HttpEntity(ContentTypes.`application/json`, """{"error":"Server is shutting down"}""")
-              )
-            } else {
-              handleMcpRequest(requestBody)
+    concat(
+      path(endpoint.stripPrefix("/")) {
+        post {
+          entity(as[String]) { requestBody =>
+            complete {
+              if (isClosing) {
+                HttpResponse(
+                  status = StatusCodes.ServiceUnavailable,
+                  entity = HttpEntity(ContentTypes.`application/json`, """{"error":"Server is shutting down"}""")
+                )
+              } else {
+                handleMcpRequest(requestBody)
+              }
             }
           }
+        } ~
+        get {
+          complete {
+            HttpResponse(
+              status = StatusCodes.MethodNotAllowed,
+              entity = HttpEntity(ContentTypes.`application/json`, """{"error":"POST method required"}""")
+            )
+          }
         }
-      } ~
-      get {
-        complete {
-          HttpResponse(
-            status = StatusCodes.MethodNotAllowed,
-            entity = HttpEntity(ContentTypes.`application/json`, """{"error":"POST method required"}""")
-          )
+      },
+      path("messages") {
+        post {
+          entity(as[String]) { requestBody =>
+            // For now, echo the request body as a JSON response
+            complete(HttpEntity(ContentTypes.`application/json`, s"""{"response": $requestBody}"""))
+          }
         }
       }
-    }
+    )
   }
 
   /**

@@ -245,6 +245,18 @@ class PekkoHttpStreamableServerTransportProvider(
   }
 
   /**
+   * Create a plain text error response for SSE endpoints
+   */
+  private def createSseErrorResponse(status: StatusCode, message: String): Route = {
+    complete(
+      HttpResponse(
+        status,
+        entity = HttpEntity(ContentTypes.`text/plain(UTF-8)`, message)
+      )
+    )
+  }
+
+  /**
    * Create SSL context from KeyStore for HTTPS support
    */
   private def createSslContext(config: SslConfig): Try[SSLContext] = Try {
@@ -354,23 +366,36 @@ class PekkoHttpStreamableServerTransportProvider(
    */
   private def handleGet(): Route = {
     if (isClosing) {
-      complete(StatusCodes.ServiceUnavailable -> "Server is shutting down")
+      logger.warn("GET request rejected: server is shutting down")
+      createSseErrorResponse(StatusCodes.ServiceUnavailable, "Server is shutting down")
     } else {
       optionalHeaderValueByName("Accept") { acceptOpt =>
         optionalHeaderValueByName(HttpHeaders.MCP_SESSION_ID) { sessionIdOpt =>
           optionalHeaderValueByName("Last-Event-ID") { lastEventIdOpt =>
             (acceptOpt, sessionIdOpt) match {
-              case (Some(accept), Some(sessionId)) if accept.contains("text/event-stream") =>
+              case (_, None) =>
+                // No session ID - must initialize first via POST
+                logger.warn(s"GET request rejected: missing mcp-session-id header. Accept: $acceptOpt")
+                createSseErrorResponse(StatusCodes.BadRequest, "Session ID required in mcp-session-id header")
+              case (None, Some(sessionId)) =>
+                // No Accept header - require text/event-stream
+                logger.warn(s"GET request rejected: missing Accept header. Session: $sessionId")
+                createSseErrorResponse(StatusCodes.BadRequest, "text/event-stream required in Accept header")
+              case (Some(accept), Some(sessionId)) if !accept.contains("text/event-stream") =>
+                // Accept header present but wrong type
+                logger.warn(s"GET request rejected: invalid Accept header: $accept. Session: $sessionId")
+                createSseErrorResponse(StatusCodes.BadRequest, s"text/event-stream required in Accept header, got: $accept")
+              case (Some(accept), Some(sessionId)) =>
+                // Valid Accept header and session ID
+                logger.info(s"GET request: establishing SSE stream for session $sessionId")
                 sessions.get(sessionId) match {
                   case null =>
-                    complete(StatusCodes.NotFound -> "Session not found")
+                    logger.warn(s"GET request rejected: session not found: $sessionId. Active sessions: ${sessions.size()}")
+                    createSseErrorResponse(StatusCodes.NotFound, s"Session not found: $sessionId")
                   case session =>
+                    logger.info(s"SSE stream established for session $sessionId")
                     handleSseStream(session, sessionId, lastEventIdOpt)
                 }
-              case (None, _) | (Some(_), _) =>
-                complete(StatusCodes.BadRequest -> "text/event-stream required in Accept header")
-              case (_, None) =>
-                complete(StatusCodes.BadRequest -> "Session ID required in mcp-session-id header")
             }
           }
         }
