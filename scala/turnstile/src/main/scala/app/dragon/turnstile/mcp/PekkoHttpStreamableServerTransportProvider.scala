@@ -242,7 +242,15 @@ class PekkoHttpStreamableServerTransportProvider(
         listeningTransports.put(sessionId, sessionTransport)
       }
 
-      val eventStream = source.map(event => ByteString(event.toString))
+      val eventStream = source.map { event =>
+        // Proper SSE formatting: data: <payload>\n\n
+        val sb = new StringBuilder
+        sb.append(s"data: ${event.data}\n")
+        event.eventType.foreach(et => sb.append(s"event: $et\n"))
+        event.id.foreach(id => sb.append(s"id: $id\n"))
+        sb.append("\n")
+        ByteString(sb.toString)
+      }
       complete(
         HttpEntity.Chunked.fromData(
           MediaTypes.`text/event-stream`.toContentType,
@@ -377,7 +385,15 @@ class PekkoHttpStreamableServerTransportProvider(
               logger.error(s"Failed to handle request stream: ${ex.getMessage}")
           }
 
-          val eventStream = source.map(event => ByteString(event.toString))
+          val eventStream = source.map { event =>
+            // Proper SSE formatting: data: <payload>\n\n
+            val sb = new StringBuilder
+            sb.append(s"data: ${event.data}\n")
+            event.eventType.foreach(et => sb.append(s"event: $et\n"))
+            event.id.foreach(id => sb.append(s"id: $id\n"))
+            sb.append("\n")
+            ByteString(sb.toString)
+          }
           complete(
             HttpEntity.Chunked.fromData(
               MediaTypes.`text/event-stream`.toContentType,
