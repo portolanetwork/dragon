@@ -114,6 +114,16 @@ class PekkoHttpStreamableServerTransportProvider(
       isClosing = true
       logger.debug(s"Closing gracefully with ${sessions.size()} active sessions")
 
+      // Close all transports first
+      listeningTransports.values().asScala.foreach { transport =>
+        try {
+          transport.forceClose()
+        } catch {
+          case ex: Exception =>
+            logger.error(s"Failed to close transport: ${ex.getMessage}")
+        }
+      }
+
       // Close all sessions
       sessions.values().asScala.foreach { session =>
         try {
@@ -125,6 +135,7 @@ class PekkoHttpStreamableServerTransportProvider(
       }
 
       sessions.clear()
+      listeningTransports.clear()
 
       // Unbind HTTP server
       binding.foreach { b =>
@@ -422,9 +433,12 @@ class PekkoHttpStreamableServerTransportProvider(
               case session =>
                 val transportContext = contextExtractor.extract(httpRequest)
                 try {
+                  // Close the transport first
+                  Option(listeningTransports.remove(sessionId)).foreach(_.forceClose())
+
+                  // Then delete the session
                   session.delete().contextWrite(ctx => ctx.put(McpTransportContext.KEY, transportContext)).block()
                   sessions.remove(sessionId)
-                  listeningTransports.remove(sessionId)
                   complete(StatusCodes.OK)
                 } catch {
                   case ex: Exception =>
@@ -449,6 +463,7 @@ class PekkoHttpStreamableServerTransportProvider(
   ) extends McpStreamableServerTransport {
 
     @volatile private var closed = false
+    @volatile private var shouldClose = false  // Track if we should close
     private val lock = new locks.ReentrantLock()
 
     override def sendMessage(message: McpSchema.JSONRPCMessage): Mono[Void] = {
@@ -483,8 +498,9 @@ class PekkoHttpStreamableServerTransportProvider(
               logger.warn(s"Message dropped for session $sessionId (queue full)")
               promise.failure(new RuntimeException("Message queue full"))
             case Success(QueueOfferResult.QueueClosed) =>
-              logger.debug(s"Queue closed for session $sessionId")
+              logger.debug(s"Queue closed for session $sessionId (client likely disconnected)")
               closed = true
+              // Do NOT call queue.complete() here; only close on explicit session close
               promise.failure(new RuntimeException("Queue closed"))
             case Success(QueueOfferResult.Failure(ex)) =>
               logger.error(s"Failed to send message to session $sessionId", ex)
@@ -512,7 +528,10 @@ class PekkoHttpStreamableServerTransportProvider(
     }
 
     override def closeGracefully(): Mono[Void] = {
-      Mono.fromRunnable(() => close())
+      // Mark for closure but don't actually close immediately
+      // The transport should stay open for the session lifetime
+      logger.debug(s"Session transport $sessionId marked for graceful close (ignoring for persistent connection)")
+      Mono.empty()
     }
 
     override def close(): Unit = {
@@ -526,6 +545,13 @@ class PekkoHttpStreamableServerTransportProvider(
       } finally {
         lock.unlock()
       }
+    }
+
+    /**
+     * Force close the transport (called during session deletion or server shutdown)
+     */
+    def forceClose(): Unit = {
+      close()
     }
   }
 }

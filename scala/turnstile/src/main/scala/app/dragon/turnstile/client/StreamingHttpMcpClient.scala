@@ -89,33 +89,31 @@ object StreamingHttpMcpClient {
       sseConnection <- establishSseStream(serverUrl, sessionId)
       _ = logger.info("\n=== SSE stream established ===")
 
-      /*
       // Step 3: List tools
       _ <- listTools(serverUrl, sessionId)
-      _ = Thread.sleep(10000)  // Wait for SSE response
-*/
+      _ = Thread.sleep(1000)  // Wait for SSE response
+
 
       // Step 4: Test echo tool
       _ <- testEchoTool(serverUrl, sessionId)
-      _ = Thread.sleep(20000)  // Wait for SSE responses
+      _ = Thread.sleep(1000)  // Wait for SSE responses
 
-      /*
       // Step 5: Test system_info tool
       _ <- testSystemInfoTool(serverUrl, sessionId)
       _ = Thread.sleep(1000)  // Wait for SSE response
 
       // Step 6: Wait a bit for any pending SSE messages
-      _ = Thread.sleep(10000)
+      //_ = Thread.sleep(10000)
 
       // Step 7: Close session
       _ <- closeSession(serverUrl, sessionId)
       _ = logger.info("\n=== Session closed ===")
 
-       */
 
       // Step 8: Terminate SSE connection
       _ = sseConnection._1.complete()
       _ = logger.info("SSE connection terminated")
+
 
     } yield ()
   }
@@ -286,6 +284,7 @@ object StreamingHttpMcpClient {
     logger.info("\n=== Testing Echo Tool ===")
 
     val testMessages = List("Hello, Streaming HTTP!", "Testing SSE transport", "Pekko HTTP + MCP!")
+    //val testMessages = List("Hello, Streaming HTTP!")
 
     val futures = testMessages.zipWithIndex.map { case (message, index) =>
       val callRequest: java.util.Map[String, Any] = Map(
