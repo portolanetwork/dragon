@@ -11,6 +11,7 @@ import org.apache.pekko.http.scaladsl.unmarshalling.Unmarshal
 import org.apache.pekko.stream.scaladsl.{Framing, Keep, Sink}
 import org.apache.pekko.util.ByteString
 import org.slf4j.{Logger, LoggerFactory}
+import io.modelcontextprotocol.spec.HttpHeaders
 
 import scala.concurrent.duration.*
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -90,15 +91,18 @@ object StreamingHttpMcpClient {
 
       // Step 3: List tools
       _ <- listTools(serverUrl, sessionId)
+      _ = Thread.sleep(1000)  // Wait for SSE response
 
       // Step 4: Test echo tool
       _ <- testEchoTool(serverUrl, sessionId)
+      _ = Thread.sleep(2000)  // Wait for SSE responses
 
       // Step 5: Test system_info tool
       _ <- testSystemInfoTool(serverUrl, sessionId)
+      _ = Thread.sleep(1000)  // Wait for SSE response
 
       // Step 6: Wait a bit for any pending SSE messages
-      _ = Thread.sleep(2000)
+      _ = Thread.sleep(1000)
 
       // Step 7: Close session
       _ <- closeSession(serverUrl, sessionId)
@@ -192,7 +196,7 @@ object StreamingHttpMcpClient {
       uri = serverUrl,
       headers = List(
         RawHeader("Accept", "text/event-stream"),
-        RawHeader("mcp-session-id", sessionId)
+        RawHeader(HttpHeaders.MCP_SESSION_ID, sessionId)
       )
     )
 
@@ -256,11 +260,16 @@ object StreamingHttpMcpClient {
     ).asJava.asInstanceOf[java.util.Map[String, Any]]
 
     sendRequest(serverUrl, sessionId, listRequest).map { response =>
-      val result = response.get("result")
-      val tools = result.get("tools")
-      logger.info(s"Found ${tools.size()} tools:")
-      tools.elements().asScala.foreach { tool =>
-        logger.info(s"  - ${tool.get("name").asText()}: ${tool.get("description").asText()}")
+      // Response will come via SSE for streaming transport
+      if (response.has("result")) {
+        val result = response.get("result")
+        val tools = result.get("tools")
+        logger.info(s"Found ${tools.size()} tools:")
+        tools.elements().asScala.foreach { tool =>
+          logger.info(s"  - ${tool.get("name").asText()}: ${tool.get("description").asText()}")
+        }
+      } else {
+        logger.info("Request sent, waiting for SSE response...")
       }
     }
   }
@@ -287,14 +296,19 @@ object StreamingHttpMcpClient {
       ).asJava.asInstanceOf[java.util.Map[String, Any]]
 
       sendRequest(serverUrl, sessionId, callRequest).map { response =>
-        val result = response.get("result")
-        val content = result.get("content")
+        // Response will come via SSE for streaming transport
+        if (response.has("result")) {
+          val result = response.get("result")
+          val content = result.get("content")
 
-        content.elements().asScala.foreach { item =>
-          if (item.get("type").asText() == "text") {
-            logger.info(s"  Input: '$message'")
-            logger.info(s"  Output: '${item.get("text").asText()}'")
+          content.elements().asScala.foreach { item =>
+            if (item.get("type").asText() == "text") {
+              logger.info(s"  Input: '$message'")
+              logger.info(s"  Output: '${item.get("text").asText()}'")
+            }
           }
+        } else {
+          logger.info(s"Echo request sent for: '$message', waiting for SSE response...")
         }
       }.recover {
         case ex: Exception =>
@@ -322,13 +336,18 @@ object StreamingHttpMcpClient {
     ).asJava.asInstanceOf[java.util.Map[String, Any]]
 
     sendRequest(serverUrl, sessionId, callRequest).map { response =>
-      val result = response.get("result")
-      val content = result.get("content")
+      // Response will come via SSE for streaming transport
+      if (response.has("result")) {
+        val result = response.get("result")
+        val content = result.get("content")
 
-      content.elements().asScala.foreach { item =>
-        if (item.get("type").asText() == "text") {
-          logger.info(s"System Information:\n${item.get("text").asText()}")
+        content.elements().asScala.foreach { item =>
+          if (item.get("type").asText() == "text") {
+            logger.info(s"System Information:\n${item.get("text").asText()}")
+          }
         }
+      } else {
+        logger.info("System info request sent, waiting for SSE response...")
       }
     }.recover {
       case ex: Exception =>
@@ -347,7 +366,7 @@ object StreamingHttpMcpClient {
       uri = serverUrl,
       headers = List(
         RawHeader("Accept", "text/event-stream, application/json"),
-        RawHeader("mcp-session-id", sessionId)
+        RawHeader(HttpHeaders.MCP_SESSION_ID, sessionId)
       ),
       entity = HttpEntity(ContentTypes.`application/json`, requestJson)
     )
@@ -382,7 +401,7 @@ object StreamingHttpMcpClient {
       method = HttpMethods.DELETE,
       uri = serverUrl,
       headers = List(
-        RawHeader("mcp-session-id", sessionId)
+        RawHeader(HttpHeaders.MCP_SESSION_ID, sessionId)
       )
     )
 
