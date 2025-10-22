@@ -18,8 +18,10 @@ import org.slf4j.{Logger, LoggerFactory}
 import reactor.core.publisher.Mono
 
 import java.time.Duration
+import java.util.{UUID, concurrent as juc}
 import java.util.concurrent.{ConcurrentHashMap, locks}
 import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 import scala.util.{Failure, Success}
 
@@ -52,7 +54,9 @@ class PekkoHttpStreamableServerTransportProvider(
   disallowDelete: Boolean,
   contextExtractor: McpTransportContextExtractor[HttpRequest],
   host: String,
-  port: Int
+  port: Int,
+  baseUrl: Option[String],
+  keepAliveInterval: Option[FiniteDuration]
 )(implicit system: ActorSystem[?]) extends McpStreamableServerTransportProvider {
 
   private val logger: Logger = LoggerFactory.getLogger(classOf[PekkoHttpStreamableServerTransportProvider])
@@ -61,6 +65,7 @@ class PekkoHttpStreamableServerTransportProvider(
   // Event types
   private val MESSAGE_EVENT_TYPE = "message"
   private val ENDPOINT_EVENT_TYPE = "endpoint"
+  private val PING_EVENT_TYPE = "ping"
 
   // Session factory set by MCP SDK
   @volatile private var sessionFactory: McpStreamableServerSession.Factory = _
@@ -76,6 +81,18 @@ class PekkoHttpStreamableServerTransportProvider(
 
   // Shutdown flag
   @volatile private var isClosing = false
+
+  // Keep-alive scheduler
+  private val keepAliveScheduler: Option[juc.ScheduledExecutorService] = keepAliveInterval.map { interval =>
+    val scheduler = juc.Executors.newSingleThreadScheduledExecutor()
+    scheduler.scheduleAtFixedRate(
+      () => sendKeepAlive(),
+      interval.toMillis,
+      interval.toMillis,
+      juc.TimeUnit.MILLISECONDS
+    )
+    scheduler
+  }
 
   override def protocolVersions(): java.util.List[String] = {
     List(
@@ -114,6 +131,19 @@ class PekkoHttpStreamableServerTransportProvider(
       isClosing = true
       logger.debug(s"Closing gracefully with ${sessions.size()} active sessions")
 
+      // Stop keep-alive scheduler
+      keepAliveScheduler.foreach { scheduler =>
+        try {
+          scheduler.shutdown()
+          if (!scheduler.awaitTermination(5, juc.TimeUnit.SECONDS)) {
+            scheduler.shutdownNow()
+          }
+        } catch {
+          case ex: Exception =>
+            logger.error(s"Failed to stop keep-alive scheduler: ${ex.getMessage}")
+        }
+      }
+
       // Close all transports first
       listeningTransports.values().asScala.foreach { transport =>
         try {
@@ -149,6 +179,37 @@ class PekkoHttpStreamableServerTransportProvider(
 
       logger.debug("Graceful shutdown completed")
     })
+  }
+
+  /**
+   * Send keep-alive ping to all active sessions
+   */
+  private def sendKeepAlive(): Unit = {
+    if (!isClosing && !listeningTransports.isEmpty) {
+      logger.trace(s"Sending keep-alive ping to ${listeningTransports.size()} sessions")
+      listeningTransports.values().asScala.foreach { transport =>
+        try {
+          transport.sendPing()
+        } catch {
+          case ex: Exception =>
+            logger.debug(s"Failed to send keep-alive ping: ${ex.getMessage}")
+        }
+      }
+    }
+  }
+
+  /**
+   * Create a JSON error response using McpError format
+   */
+  private def createErrorResponse(status: StatusCode, message: String, code: Int = -32603): Route = {
+    val error = new McpSchema.JSONRPCResponse.JSONRPCError(code, message, null)
+    val errorResponse = jsonMapper.writeValueAsString(error)
+    complete(
+      HttpResponse(
+        status,
+        entity = HttpEntity(ContentTypes.`application/json`, errorResponse)
+      )
+    )
   }
 
   /**
@@ -229,6 +290,13 @@ class PekkoHttpStreamableServerTransportProvider(
 
       val sessionTransport = new PekkoHttpStreamableMcpSessionTransport(sessionId, queue, jsonMapper)
 
+      // Send initial endpoint event if this is a new connection (not a replay)
+      if (lastEventIdOpt.isEmpty) {
+        val endpointUrl = baseUrl.getOrElse(s"http://$host:$port") + mcpEndpoint
+        val endpointEvent = ServerSentEvent(data = endpointUrl, eventType = Some(ENDPOINT_EVENT_TYPE))
+        queue.offer(endpointEvent)
+      }
+
       // Handle replay if Last-Event-ID is present
       lastEventIdOpt.foreach { lastId =>
         try {
@@ -304,9 +372,14 @@ class PekkoHttpStreamableServerTransportProvider(
           if (!acceptsJson) {
             complete(StatusCodes.BadRequest -> "application/json required in Accept header for initialize")
           } else {
+            // Generate a new session ID
+            val sessionId = UUID.randomUUID().toString
+
             val initRequest = jsonMapper.convertValue(request.params(), new TypeRef[McpSchema.InitializeRequest]() {})
             val init = sessionFactory.startSession(initRequest)
-            sessions.put(init.session().getId, init.session())
+
+            // Store session with generated ID
+            sessions.put(sessionId, init.session())
 
             try {
               val initResult = init.initResult().block()
@@ -317,14 +390,15 @@ class PekkoHttpStreamableServerTransportProvider(
               complete(
                 HttpResponse(
                   StatusCodes.OK,
-                  headers = List(RawHeader(HttpHeaders.MCP_SESSION_ID, init.session().getId)),
+                  headers = List(RawHeader(HttpHeaders.MCP_SESSION_ID, sessionId)),
                   entity = HttpEntity(ContentTypes.`application/json`, jsonResponse)
                 )
               )
             } catch {
               case ex: Exception =>
                 logger.error(s"Failed to initialize session: ${ex.getMessage}")
-                complete(StatusCodes.InternalServerError -> s"Failed to initialize: ${ex.getMessage}")
+                sessions.remove(sessionId)  // Clean up on failure
+                createErrorResponse(StatusCodes.InternalServerError, s"Failed to initialize: ${ex.getMessage}")
             }
           }
 
@@ -334,18 +408,18 @@ class PekkoHttpStreamableServerTransportProvider(
             case Some(sessionId) =>
               sessions.get(sessionId) match {
                 case null =>
-                  complete(StatusCodes.NotFound -> s"Session not found: $sessionId")
+                  createErrorResponse(StatusCodes.NotFound, s"Session not found: $sessionId", -32001)
                 case session =>
                   handleSessionMessage(session, message, transportContext, sessionId)
               }
             case None =>
-              complete(StatusCodes.BadRequest -> "Session ID required in mcp-session-id header")
+              createErrorResponse(StatusCodes.BadRequest, "Session ID required in mcp-session-id header", -32602)
           }
       }
     } catch {
       case ex: Exception =>
         logger.error(s"Failed to deserialize message: ${ex.getMessage}")
-        complete(StatusCodes.BadRequest -> s"Invalid message format: ${ex.getMessage}")
+        createErrorResponse(StatusCodes.BadRequest, s"Invalid message format: ${ex.getMessage}", -32700)
     }
   }
 
@@ -377,7 +451,7 @@ class PekkoHttpStreamableServerTransportProvider(
           } catch {
             case ex: Exception =>
               logger.error(s"Failed to handle request: ${ex.getMessage}", ex)
-              complete(StatusCodes.InternalServerError -> ex.getMessage)
+              createErrorResponse(StatusCodes.InternalServerError, ex.getMessage)
           }
         } else {
           // No listening stream - create per-request SSE stream
@@ -443,11 +517,11 @@ class PekkoHttpStreamableServerTransportProvider(
                 } catch {
                   case ex: Exception =>
                     logger.error(s"Failed to delete session $sessionId: ${ex.getMessage}")
-                    complete(StatusCodes.InternalServerError -> ex.getMessage)
+                    createErrorResponse(StatusCodes.InternalServerError, ex.getMessage)
                 }
             }
           case None =>
-            complete(StatusCodes.BadRequest -> "Session ID required in mcp-session-id header")
+            createErrorResponse(StatusCodes.BadRequest, "Session ID required in mcp-session-id header", -32602)
         }
       }
     }
@@ -548,6 +622,23 @@ class PekkoHttpStreamableServerTransportProvider(
     }
 
     /**
+     * Send a ping event to keep the connection alive
+     */
+    def sendPing(): Unit = {
+      if (!closed) {
+        lock.lock()
+        try {
+          if (!closed) {
+            val pingEvent = ServerSentEvent(data = "", eventType = Some(PING_EVENT_TYPE))
+            queue.offer(pingEvent)
+          }
+        } finally {
+          lock.unlock()
+        }
+      }
+    }
+
+    /**
      * Force close the transport (called during session deletion or server shutdown)
      */
     def forceClose(): Unit = {
@@ -566,6 +657,8 @@ object PekkoHttpStreamableServerTransportProvider {
     private var contextExtractor: McpTransportContextExtractor[HttpRequest] = _ => McpTransportContext.EMPTY
     private var host: String = "0.0.0.0"
     private var port: Int = 8082
+    private var baseUrl: Option[String] = None
+    private var keepAliveInterval: Option[FiniteDuration] = Some(30.seconds)
 
     def jsonMapper(mapper: McpJsonMapper): Builder = {
       this.jsonMapper = mapper
@@ -597,6 +690,21 @@ object PekkoHttpStreamableServerTransportProvider {
       this
     }
 
+    def baseUrl(url: String): Builder = {
+      this.baseUrl = Some(url)
+      this
+    }
+
+    def keepAliveInterval(interval: FiniteDuration): Builder = {
+      this.keepAliveInterval = Some(interval)
+      this
+    }
+
+    def disableKeepAlive(): Builder = {
+      this.keepAliveInterval = None
+      this
+    }
+
     def build()(implicit system: ActorSystem[?]): PekkoHttpStreamableServerTransportProvider = {
       val mapper = if (jsonMapper == null) McpJsonMapper.getDefault else jsonMapper
       new PekkoHttpStreamableServerTransportProvider(
@@ -605,7 +713,9 @@ object PekkoHttpStreamableServerTransportProvider {
         disallowDelete,
         contextExtractor,
         host,
-        port
+        port,
+        baseUrl,
+        keepAliveInterval
       )
     }
   }
