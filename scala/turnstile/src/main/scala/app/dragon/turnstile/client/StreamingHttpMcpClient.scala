@@ -14,25 +14,28 @@ import org.slf4j.{Logger, LoggerFactory}
 import io.modelcontextprotocol.spec.HttpHeaders
 
 import scala.concurrent.duration.*
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.jdk.CollectionConverters.*
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Success}
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * HTTP Streaming MCP Client using Server-Sent Events (SSE).
+ * HTTP Streaming MCP Client Test Case using Server-Sent Events (SSE).
  *
- * This client demonstrates the full workflow for connecting to an HTTP streaming MCP server:
+ * This test case validates the full workflow for bidirectional streaming MCP communication:
  * 1. Initialize connection via POST to get session ID
  * 2. Establish SSE stream via GET with session ID
  * 3. Send requests via POST with session ID
- * 4. Receive responses via SSE stream
+ * 4. Verify all responses are received via SSE stream
  * 5. Close session via DELETE
  *
- * The streaming protocol provides:
- * - Long-lived bidirectional communication
- * - Server-initiated messages (notifications, progress)
- * - Message replay on reconnection
- * - Session-based state management
+ * Test Validation Features:
+ * - Tracks all pending requests by ID
+ * - Verifies each response is received within timeout
+ * - Validates response content matches expected format
+ * - Ensures bidirectional streaming works correctly
+ * - Reports test results with pass/fail status
  *
  * Usage:
  * {{{
@@ -42,6 +45,21 @@ import scala.util.{Failure, Success, Try}
 object StreamingHttpMcpClient {
   private val logger: Logger = LoggerFactory.getLogger(this.getClass)
   private val jsonMapper = new ObjectMapper()
+
+  // Test result tracking
+  case class TestResult(
+    testName: String,
+    requestId: Int,
+    success: Boolean,
+    message: String,
+    responseTimeMs: Long
+  )
+
+  // Response tracking
+  private val pendingRequests = new ConcurrentHashMap[Int, Promise[JsonNode]]()
+  private val testResults = new java.util.concurrent.CopyOnWriteArrayList[TestResult]()
+  private val receivedResponses = new AtomicInteger(0)
+  private val expectedResponses = new AtomicInteger(0)
 
   // Minimal configuration without clustering to avoid port conflicts
   private val clientConfig = ConfigFactory.parseString(
@@ -62,16 +80,30 @@ object StreamingHttpMcpClient {
   def main(args: Array[String]): Unit = {
     try {
       val serverUrl = if (args.nonEmpty) args(0) else "http://localhost:8082/mcp"
-      logger.info(s"Starting Streaming HTTP MCP Client for: $serverUrl")
+      logger.info(s"=== Starting Streaming HTTP MCP Client Test Case ===")
+      logger.info(s"Server URL: $serverUrl")
+      logger.info(s"Test Objective: Verify bidirectional streaming with all responses received\n")
 
-      // Run the client workflow
+      // Run the test client workflow
       val result = runClient(serverUrl)
       Await.result(result, 60.seconds)
 
-      logger.info("\n=== Streaming HTTP MCP Client completed successfully ===")
+      // Print test results
+      printTestResults()
+
+      // Exit with appropriate code
+      val allPassed = testResults.asScala.forall(_.success)
+      if (allPassed) {
+        logger.info("\n✓ ALL TESTS PASSED")
+        System.exit(0)
+      } else {
+        logger.error("\n✗ SOME TESTS FAILED")
+        System.exit(1)
+      }
     } catch {
       case ex: Exception =>
-        logger.error("Streaming HTTP MCP Client failed", ex)
+        logger.error("Test execution failed with exception", ex)
+        printTestResults()
         System.exit(1)
     } finally {
       system.terminate()
@@ -79,43 +111,110 @@ object StreamingHttpMcpClient {
     }
   }
 
+  private def printTestResults(): Unit = {
+    logger.info("\n" + "="*80)
+    logger.info("TEST RESULTS SUMMARY")
+    logger.info("="*80)
+
+    val results = testResults.asScala.toList
+    val passed = results.count(_.success)
+    val failed = results.count(!_.success)
+    val totalExpected = expectedResponses.get()
+    val totalReceived = receivedResponses.get()
+
+    results.foreach { result =>
+      val status = if (result.success) "✓ PASS" else "✗ FAIL"
+      val timing = f"${result.responseTimeMs}%4d ms"
+      logger.info(f"[$status] [ID:${result.requestId}%2d] [$timing] ${result.testName}")
+      if (!result.success) {
+        logger.info(f"         Reason: ${result.message}")
+      }
+    }
+
+    logger.info("-"*80)
+    logger.info(f"Total Tests: ${results.size}  Passed: $passed  Failed: $failed")
+    logger.info(f"Expected Responses: $totalExpected  Received: $totalReceived")
+    logger.info("="*80)
+  }
+
   private def runClient(serverUrl: String): Future[Unit] = {
     for {
-      // Step 1: Initialize and get session ID
+      // Test 1: Initialize and get session ID
       sessionId <- initializeSession(serverUrl)
-      _ = logger.info(s"\n=== Session initialized: $sessionId ===")
+      _ = logger.info(s"✓ Session initialized: $sessionId\n")
 
-      // Step 2: Establish SSE connection
+      // Test 2: Establish SSE connection
       sseConnection <- establishSseStream(serverUrl, sessionId)
-      _ = logger.info("\n=== SSE stream established ===")
+      _ = logger.info("✓ SSE stream established\n")
 
-      // Step 3: List tools
+      // Test 3: List tools
       _ <- listTools(serverUrl, sessionId)
-      _ = Thread.sleep(1000)  // Wait for SSE response
 
-
-      // Step 4: Test echo tool
+      // Test 4: Test echo tool with multiple messages
       _ <- testEchoTool(serverUrl, sessionId)
-      _ = Thread.sleep(1000)  // Wait for SSE responses
 
-      // Step 5: Test system_info tool
+      // Test 5: Test system_info tool
       _ <- testSystemInfoTool(serverUrl, sessionId)
-      _ = Thread.sleep(1000)  // Wait for SSE response
 
-      // Step 6: Wait a bit for any pending SSE messages
-      //_ = Thread.sleep(10000)
+      // Wait for all pending responses with timeout
+      _ <- waitForAllResponses(timeout = 10.seconds)
 
-      // Step 7: Close session
+      // Test 6: Close session
       _ <- closeSession(serverUrl, sessionId)
-      _ = logger.info("\n=== Session closed ===")
+      _ = logger.info("✓ Session closed\n")
 
-
-      // Step 8: Terminate SSE connection
+      // Terminate SSE connection
       _ = sseConnection._1.complete()
-      _ = logger.info("SSE connection terminated")
-
+      _ = logger.info("✓ SSE connection terminated\n")
 
     } yield ()
+  }
+
+  /**
+   * Wait for all pending responses to be received
+   */
+  private def waitForAllResponses(timeout: FiniteDuration): Future[Unit] = {
+    val expected = expectedResponses.get()
+    if (expected == 0) {
+      return Future.successful(())
+    }
+
+    logger.info(s"Waiting for $expected responses (timeout: ${timeout.toSeconds}s)...")
+
+    val allFutures = pendingRequests.values().asScala.map(_.future).toList
+    val allResponsesFuture = Future.sequence(allFutures).map(_ => ())
+
+    // Race between timeout and all responses
+    Future.firstCompletedOf(List(
+      allResponsesFuture,
+      Future {
+        Thread.sleep(timeout.toMillis)
+        ()
+      }
+    )).map { _ =>
+      val received = receivedResponses.get()
+      val pending = expected - received
+
+      if (pending > 0) {
+        logger.warn(s"⚠ Timeout: $pending responses still pending after ${timeout.toSeconds}s")
+
+        // Mark pending requests as failed
+        pendingRequests.asScala.foreach { case (id, promise) =>
+          if (!promise.isCompleted) {
+            testResults.add(TestResult(
+              testName = s"Request ID $id",
+              requestId = id,
+              success = false,
+              message = "Response not received within timeout",
+              responseTimeMs = timeout.toMillis
+            ))
+            promise.failure(new java.util.concurrent.TimeoutException(s"Response not received for request $id"))
+          }
+        }
+      } else {
+        logger.info(s"✓ All $received responses received successfully")
+      }
+    }
   }
 
   /**
@@ -192,7 +291,7 @@ object StreamingHttpMcpClient {
    * Establish SSE stream for receiving server messages
    */
   private def establishSseStream(serverUrl: String, sessionId: String): Future[(org.apache.pekko.stream.scaladsl.SourceQueueWithComplete[Unit], Future[Unit])] = {
-    logger.info("\n=== Establishing SSE Stream ===")
+    logger.info("=== TEST: Establishing SSE Stream ===")
 
     val httpRequest = HttpRequest(
       method = HttpMethods.GET,
@@ -213,28 +312,52 @@ object StreamingHttpMcpClient {
             .toMat(Sink.ignore)(Keep.both)
             .run()
 
-          // Process SSE events - parse line-by-line
+          // Process SSE events - parse line-by-line and match with pending requests
           val eventsFuture = response.entity.dataBytes
             .via(Framing.delimiter(ByteString("\n"), maximumFrameLength = 8192, allowTruncation = true))
             .map(_.utf8String)
             .runForeach { line =>
               if (line.startsWith("data: ")) {
                 val data = line.substring(6)
-                logger.info(s"SSE data: ${data.take(200)}")
 
-                // Parse and display the message
-                try {
-                  val jsonData = jsonMapper.readTree(data)
-                  if (jsonData.has("result")) {
-                    val result = jsonData.get("result")
-                    logger.info(s"  → Result: ${result.toString.take(200)}")
-                  } else if (jsonData.has("error")) {
-                    logger.error(s"  → Error: ${jsonData.get("error")}")
+                // Skip non-JSON SSE events (like endpoint announcements)
+                if (!data.startsWith("http")) {
+                  logger.debug(s"Received SSE data: ${data.take(100)}...")
+
+                  // Parse and route the response to the appropriate promise
+                  try {
+                    val jsonData = jsonMapper.readTree(data)
+
+                    // Extract request ID if present
+                    if (jsonData.has("id")) {
+                      val id = jsonData.get("id").asInt()
+                      val promise = pendingRequests.remove(id)
+
+                      if (promise != null) {
+                        val received = receivedResponses.incrementAndGet()
+                        logger.info(s"✓ Received response for request ID $id (${received}/${expectedResponses.get()})")
+                        promise.success(jsonData)
+                      } else {
+                        logger.debug(s"Received response for ID $id but no pending request found")
+                      }
+                    }
+
+                    // Log result/error for debugging
+                    if (jsonData.has("result")) {
+                      val result = jsonData.get("result")
+                      logger.debug(s"  Result: ${result.toString.take(100)}")
+                    } else if (jsonData.has("error")) {
+                      val error = jsonData.get("error")
+                      logger.error(s"  Error: $error")
+                    }
+                  } catch {
+                    case ex: Exception =>
+                      logger.debug(s"Could not parse SSE data as JSON: ${ex.getMessage}")
                   }
-                } catch {
-                  case ex: Exception =>
-                    logger.debug(s"Could not parse event data as JSON: ${ex.getMessage}")
                 }
+              } else if (line.startsWith("event: ")) {
+                val eventType = line.substring(7)
+                logger.debug(s"SSE event type: $eventType")
               }
             }
             .map(_ => ())
@@ -253,43 +376,85 @@ object StreamingHttpMcpClient {
    * List available tools
    */
   private def listTools(serverUrl: String, sessionId: String): Future[Unit] = {
-    logger.info("\n=== Listing Available Tools ===")
+    logger.info("=== TEST: Listing Available Tools ===")
 
+    val requestId = 2
     val listRequest: java.util.Map[String, Any] = Map(
       "jsonrpc" -> "2.0",
-      "id" -> 2,
+      "id" -> requestId,
       "method" -> "tools/list",
       "params" -> Map[String, Any]().asJava
     ).asJava.asInstanceOf[java.util.Map[String, Any]]
 
-    sendRequest(serverUrl, sessionId, listRequest).map { response =>
-      // Response will come via SSE for streaming transport
+    val startTime = System.currentTimeMillis()
+
+    sendRequestWithTracking(serverUrl, sessionId, listRequest, "List Tools").flatMap { response =>
+      val elapsed = System.currentTimeMillis() - startTime
+
+      // Validate response
       if (response.has("result")) {
         val result = response.get("result")
-        val tools = result.get("tools")
-        logger.info(s"Found ${tools.size()} tools:")
-        tools.elements().asScala.foreach { tool =>
-          logger.info(s"  - ${tool.get("name").asText()}: ${tool.get("description").asText()}")
+        if (result.has("tools")) {
+          val tools = result.get("tools")
+          val toolCount = tools.size()
+
+          logger.info(s"✓ Received tools list: $toolCount tools")
+          tools.elements().asScala.foreach { tool =>
+            logger.info(s"    - ${tool.get("name").asText()}: ${tool.get("description").asText()}")
+          }
+
+          // Validate we have expected tools
+          val expectedTools = Set("echo", "system_info")
+          val actualTools = tools.elements().asScala.map(_.get("name").asText()).toSet
+          val hasAllTools = expectedTools.subsetOf(actualTools)
+
+          testResults.add(TestResult(
+            testName = "List Tools",
+            requestId = requestId,
+            success = hasAllTools,
+            message = if (hasAllTools) s"Found all expected tools ($toolCount total)" else s"Missing tools: ${expectedTools.diff(actualTools).mkString(", ")}",
+            responseTimeMs = elapsed
+          ))
+
+          Future.successful(())
+        } else {
+          val msg = "Response missing 'tools' field"
+          logger.error(s"✗ $msg")
+          testResults.add(TestResult("List Tools", requestId, false, msg, elapsed))
+          Future.failed(new RuntimeException(msg))
         }
+      } else if (response.has("error")) {
+        val error = response.get("error")
+        val msg = s"Error response: ${error.get("message").asText()}"
+        logger.error(s"✗ $msg")
+        testResults.add(TestResult("List Tools", requestId, false, msg, elapsed))
+        Future.failed(new RuntimeException(msg))
       } else {
-        logger.info("Request sent, waiting for SSE response...")
+        val msg = "Invalid response format"
+        logger.error(s"✗ $msg")
+        testResults.add(TestResult("List Tools", requestId, false, msg, elapsed))
+        Future.failed(new RuntimeException(msg))
       }
     }
   }
 
   /**
-   * Test the echo tool
+   * Test the echo tool with multiple messages
    */
   private def testEchoTool(serverUrl: String, sessionId: String): Future[Unit] = {
-    logger.info("\n=== Testing Echo Tool ===")
+    logger.info("=== TEST: Echo Tool (Multiple Messages) ===")
 
-    val testMessages = List("Hello, Streaming HTTP!", "Testing SSE transport", "Pekko HTTP + MCP!")
-    //val testMessages = List("Hello, Streaming HTTP!")
+    val testMessages = List(
+      "Hello, Streaming HTTP!",
+      "Testing SSE transport",
+      "Pekko HTTP + MCP!"
+    )
 
     val futures = testMessages.zipWithIndex.map { case (message, index) =>
+      val requestId = 10 + index
       val callRequest: java.util.Map[String, Any] = Map(
         "jsonrpc" -> "2.0",
-        "id" -> (10 + index),
+        "id" -> requestId,
         "method" -> "tools/call",
         "params" -> Map(
           "name" -> "echo",
@@ -299,24 +464,66 @@ object StreamingHttpMcpClient {
         ).asJava
       ).asJava.asInstanceOf[java.util.Map[String, Any]]
 
-      sendRequest(serverUrl, sessionId, callRequest).map { response =>
-        // Response will come via SSE for streaming transport
+      val startTime = System.currentTimeMillis()
+
+      sendRequestWithTracking(serverUrl, sessionId, callRequest, s"Echo Tool #${index + 1}").flatMap { response =>
+        val elapsed = System.currentTimeMillis() - startTime
+
+        // Validate echo response
         if (response.has("result")) {
           val result = response.get("result")
-          val content = result.get("content")
+          if (result.has("content")) {
+            val content = result.get("content")
+            val textItems = content.elements().asScala.filter(_.get("type").asText() == "text").toList
 
-          content.elements().asScala.foreach { item =>
-            if (item.get("type").asText() == "text") {
-              logger.info(s"  Input: '$message'")
-              logger.info(s"  Output: '${item.get("text").asText()}'")
+            if (textItems.nonEmpty) {
+              val echoedText = textItems.head.get("text").asText()
+              val expectedEcho = s"Echo: $message"
+              val matches = echoedText == expectedEcho
+
+              logger.info(s"  Input:    '$message'")
+              logger.info(s"  Output:   '$echoedText'")
+              logger.info(s"  Expected: '$expectedEcho'")
+              logger.info(s"  Match:    ${if (matches) "✓" else "✗"}")
+
+              testResults.add(TestResult(
+                testName = s"Echo Tool #${index + 1}: '$message'",
+                requestId = requestId,
+                success = matches,
+                message = if (matches) "Echo matches expected output" else s"Expected '$expectedEcho' but got '$echoedText'",
+                responseTimeMs = elapsed
+              ))
+
+              Future.successful(())
+            } else {
+              val msg = "No text content in response"
+              logger.error(s"✗ $msg")
+              testResults.add(TestResult(s"Echo Tool #${index + 1}", requestId, false, msg, elapsed))
+              Future.failed(new RuntimeException(msg))
             }
+          } else {
+            val msg = "Response missing 'content' field"
+            logger.error(s"✗ $msg")
+            testResults.add(TestResult(s"Echo Tool #${index + 1}", requestId, false, msg, elapsed))
+            Future.failed(new RuntimeException(msg))
           }
+        } else if (response.has("error")) {
+          val error = response.get("error")
+          val msg = s"Error: ${error.get("message").asText()}"
+          logger.error(s"✗ $msg")
+          testResults.add(TestResult(s"Echo Tool #${index + 1}", requestId, false, msg, elapsed))
+          Future.failed(new RuntimeException(msg))
         } else {
-          logger.info(s"Echo request sent for: '$message', waiting for SSE response...")
+          val msg = "Invalid response format"
+          logger.error(s"✗ $msg")
+          testResults.add(TestResult(s"Echo Tool #${index + 1}", requestId, false, msg, elapsed))
+          Future.failed(new RuntimeException(msg))
         }
       }.recover {
         case ex: Exception =>
-          logger.error(s"Failed to call echo tool with message '$message'", ex)
+          val elapsed = System.currentTimeMillis() - startTime
+          logger.error(s"✗ Echo test #${index + 1} failed: ${ex.getMessage}")
+          testResults.add(TestResult(s"Echo Tool #${index + 1}", requestId, false, ex.getMessage, elapsed))
       }
     }
 
@@ -327,11 +534,12 @@ object StreamingHttpMcpClient {
    * Test the system_info tool
    */
   private def testSystemInfoTool(serverUrl: String, sessionId: String): Future[Unit] = {
-    logger.info("\n=== Testing System Info Tool ===")
+    logger.info("=== TEST: System Info Tool ===")
 
+    val requestId = 20
     val callRequest: java.util.Map[String, Any] = Map(
       "jsonrpc" -> "2.0",
-      "id" -> 20,
+      "id" -> requestId,
       "method" -> "tools/call",
       "params" -> Map(
         "name" -> "system_info",
@@ -339,31 +547,89 @@ object StreamingHttpMcpClient {
       ).asJava
     ).asJava.asInstanceOf[java.util.Map[String, Any]]
 
-    sendRequest(serverUrl, sessionId, callRequest).map { response =>
-      // Response will come via SSE for streaming transport
+    val startTime = System.currentTimeMillis()
+
+    sendRequestWithTracking(serverUrl, sessionId, callRequest, "System Info Tool").flatMap { response =>
+      val elapsed = System.currentTimeMillis() - startTime
+
+      // Validate system info response
       if (response.has("result")) {
         val result = response.get("result")
-        val content = result.get("content")
+        if (result.has("content")) {
+          val content = result.get("content")
+          val textItems = content.elements().asScala.filter(_.get("type").asText() == "text").toList
 
-        content.elements().asScala.foreach { item =>
-          if (item.get("type").asText() == "text") {
-            logger.info(s"System Information:\n${item.get("text").asText()}")
+          if (textItems.nonEmpty) {
+            val sysInfo = textItems.head.get("text").asText()
+
+            // Validate system info contains expected fields
+            val expectedFields = List("OS Name:", "Java Version:", "Available Processors:", "Total Memory:")
+            val missingFields = expectedFields.filterNot(sysInfo.contains)
+            val hasAllFields = missingFields.isEmpty
+
+            logger.info("System Information:")
+            logger.info(sysInfo)
+
+            testResults.add(TestResult(
+              testName = "System Info Tool",
+              requestId = requestId,
+              success = hasAllFields,
+              message = if (hasAllFields) "Contains all expected fields" else s"Missing fields: ${missingFields.mkString(", ")}",
+              responseTimeMs = elapsed
+            ))
+
+            Future.successful(())
+          } else {
+            val msg = "No text content in response"
+            logger.error(s"✗ $msg")
+            testResults.add(TestResult("System Info Tool", requestId, false, msg, elapsed))
+            Future.failed(new RuntimeException(msg))
           }
+        } else {
+          val msg = "Response missing 'content' field"
+          logger.error(s"✗ $msg")
+          testResults.add(TestResult("System Info Tool", requestId, false, msg, elapsed))
+          Future.failed(new RuntimeException(msg))
         }
+      } else if (response.has("error")) {
+        val error = response.get("error")
+        val msg = s"Error: ${error.get("message").asText()}"
+        logger.error(s"✗ $msg")
+        testResults.add(TestResult("System Info Tool", requestId, false, msg, elapsed))
+        Future.failed(new RuntimeException(msg))
       } else {
-        logger.info("System info request sent, waiting for SSE response...")
+        val msg = "Invalid response format"
+        logger.error(s"✗ $msg")
+        testResults.add(TestResult("System Info Tool", requestId, false, msg, elapsed))
+        Future.failed(new RuntimeException(msg))
       }
     }.recover {
       case ex: Exception =>
-        logger.error("Failed to call system_info tool", ex)
+        val elapsed = System.currentTimeMillis() - startTime
+        logger.error(s"✗ System info test failed: ${ex.getMessage}")
+        testResults.add(TestResult("System Info Tool", requestId, false, ex.getMessage, elapsed))
+        ()
     }
   }
 
   /**
-   * Send a request and get response (for non-streaming responses, we get via SSE)
+   * Send a request with tracking for response validation
    */
-  private def sendRequest(serverUrl: String, sessionId: String, requestBody: java.util.Map[String, Any]): Future[JsonNode] = {
+  private def sendRequestWithTracking(
+    serverUrl: String,
+    sessionId: String,
+    requestBody: java.util.Map[String, Any],
+    testName: String
+  ): Future[JsonNode] = {
+    val requestId = requestBody.get("id").asInstanceOf[Int]
+    val promise = Promise[JsonNode]()
+
+    // Register pending request
+    pendingRequests.put(requestId, promise)
+    expectedResponses.incrementAndGet()
+
     val requestJson = jsonMapper.writeValueAsString(requestBody)
+    logger.debug(s"Sending request ID $requestId: $testName")
 
     val httpRequest = HttpRequest(
       method = HttpMethods.POST,
@@ -378,18 +644,26 @@ object StreamingHttpMcpClient {
     Http().singleRequest(httpRequest).flatMap { response =>
       response.status match {
         case StatusCodes.Accepted =>
-          // Response will come via SSE, return empty for now
-          Future.successful(jsonMapper.createObjectNode())
+          // Response will come via SSE stream
+          logger.debug(s"Request $requestId accepted, waiting for SSE response...")
+          promise.future
 
         case StatusCodes.OK =>
-          // Direct response (for some methods)
+          // Direct response (shouldn't happen in streaming mode, but handle it)
+          logger.debug(s"Request $requestId got direct response")
           Unmarshal(response.entity).to[String].map { body =>
-            jsonMapper.readTree(body)
+            val jsonResponse = jsonMapper.readTree(body)
+            receivedResponses.incrementAndGet()
+            promise.success(jsonResponse)
+            jsonResponse
           }
 
         case _ =>
           Unmarshal(response.entity).to[String].flatMap { body =>
-            Future.failed(new RuntimeException(s"Request failed: ${response.status} - $body"))
+            val error = new RuntimeException(s"Request failed: ${response.status} - $body")
+            promise.failure(error)
+            pendingRequests.remove(requestId)
+            Future.failed(error)
           }
       }
     }
