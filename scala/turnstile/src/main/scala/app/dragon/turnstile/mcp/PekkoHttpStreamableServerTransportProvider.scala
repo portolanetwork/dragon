@@ -39,34 +39,48 @@ case class SslConfig(
 )
 
 /**
- * Pekko HTTP implementation of MCP streamable transport using Server-Sent Events (SSE).
+ * Pekko HTTP implementation of MCP Streamable HTTP transport (MCP 2025-03-26).
  *
  * This is the Pekko HTTP equivalent of HttpServletStreamableServerTransportProvider,
- * providing HTTP streaming for the Model Context Protocol using:
- * - Server-Sent Events (SSE) for server-to-client messages (GET requests)
- * - HTTP POST for client-to-server messages
+ * providing Streamable HTTP transport for the Model Context Protocol using:
+ * - HTTP POST for client-to-server messages (with Accept: application/json, text/event-stream)
+ * - HTTP GET for establishing server-to-client SSE streams (with Accept: text/event-stream)
+ * - Single unified endpoint supporting both POST and GET methods
  * - Session-based communication with mcp-session-id headers
  * - Message replay support using Last-Event-ID
  * - Optional HTTPS/TLS support for secure communication
  *
- * Architecture:
- * - GET /mcp: Establish SSE connection for receiving server messages
- * - POST /mcp: Send client messages (initialize, requests, responses, notifications)
- * - DELETE /mcp: Delete session (optional)
- * - GET /messages: Alternative SSE endpoint (cloud connector compatibility)
- * - POST /messages: Alternative message endpoint (cloud connector compatibility)
+ * Streamable HTTP Transport (replaces deprecated HTTP+SSE from MCP 2024-11-05):
+ * This transport consolidates the previous separate endpoints into a single MCP endpoint,
+ * using Server-Sent Events (SSE) as the underlying streaming mechanism but with improved
+ * session management and a unified request/response model.
  *
- * The transport manages multiple concurrent sessions, each with its own SSE stream.
+ * Architecture:
+ * - POST /mcp: Send messages (initialize creates session, others require mcp-session-id)
+ *   - Accept header must include both "application/json" and "text/event-stream"
+ *   - Returns HTTP 202 for notifications/responses (no body)
+ *   - Returns text/event-stream for request responses (may include intermediate messages)
+ * - GET /mcp: Establish SSE connection for server-initiated messages
+ *   - Accept header must include "text/event-stream"
+ *   - Requires mcp-session-id header
+ *   - Supports Last-Event-ID for message replay
+ * - DELETE /mcp: Delete session (optional)
+ *   - Requires mcp-session-id header
  *
  * Cloud Connector Compatibility:
  * - /messages endpoint provides compatibility with cloud-based MCP connectors
- * - Both /mcp and /messages endpoints support the same operations
+ * - Both /mcp and /messages endpoints support identical operations
  * - Session management works identically across both endpoints
  *
  * HTTPS Support:
  * - Optional SSL/TLS encryption using Java KeyStore
  * - Configurable via SslConfig
  * - Supports PKCS12, JKS, and other KeyStore formats
+ *
+ * Protocol Compliance:
+ * - Supports MCP protocol versions: 2024-11-05, 2025-03-26, 2025-06-18
+ * - Implements Streamable HTTP transport specification (2025-03-26)
+ * - Session IDs are globally unique and cryptographically secure (UUID)
  *
  * @param jsonMapper The JSON mapper for MCP message serialization
  * @param mcpEndpoint The endpoint path (default: "/mcp")
@@ -362,7 +376,13 @@ class PekkoHttpStreamableServerTransportProvider(
   }
 
   /**
-   * Handle GET requests for SSE connections
+   * Handle GET requests for establishing SSE streams (Streamable HTTP transport).
+   *
+   * Per MCP Streamable HTTP spec (2025-03-26):
+   * - Requires Accept: text/event-stream header
+   * - Requires mcp-session-id header (session must already exist from POST initialize)
+   * - Supports Last-Event-ID for message replay
+   * - Returns SSE stream for server-initiated messages
    */
   private def handleGet(): Route = {
     if (isClosing) {
@@ -404,7 +424,10 @@ class PekkoHttpStreamableServerTransportProvider(
   }
 
   /**
-   * Handle SSE stream for a session
+   * Handle SSE stream for a session (Streamable HTTP GET endpoint).
+   *
+   * Establishes a Server-Sent Events stream for server-to-client messages.
+   * Supports message replay via Last-Event-ID header.
    */
   private def handleSseStream(session: McpStreamableServerSession, sessionId: String, lastEventIdOpt: Option[String]): Route = {
     extractRequest { httpRequest =>
@@ -467,7 +490,14 @@ class PekkoHttpStreamableServerTransportProvider(
   }
 
   /**
-   * Handle POST requests for client messages
+   * Handle POST requests for client messages (Streamable HTTP transport).
+   *
+   * Per MCP Streamable HTTP spec (2025-03-26):
+   * - Requires Accept header with both "application/json" and "text/event-stream"
+   * - Initialize request: Creates new session, returns JSON response with mcp-session-id header
+   * - Other messages: Require existing mcp-session-id header
+   * - Responses/notifications: Return HTTP 202 (Accepted) with no body
+   * - Requests: Return text/event-stream with response messages
    */
   private def handlePost(): Route = {
     if (isClosing) {
@@ -655,7 +685,10 @@ class PekkoHttpStreamableServerTransportProvider(
   }
 
   /**
-   * Session transport implementation using Pekko Streams queue for SSE
+   * Session transport implementation for Streamable HTTP using Pekko Streams queue for SSE.
+   *
+   * This transport manages the SSE stream for a single session, formatting JSON-RPC messages
+   * as Server-Sent Events according to the Streamable HTTP transport specification.
    */
   private class PekkoHttpStreamableMcpSessionTransport(
     sessionId: String,

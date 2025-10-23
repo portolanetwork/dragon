@@ -10,27 +10,32 @@ import scala.jdk.CollectionConverters.*
 import scala.util.Try
 
 /**
- * MCP Server implementation using HTTP streaming with Server-Sent Events (SSE).
+ * MCP Server implementation using Streamable HTTP transport (MCP 2025-03-26).
  *
- * This server provides streaming HTTP transport for the Model Context Protocol using:
- * - Server-Sent Events (SSE) for server-to-client messages
- * - HTTP POST for client-to-server messages
- * - Session-based communication with persistent connections
- * - Message replay support
+ * This server provides Streamable HTTP transport for the Model Context Protocol,
+ * implementing the current MCP specification that replaces the deprecated HTTP+SSE
+ * transport from protocol version 2024-11-05.
  *
- * Key Features:
- * - Bidirectional streaming over HTTP
+ * Streamable HTTP Transport Features:
+ * - Single unified endpoint supporting POST and GET methods
+ * - HTTP POST for client-to-server messages (with Accept: application/json, text/event-stream)
+ * - HTTP GET for server-to-client SSE streams (with Accept: text/event-stream)
+ * - Session-based communication with mcp-session-id headers
+ * - Message replay support via Last-Event-ID
  * - Multiple concurrent client sessions
- * - Session management with mcp-session-id headers
- * - Message buffering and replay on reconnection
  * - Graceful shutdown
  *
- * Transport Details:
- * - GET /mcp: Establish SSE connection (with mcp-session-id header)
+ * Protocol Endpoints:
  * - POST /mcp: Send messages (initialize creates session, others require mcp-session-id)
+ *   - Initialize: Returns JSON response with mcp-session-id header
+ *   - Responses/Notifications: Returns HTTP 202 Accepted
+ *   - Requests: Returns text/event-stream with responses
+ * - GET /mcp: Establish SSE connection (requires existing mcp-session-id header)
  * - DELETE /mcp: Close session (with mcp-session-id header)
+ * - POST /messages: Cloud connector compatibility endpoint (same as POST /mcp)
+ * - GET /messages: Cloud connector compatibility endpoint (same as GET /mcp)
  *
- * This is the streaming equivalent of the stateless HTTP server, providing:
+ * Key Benefits over Stateless HTTP:
  * - Long-lived connections instead of request/response pairs
  * - Server-initiated messages (notifications, progress updates)
  * - Better performance for interactive applications
@@ -122,8 +127,8 @@ class StreamingHttpMcpServer(config: Config)(implicit system: ActorSystem[?]) {
    * Start the MCP streaming HTTP server
    */
   def start(): Unit = {
-    logger.info(s"Starting MCP Streaming HTTP Server: $serverName v$serverVersion")
-    logger.info("Using HTTP streaming with Server-Sent Events (SSE)")
+    logger.info(s"Starting MCP Streamable HTTP Server: $serverName v$serverVersion")
+    logger.info("Using Streamable HTTP transport (MCP 2025-03-26)")
 
     val protocol = if (sslConfig.exists(_.enabled)) "https" else "http"
     logger.info(s"Server will be available at $protocol://$host:$port/mcp")
@@ -134,13 +139,13 @@ class StreamingHttpMcpServer(config: Config)(implicit system: ActorSystem[?]) {
       logger.info(s"  KeyStore Type: ${sslConfig.get.keyStoreType}")
     }
 
-    logger.info("Client should:")
-    logger.info("  1. POST to /mcp (or /messages) with initialize request")
+    logger.info("Streamable HTTP Protocol Flow:")
+    logger.info("  1. POST to /mcp with initialize request (Accept: application/json, text/event-stream)")
     logger.info("  2. Receive mcp-session-id in response header")
-    logger.info("  3. GET /mcp (or /messages) with mcp-session-id header to establish SSE stream")
-    logger.info("  4. POST to /mcp (or /messages) with mcp-session-id header to send requests")
+    logger.info("  3. GET /mcp with mcp-session-id header to establish SSE stream (Accept: text/event-stream)")
+    logger.info("  4. POST to /mcp with mcp-session-id header to send requests/responses/notifications")
     logger.info("")
-    logger.info("Note: Both /mcp and /messages endpoints are supported for cloud connector compatibility")
+    logger.info("Cloud Connector Compatibility: /messages endpoint mirrors /mcp functionality")
 
     transportProvider.start()
 
