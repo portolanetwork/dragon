@@ -35,7 +35,8 @@ trait McpService {
   /**
    * Get all tools with their handlers as Java BiFunction for SDK compatibility
    */
-  final def getToolsWithHandlers: List[(McpSchema.Tool, java.util.function.BiFunction[McpTransportContext, McpSchema.CallToolRequest, McpSchema.CallToolResult])] = {
+  final def getToolsWithHandlers: 
+  List[(McpSchema.Tool, java.util.function.BiFunction[McpTransportContext, McpSchema.CallToolRequest, McpSchema.CallToolResult])] = {
     tools.map { tool =>
       val javaHandler = new java.util.function.BiFunction[McpTransportContext, McpSchema.CallToolRequest, McpSchema.CallToolResult] {
         override def apply(ctx: McpTransportContext, req: McpSchema.CallToolRequest): McpSchema.CallToolResult =
