@@ -10,7 +10,7 @@ import org.apache.pekko.http.scaladsl.model.*
 import org.apache.pekko.http.scaladsl.model.headers.RawHeader
 import org.apache.pekko.http.scaladsl.model.sse.ServerSentEvent
 import org.apache.pekko.http.scaladsl.server.Directives.*
-import org.apache.pekko.http.scaladsl.server.Route
+import org.apache.pekko.http.scaladsl.server.{Directive0, Route}
 import org.apache.pekko.stream.scaladsl.{BroadcastHub, Keep, Source, SourceQueueWithComplete}
 import org.apache.pekko.stream.{OverflowStrategy, QueueOfferResult}
 import org.apache.pekko.util.ByteString
@@ -76,6 +76,12 @@ case class SslConfig(
  * - Optional SSL/TLS encryption using Java KeyStore
  * - Configurable via SslConfig
  * - Supports PKCS12, JKS, and other KeyStore formats
+ *
+ * CORS Support for Remote Connectors:
+ * - Automatic CORS headers for cross-origin requests (ngrok, cloud hosting, etc.)
+ * - OPTIONS preflight request handling
+ * - Exposes mcp-session-id header to clients
+ * - Configured for "*" origin (can be restricted for production)
  *
  * Protocol Compliance:
  * - Supports MCP protocol versions: 2024-11-05, 2025-03-26, 2025-06-18
@@ -348,29 +354,66 @@ class PekkoHttpStreamableServerTransportProvider(
   }
 
   /**
-   * Create the Pekko HTTP route handling GET, POST, DELETE
+   * Add CORS headers to response for remote MCP connector support
+   */
+  private def addCorsHeaders: Directive0 = {
+    respondWithHeaders(
+      RawHeader("Access-Control-Allow-Origin", "*"),
+      RawHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS"),
+      RawHeader("Access-Control-Allow-Headers", "Content-Type, Accept, Authorization, x-api-key, mcp-session-id, last-event-id, cache-control"),
+      RawHeader("Access-Control-Expose-Headers", "Content-Type, mcp-session-id"),
+      RawHeader("Access-Control-Max-Age", "86400")
+    )
+  }
+
+  /**
+   * Handle OPTIONS requests for CORS preflight
+   */
+  private def handleOptions(): Route = {
+    complete(
+      HttpResponse(
+        StatusCodes.NoContent,
+        headers = List(
+          RawHeader("Access-Control-Allow-Origin", "*"),
+          RawHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS"),
+          RawHeader("Access-Control-Allow-Headers", "Content-Type, Accept, Authorization, x-api-key, mcp-session-id, last-event-id, cache-control"),
+          RawHeader("Access-Control-Expose-Headers", "Content-Type, mcp-session-id"),
+          RawHeader("Access-Control-Max-Age", "86400")
+        )
+      )
+    )
+  }
+
+  /**
+   * Create the Pekko HTTP route handling GET, POST, DELETE, OPTIONS
    */
   private def createRoute(): Route = {
-    path(mcpEndpoint.stripPrefix("/")) {
-      get {
-        handleGet()
+    addCorsHeaders {
+      path(mcpEndpoint.stripPrefix("/")) {
+        options {
+          handleOptions()
+        } ~
+        get {
+          handleGet()
+        } ~
+        post {
+          handlePost()
+        } ~
+        delete {
+          handleDelete()
+        }
       } ~
-      post {
-        handlePost()
-      } ~
-      delete {
-        handleDelete()
-      }
-    } ~
-    path("messages") {
-      // Cloud connector compatibility endpoint
-      // POST /messages is equivalent to POST /mcp for message sending
-      post {
-        handlePost()
-      } ~
-      // GET /messages can be used for SSE streaming
-      get {
-        handleGet()
+      path("messages") {
+        // Cloud connector compatibility endpoint
+        options {
+          handleOptions()
+        } ~
+        post {
+          handlePost()
+        } ~
+        get {
+          handleGet()
+        }
       }
     }
   }
@@ -481,9 +524,16 @@ class PekkoHttpStreamableServerTransportProvider(
         ByteString(sb.toString)
       }
       complete(
-        HttpEntity.Chunked.fromData(
-          MediaTypes.`text/event-stream`.toContentType,
-          eventStream
+        HttpResponse(
+          StatusCodes.OK,
+          headers = List(
+            RawHeader("Cache-Control", "no-cache"),
+            RawHeader("Connection", "keep-alive")
+          ),
+          entity = HttpEntity.Chunked.fromData(
+            MediaTypes.`text/event-stream`.toContentType,
+            eventStream
+          )
         )
       )
     }
@@ -664,9 +714,16 @@ class PekkoHttpStreamableServerTransportProvider(
             ByteString(sb.toString)
           }
           complete(
-            HttpEntity.Chunked.fromData(
-              MediaTypes.`text/event-stream`.toContentType,
-              eventStream
+            HttpResponse(
+              StatusCodes.OK,
+              headers = List(
+                RawHeader("Cache-Control", "no-cache"),
+                RawHeader("Connection", "keep-alive")
+              ),
+              entity = HttpEntity.Chunked.fromData(
+                MediaTypes.`text/event-stream`.toContentType,
+                eventStream
+              )
             )
           )
         }
