@@ -1,6 +1,6 @@
 package app.dragon.turnstile.mcp
 
-import app.dragon.turnstile.service.McpService
+import app.dragon.turnstile.service.{McpService, ToolsService, ToolsServiceExample}
 import com.typesafe.config.Config
 import io.modelcontextprotocol.json.McpJsonMapper
 import io.modelcontextprotocol.server.{McpServer, McpSyncServer}
@@ -51,13 +51,22 @@ import scala.util.Try
 class StreamingHttpMcpServer(config: Config)(implicit system: ActorSystem[?]) {
   private val logger: Logger = LoggerFactory.getLogger(classOf[StreamingHttpMcpServer])
 
+  // Execution context for async operations
+  private implicit val ec: scala.concurrent.ExecutionContext = system.executionContext
+
   private val serverName = config.getString("name")
   private val serverVersion = config.getString("version")
   private val host = config.getString("host")
   private val port = config.getInt("port")
 
-  // Create the service layer for tool handlers
-  private val mcpService = McpService(config)
+  // Create the ToolsService for dynamic tool management
+  private val toolsService = ToolsService(config)
+
+  // Initialize demo tools for default user
+  initializeDemoTools()
+
+  // Create the service layer for tool handlers (using default user)
+  private val mcpService = toolsService.createServiceForUser("default")
 
   // Create the JSON mapper
   private val jsonMapper = McpJsonMapper.getDefault
@@ -124,6 +133,31 @@ class StreamingHttpMcpServer(config: Config)(implicit system: ActorSystem[?]) {
   }
 
   /**
+   * Initialize demo tools for the default user
+   */
+  private def initializeDemoTools(): Unit = {
+    logger.info("Initializing demo tools for default user...")
+
+    val demoTools = List(
+      ToolsServiceExample.createGreetingTool,
+      ToolsServiceExample.createCalculatorTool,
+      ToolsServiceExample.createWeatherTool
+    )
+
+    toolsService.updateTools("default", demoTools) match {
+      case Right(count) =>
+        logger.info(s"Successfully registered $count demo tools: ${demoTools.map(_.name).mkString(", ")}")
+      case Left(errors) =>
+        logger.warn(s"Failed to register demo tools: ${errors.mkString(", ")}")
+    }
+  }
+
+  /**
+   * Get the ToolsService instance (for external access)
+   */
+  def getToolsService: ToolsService = toolsService
+
+  /**
    * Start the MCP streaming HTTP server
    */
   def start(): Unit = {
@@ -160,6 +194,7 @@ class StreamingHttpMcpServer(config: Config)(implicit system: ActorSystem[?]) {
     logger.info("Stopping MCP Streaming HTTP Server")
     try {
       transportProvider.closeGracefully().block()
+      toolsService.close() // Close database connection pool
       logger.info("MCP Streaming HTTP Server stopped gracefully")
     } catch {
       case ex: Exception =>

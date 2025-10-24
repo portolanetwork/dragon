@@ -61,7 +61,7 @@ trait McpService {
  * 2. Add the tool instance to the `tools` sequence below
  */
 class DefaultMcpService(config: Config) extends McpService {
-  private val logger: Logger = LoggerFactory.getLogger(classOf[DefaultMcpService])
+  private val logger: Logger = LoggerFactory.getLogger(classOf[ DefaultMcpService])
 
   private val serverName = config.getString("name")
   private val serverVersion = config.getString("version")

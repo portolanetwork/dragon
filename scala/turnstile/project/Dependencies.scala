@@ -16,6 +16,11 @@ object Dependencies {
   val jwtScalaVersion = "10.0.1"
   val protobufJavaUtilVersion = "3.25.6"
   val mcpSdkVersion = "0.14.1"
+  val slickVersion = "3.5.2"
+  val slickPgVersion = "0.22.2"
+  val postgresqlVersion = "42.7.4"
+  val hikariCPVersion = "6.2.1"
+  val flywayVersion = "11.1.0"
 
   val dependencies = Seq(
     "org.apache.pekko" %% "pekko-actor" % pekkoVersion,
@@ -63,10 +68,20 @@ object Dependencies {
     "com.google.protobuf" % "protobuf-java-util" % protobufJavaUtilVersion,
     // MCP (Model Context Protocol)
     "io.modelcontextprotocol.sdk" % "mcp" % mcpSdkVersion,
+    // Database - Slick ORM with PostgreSQL
+    "com.typesafe.slick" %% "slick" % slickVersion,
+    "com.typesafe.slick" %% "slick-hikaricp" % slickVersion,
+    "com.github.tminglei" %% "slick-pg" % slickPgVersion,
+    "com.github.tminglei" %% "slick-pg_play-json" % slickPgVersion,
+    "org.postgresql" % "postgresql" % postgresqlVersion,
+    "com.zaxxer" % "HikariCP" % hikariCPVersion,
+    "org.flywaydb" % "flyway-core" % flywayVersion,
+    "org.flywaydb" % "flyway-database-postgresql" % flywayVersion,
     // Test
     "org.apache.pekko" %% "pekko-actor-testkit-typed" % pekkoVersion % Test,
     "org.scalamock" %% "scalamock" % scalaMockVersion % Test,
-    "org.scalatest" %% "scalatest" % scalaTestVersion % Test
+    "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
+    "com.h2database" % "h2" % "2.3.232" % Test  // H2 for testing
   )
 
   val dependencyOverrides = Seq()
