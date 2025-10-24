@@ -1,6 +1,6 @@
 package app.dragon.turnstile.service
 
-import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
+import app.dragon.turnstile.utils.JsonUtils
 import io.modelcontextprotocol.common.McpTransportContext
 import io.modelcontextprotocol.json.McpJsonMapper
 import io.modelcontextprotocol.spec.McpSchema
@@ -15,6 +15,7 @@ import scala.util.{Failure, Success, Try}
  * Dynamic tools allow runtime tool registration per user, with schemas
  * defined in JSON format and handlers that can be interpreted or scripted.
  *
+ * @param id Database ID (None for new tools, Some for persisted tools)
  * @param name Tool name (must be unique per user)
  * @param description Tool description
  * @param schemaJson JSON schema for input parameters (as JSON string)
@@ -22,6 +23,7 @@ import scala.util.{Failure, Success, Try}
  * @param isDefault Whether this is a default (non-replaceable) tool
  */
 case class DynamicTool(
+  id: Option[Long] = None,
   name: String,
   description: String,
   schemaJson: String,
@@ -34,7 +36,6 @@ case class DynamicTool(
  */
 object DynamicTool {
   private val logger: Logger = LoggerFactory.getLogger(DynamicTool.getClass)
-  private val objectMapper = new ObjectMapper()
   private val mcpJsonMapper = McpJsonMapper.getDefault
 
   /**
@@ -62,7 +63,7 @@ object DynamicTool {
    * @return Try[McpTool] - Success with McpTool or Failure with error
    */
   def toMcpTool(dynamicTool: DynamicTool): Try[McpTool] = {
-    parseJsonSchema(dynamicTool.schemaJson).map { inputSchema =>
+    JsonUtils.parseJsonSchema(dynamicTool.schemaJson).map { inputSchema =>
       val schema = McpSchema.Tool.builder()
         .name(dynamicTool.name)
         .description(dynamicTool.description)
@@ -75,73 +76,6 @@ object DynamicTool {
         schema = schema,
         handler = dynamicTool.handler
       )
-    }
-  }
-
-  /**
-   * Parse JSON schema string into McpSchema.JsonSchema
-   *
-   * @param schemaJson JSON schema as string
-   * @return Try[McpSchema.JsonSchema]
-   */
-  def parseJsonSchema(schemaJson: String): Try[McpSchema.JsonSchema] = Try {
-    val jsonNode = objectMapper.readTree(schemaJson)
-
-    val schemaType = Option(jsonNode.get("type"))
-      .map(_.asText())
-      .getOrElse("object")
-
-    val properties = Option(jsonNode.get("properties"))
-      .map { propsNode =>
-        val fields = propsNode.fields().asScala
-        fields.map { entry =>
-          val key = entry.getKey
-          val value = entry.getValue
-          // Convert JsonNode to Map[String, Any] for Java interop
-          val propMap = jsonNodeToMap(value)
-          key -> propMap.asJava.asInstanceOf[Object]
-        }.toMap.asJava
-      }
-      .getOrElse(java.util.Collections.emptyMap())
-
-    val required = Option(jsonNode.get("required"))
-      .map { reqNode =>
-        reqNode.elements().asScala.map(_.asText()).toSeq.asJava
-      }
-      .getOrElse(java.util.Collections.emptyList())
-
-    new McpSchema.JsonSchema(
-      schemaType,
-      properties,
-      required,
-      null, // additionalProperties
-      null, // defs
-      null  // definitions
-    )
-  }
-
-  /**
-   * Convert JsonNode to Map[String, Any] for Java interop
-   */
-  private def jsonNodeToMap(node: JsonNode): Map[String, Any] = {
-    if (node.isObject) {
-      node.fields().asScala.map { entry =>
-        entry.getKey -> (entry.getValue match {
-          case v if v.isTextual => v.asText()
-          case v if v.isNumber => v.asDouble()
-          case v if v.isBoolean => v.asBoolean()
-          case v if v.isObject => jsonNodeToMap(v)
-          case v if v.isArray => v.elements().asScala.map {
-            case elem if elem.isTextual => elem.asText()
-            case elem if elem.isNumber => elem.asDouble()
-            case elem if elem.isBoolean => elem.asBoolean()
-            case elem => jsonNodeToMap(elem)
-          }.toList
-          case _ => null
-        })
-      }.toMap
-    } else {
-      Map.empty
     }
   }
 
@@ -196,7 +130,7 @@ object DynamicTool {
     } else if (tool.description.isEmpty) {
       Left("Tool description cannot be empty")
     } else {
-      parseJsonSchema(tool.schemaJson) match {
+      JsonUtils.parseJsonSchema(tool.schemaJson) match {
         case Success(_) => Right(tool)
         case Failure(ex) => Left(s"Invalid JSON schema: ${ex.getMessage}")
       }

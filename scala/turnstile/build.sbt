@@ -9,6 +9,11 @@ ThisBuild / dynverSeparator := "-"
 pekkoGrpcGeneratedSources := Seq(PekkoGrpc.Server, PekkoGrpc.Client)
 pekkoGrpcCodeGeneratorSettings += "server_power_apis"
 
+Compile / PB.protoSources := Seq(
+  sourceDirectory.value / ".." / ".." / ".." / "resources" / "proto",
+  sourceDirectory.value / "main" / "protobuf"
+)
+
 lazy val root = (project in file("."))
   .enablePlugins(DockerPlugin, UniversalPlugin)
   .enablePlugins(JavaAgent, JavaAppPackaging)

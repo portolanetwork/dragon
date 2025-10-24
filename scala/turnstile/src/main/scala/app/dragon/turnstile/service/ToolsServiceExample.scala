@@ -10,11 +10,11 @@ import scala.jdk.CollectionConverters.*
  * Example usage of ToolsService for dynamic tool registration.
  *
  * This demonstrates:
- * 1. Creating a ToolsService
+ * 1. Creating and using the ToolsService singleton
  * 2. Defining custom tools with JSON schemas
- * 3. Registering tools for specific users
- * 4. Retrieving and using tools
- * 5. Error handling and validation
+ * 3. CRUD operations: createTool, getTool, getTools, deleteTool
+ * 4. Error handling and validation
+ * 5. Working with tool IDs for identification
  */
 object ToolsServiceExample {
   private val logger: Logger = LoggerFactory.getLogger(ToolsServiceExample.getClass)
@@ -196,13 +196,13 @@ object ToolsServiceExample {
 
     // Create the service with global execution context
     implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
-    val toolsService = ToolsService(config)
+    val toolsService = ToolsService.instance
 
     // Check default tools
     val defaultTools = toolsService.getDefaultTools
     logger.info(s"Default tools: ${defaultTools.map(_.name).mkString(", ")}")
 
-    // Register custom tools for a user
+    // Create custom tools for a user
     val userId = "user123"
     val customTools = List(
       createGreetingTool,
@@ -210,24 +210,23 @@ object ToolsServiceExample {
       createWeatherTool
     )
 
-    toolsService.updateTools(userId, customTools) match {
-      case Right(count) =>
-        logger.info(s"Successfully registered $count custom tools for $userId")
-      case Left(errors) =>
-        logger.error(s"Failed to register tools: ${errors.mkString(", ")}")
+    // Create each tool individually
+    customTools.foreach { tool =>
+      toolsService.createTool(userId, tool).map {
+        case Right(created) =>
+          logger.info(s"Successfully created tool ${created.name} with id ${created.id} for $userId")
+        case Left(err) =>
+          logger.error(s"Failed to create tool ${tool.name}: ${err.message}")
+      }
     }
 
-    // Get all tools for the user
-    val allTools = toolsService.getToolsForUser(userId)
-    logger.info(s"User $userId has ${allTools.size} tools: ${allTools.map(_.name).mkString(", ")}")
-
-    // Create an MCP service for the user
-    val userService = toolsService.createServiceForUser(userId)
-    logger.info(s"Created MCP service with ${userService.tools.size} tools")
-
-    // Get statistics
-    val stats = toolsService.getStats
-    logger.info(s"Service statistics: $stats")
+    // Get all tools for the user (asynchronously)
+    toolsService.getTools(userId).map {
+      case Right(allTools) =>
+        logger.info(s"User $userId has ${allTools.size} tools: ${allTools.map(_.name).mkString(", ")}")
+      case Left(err) =>
+        logger.error(s"Failed to get tools: ${err.message}")
+    }
   }
 
   /**
@@ -237,7 +236,7 @@ object ToolsServiceExample {
     logger.info("=== ToolsService Error Handling Example ===")
 
     implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
-    val toolsService = ToolsService(config)
+    val toolsService = ToolsService.instance
     val userId = "user456"
 
     // Example 1: Invalid JSON schema
@@ -248,25 +247,14 @@ object ToolsServiceExample {
       handler = DynamicTool.simpleTextHandler("test")
     )
 
-    toolsService.updateTools(userId, List(invalidSchemaTool)) match {
+    toolsService.createTool(userId, invalidSchemaTool).map {
       case Right(_) =>
         logger.error("Should have failed with invalid schema")
-      case Left(errors) =>
-        logger.info(s"Expected validation error: ${errors.mkString(", ")}")
+      case Left(err) =>
+        logger.info(s"Expected validation error: ${err.message}")
     }
 
-    // Example 2: Duplicate tool names
-    val tool1 = createGreetingTool
-    val tool2 = createGreetingTool.copy(description = "Another greeting")
-
-    toolsService.updateTools(userId, List(tool1, tool2)) match {
-      case Right(_) =>
-        logger.error("Should have failed with duplicate names")
-      case Left(errors) =>
-        logger.info(s"Expected duplicate error: ${errors.mkString(", ")}")
-    }
-
-    // Example 3: Conflicting with default tool names
+    // Example 2: Conflicting with default tool names
     val conflictingTool = DynamicTool(
       name = "echo", // Conflicts with default echo tool
       description = "Conflicts with default",
@@ -274,44 +262,83 @@ object ToolsServiceExample {
       handler = DynamicTool.simpleTextHandler("test")
     )
 
-    toolsService.updateTools(userId, List(conflictingTool)) match {
+    toolsService.createTool(userId, conflictingTool).map {
       case Right(_) =>
         logger.error("Should have failed with name conflict")
-      case Left(errors) =>
-        logger.info(s"Expected conflict error: ${errors.mkString(", ")}")
+      case Left(err) =>
+        logger.info(s"Expected conflict error: ${err.message}")
+    }
+
+    // Example 3: Get non-existent tool
+    toolsService.getTool(userId, 99999L).map {
+      case Right(_) =>
+        logger.error("Should have failed - tool doesn't exist")
+      case Left(err) =>
+        logger.info(s"Expected not found error: ${err.message}")
+    }
+
+    // Example 4: Delete non-existent tool
+    toolsService.deleteTool(userId, 99999L).map {
+      case Right(_) =>
+        logger.error("Should have failed - tool doesn't exist")
+      case Left(err) =>
+        logger.info(s"Expected not found error: ${err.message}")
     }
   }
 
   /**
-   * Demonstrate tool replacement and clearing
+   * Demonstrate tool CRUD operations
    */
   def demonstrateToolManagement(config: Config): Unit = {
     logger.info("=== ToolsService Tool Management Example ===")
 
     implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
-    val toolsService = ToolsService(config)
+    val toolsService = ToolsService.instance
     val userId = "user789"
 
-    // Register initial tools
-    toolsService.updateTools(userId, List(createGreetingTool)) match {
-      case Right(_) => logger.info(s"Registered initial tools")
-      case Left(errors) => logger.error(s"Failed: ${errors.mkString(", ")}")
+    // Create a tool
+    val greetingFuture = toolsService.createTool(userId, createGreetingTool).map {
+      case Right(created) =>
+        logger.info(s"Created tool ${created.name} with id ${created.id}")
+        created.id.get // Return the id
+      case Left(err) =>
+        logger.error(s"Failed to create tool: ${err.message}")
+        0L
     }
 
-    logger.info(s"Tools after initial registration: ${toolsService.getToolNamesForUser(userId).mkString(", ")}")
+    // After creating, get all tools
+    greetingFuture.flatMap { toolId =>
+      toolsService.getTools(userId).map {
+        case Right(allTools) =>
+          logger.info(s"Tools after creation: ${allTools.map(_.name).mkString(", ")}")
+        case Left(err) =>
+          logger.error(s"Failed to get tools: ${err.message}")
+      }
 
-    // Replace with new tools
-    toolsService.updateTools(userId, List(createCalculatorTool, createWeatherTool)) match {
-      case Right(_) => logger.info(s"Replaced with new tools")
-      case Left(errors) => logger.error(s"Failed: ${errors.mkString(", ")}")
+      // Get the specific tool by id
+      toolsService.getTool(userId, toolId).map {
+        case Right(tool) =>
+          logger.info(s"Retrieved tool: ${tool.name}")
+        case Left(err) =>
+          logger.error(s"Failed to get tool: ${err.message}")
+      }
+
+      // Delete the tool
+      toolsService.deleteTool(userId, toolId).map {
+        case Right(count) =>
+          logger.info(s"Deleted $count tool(s)")
+        case Left(err) =>
+          logger.error(s"Failed to delete tool: ${err.message}")
+      }
+
+      // Verify deletion
+      toolsService.getTool(userId, toolId).map {
+        case Right(_) =>
+          logger.error("Tool should have been deleted")
+        case Left(err) =>
+          logger.info(s"Confirmed deletion: ${err.message}")
+      }
     }
-
-    logger.info(s"Tools after replacement: ${toolsService.getToolNamesForUser(userId).mkString(", ")}")
-
-    // Clear all custom tools
-    val cleared = toolsService.clearUserTools(userId)
-    logger.info(s"Cleared $cleared custom tools")
-    logger.info(s"Tools after clearing: ${toolsService.getToolNamesForUser(userId).mkString(", ")}")
   }
 
   /**

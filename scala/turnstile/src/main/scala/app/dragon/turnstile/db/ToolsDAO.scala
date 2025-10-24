@@ -57,6 +57,21 @@ class ToolsDAO(config: Config)(implicit ec: ExecutionContext) {
   }
 
   /**
+   * Get a specific tool by id and user
+   */
+  def getToolById(userId: String, toolId: Long): Future[Option[DynamicTool]] = {
+    val query = Tables.userTools
+      .filter(row => row.id === toolId && row.userId === userId)
+      .result
+      .headOption
+
+    db.run(query).map(_.map(rowToTool)).recoverWith { case ex =>
+      logger.error(s"Failed to get tool with id $toolId for user $userId", ex)
+      Future.failed(ex)
+    }
+  }
+
+  /**
    * Check if a tool exists for a user
    */
   def toolExists(userId: String, toolName: String): Future[Boolean] = {
@@ -95,6 +110,26 @@ class ToolsDAO(config: Config)(implicit ec: ExecutionContext) {
   }
 
   /**
+   * Create a new tool for a user and return it with the generated id
+   */
+  def createTool(userId: String, tool: DynamicTool): Future[DynamicTool] = {
+    val timestamp = new Timestamp(System.currentTimeMillis())
+    val row = toolToRow(userId, tool, timestamp)
+
+    val action = (Tables.userTools returning Tables.userTools.map(_.id)
+      into ((row, id) => row.copy(id = id))) += row
+
+    db.run(action).map { insertedRow =>
+      rowToTool(insertedRow)
+    }.andThen {
+      case Success(created) =>
+        logger.info(s"Created tool ${tool.name} with id ${created.id} for user $userId")
+      case Failure(ex) =>
+        logger.error(s"Failed to create tool ${tool.name} for user $userId", ex)
+    }
+  }
+
+  /**
    * Insert or update a single tool for a user
    */
   def upsertTool(userId: String, tool: DynamicTool): Future[Int] = {
@@ -112,7 +147,7 @@ class ToolsDAO(config: Config)(implicit ec: ExecutionContext) {
   }
 
   /**
-   * Delete a specific tool for a user
+   * Delete a specific tool for a user by name
    */
   def deleteTool(userId: String, toolName: String): Future[Int] = {
     val action = Tables.userTools
@@ -124,6 +159,22 @@ class ToolsDAO(config: Config)(implicit ec: ExecutionContext) {
         logger.debug(s"Deleted tool $toolName for user $userId: $count rows affected")
       case Failure(ex) =>
         logger.error(s"Failed to delete tool $toolName for user $userId", ex)
+    }
+  }
+
+  /**
+   * Delete a specific tool by id and user
+   */
+  def deleteToolById(userId: String, toolId: Long): Future[Int] = {
+    val action = Tables.userTools
+      .filter(row => row.id === toolId && row.userId === userId)
+      .delete
+
+    db.run(action).andThen {
+      case Success(count) =>
+        logger.debug(s"Deleted tool with id $toolId for user $userId: $count rows affected")
+      case Failure(ex) =>
+        logger.error(s"Failed to delete tool with id $toolId for user $userId", ex)
     }
   }
 
@@ -176,6 +227,7 @@ class ToolsDAO(config: Config)(implicit ec: ExecutionContext) {
   // Helper: Convert database row to DynamicTool
   private def rowToTool(row: UserToolRow): DynamicTool = {
     DynamicTool(
+      id = Some(row.id),
       name = row.toolName,
       description = row.description,
       schemaJson = Json.stringify(row.schemaJson), // Convert JsValue to String
@@ -193,6 +245,7 @@ class ToolsDAO(config: Config)(implicit ec: ExecutionContext) {
     }
 
     UserToolRow(
+      id = tool.id.getOrElse(0L), // 0L for new tools (auto-generated)
       userId = userId,
       toolName = tool.name,
       description = tool.description,

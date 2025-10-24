@@ -45,8 +45,8 @@ object Guardian {
       // Example:
       // MyActor.initSharding(context.system)
 
-      // Start GRPC server
-      GreeterServer.start(grpcHost, grpcPort, context.system)
+      // Start GRPC server (hosting both GreeterService and TurnstileService)
+      TurnstileServer.start(grpcHost, grpcPort, context.system)
       
       // Start MCP Stdio server if enabled
       if (mcpStdioConfig.getBoolean("enabled")) {

@@ -57,7 +57,7 @@ class StdioMcpServer(config: Config)(implicit system: ActorSystem[?]) {
   initializeDemoTools()
 
   // Create the service layer for tool handlers (using default user)
-  private val mcpService = toolsService.createServiceForUser("default")
+  private val mcpServiceFut: scala.concurrent.Future[McpService] = toolsService.createServiceForUser("default")
 
   // Create the JSON mapper for MCP protocol
   private val jsonMapper = McpJsonMapper.getDefault
@@ -67,7 +67,7 @@ class StdioMcpServer(config: Config)(implicit system: ActorSystem[?]) {
 
   // Build the session-based sync server using the SDK builder pattern
   // This creates a session-based server (not stateless) which supports streaming
-  private val mcpServer: io.modelcontextprotocol.server.McpSyncServer = {
+  private val mcpServerFut: scala.concurrent.Future[io.modelcontextprotocol.server.McpSyncServer] = mcpServiceFut.map { mcpService =>
     var builder = McpServer.sync(transportProvider)
       .serverInfo(serverName, serverVersion)
 
@@ -107,11 +107,14 @@ class StdioMcpServer(config: Config)(implicit system: ActorSystem[?]) {
       ToolsServiceExample.createWeatherTool
     )
 
-    toolsService.updateTools("default", demoTools) match {
-      case Right(count) =>
-        logger.info(s"Successfully registered $count demo tools: ${demoTools.map(_.name).mkString(", ")}")
-      case Left(errors) =>
-        logger.warn(s"Failed to register demo tools: ${errors.mkString(", ")}")
+    // Create each demo tool individually
+    demoTools.foreach { tool =>
+      toolsService.createTool("default", tool).map {
+        case Right(created) =>
+          logger.info(s"Successfully registered demo tool ${created.name} with id ${created.id}")
+        case Left(err) =>
+          logger.warn(s"Failed to register demo tool ${tool.name}: ${err.message}")
+      }
     }
   }
 
@@ -125,10 +128,12 @@ class StdioMcpServer(config: Config)(implicit system: ActorSystem[?]) {
    * The server automatically starts listening on stdin/stdout when created
    */
   def start(): Unit = {
-    logger.info(s"Starting MCP Stdio Server: $serverName v$serverVersion")
-    logger.info("MCP Server using streaming stdio transport (StdioServerTransportProvider)")
-    logger.info("Server will communicate via stdin/stdout with non-blocking message processing")
-    logger.info("Available tools: " + mcpServer.listTools().asScala.map(_.name()).mkString(", "))
+    mcpServerFut.foreach { mcpServer =>
+      logger.info(s"Starting MCP Stdio Server: $serverName v$serverVersion")
+      logger.info("MCP Server using streaming stdio transport (StdioServerTransportProvider)")
+      logger.info("Server will communicate via stdin/stdout with non-blocking message processing")
+      logger.info("Available tools: " + mcpServer.listTools().asScala.map(_.name()).mkString(", "))
+    }
   }
 
   /**

@@ -15,9 +15,11 @@ import scala.util.{Failure, Success, Try}
 /**
  * Service for managing dynamic tool registration per user with database persistence.
  *
- * This service allows users to register custom tools at runtime while preserving
- * default system tools. Each user has their own set of custom tools that are merged
- * with the default tools when requested.
+ * This service provides a simplified API for CRUD operations on user tools:
+ * - createTool: Create a new tool for a user
+ * - getTool: Get a specific tool by id
+ * - getTools: Get all tools for a user (default + custom)
+ * - deleteTool: Delete a tool by id
  *
  * Key features:
  * - Per-user tool registration
@@ -26,14 +28,14 @@ import scala.util.{Failure, Success, Try}
  * - Thread-safe concurrent access
  * - Tool validation
  * - JSON schema support for tool definitions
- * - In-memory cache for performance
+ * - ID-based tool identification
  *
  * Note: Handlers are not persisted to the database. When loading tools from the database,
- * you must associate them with handlers using the tool registry or custom handler maps.
+ * handlers must be registered using registerHandler().
  *
  * Example usage:
  * {{{
- * val toolsService = ToolsService(config)
+ * val toolsService = ToolsService.instance
  *
  * // Define a custom tool with JSON schema
  * val customTool = DynamicTool(
@@ -43,302 +45,43 @@ import scala.util.{Failure, Success, Try}
  *   handler = (ctx, req) => { /* implementation */ }
  * )
  *
- * // Update tools for a user (persisted to database)
- * toolsService.updateTools("user123", List(customTool))
+ * // Create a tool for a user
+ * toolsService.createTool("user123", customTool).map {
+ *   case Right(created) => println(s"Created tool with id: ${created.id}")
+ *   case Left(error) => println(s"Error: ${error.message}")
+ * }
  *
- * // Get all tools for a user (default + custom from database)
- * val allTools = toolsService.getToolsForUser("user123")
+ * // Get all tools for a user
+ * toolsService.getTools("user123").map {
+ *   case Right(tools) => println(s"Found ${tools.size} tools")
+ *   case Left(error) => println(s"Error: ${error.message}")
+ * }
+ *
+ * // Get a specific tool by id
+ * toolsService.getTool("user123", toolId).map {
+ *   case Right(tool) => println(s"Found tool: ${tool.name}")
+ *   case Left(error) => println(s"Error: ${error.message}")
+ * }
+ *
+ * // Delete a tool by id
+ * toolsService.deleteTool("user123", toolId).map {
+ *   case Right(count) => println(s"Deleted $count tool(s)")
+ *   case Left(error) => println(s"Error: ${error.message}")
+ * }
  * }}}
  */
-class ToolsService(config: Config)(implicit ec: ExecutionContext) {
-  private val logger: Logger = LoggerFactory.getLogger(classOf[ToolsService])
 
-  // Database timeout for sync operations
-  private val dbTimeout = 10.seconds
-
-  // Default tools (from configuration)
-  //private val defaultService = new DefaultMcpService(config)
-  private val defaultTools: List[DynamicTool] = Seq(
-    EchoTool().tool,
-    SystemInfoTool().tool
-  ).map(tool => DynamicTool.fromMcpTool(tool, isDefault = true)).toList
-
-  // User-specific custom tools - in-memory cache (userId -> List[DynamicTool])
-  // This is a cache layer on top of database for performance
-  private val userToolsCache = new ConcurrentHashMap[String, List[DynamicTool]]()
-
-  // Handler registry: Maps tool names to their handlers
-  // Since handlers are not persisted, we need a registry to associate them
-  private val handlerRegistry = new ConcurrentHashMap[String, ToolHandler]()
-
-  // Database DAO
-  private val toolsDAO = ToolsDAO(config)
-
-  logger.info(s"ToolsService initialized with ${defaultTools.size} default tools: ${defaultTools.map(_.name).mkString(", ")}")
-  logger.info("Database persistence enabled for custom tools")
-
-  /**
-   * Update tools for a specific user.
-   *
-   * This replaces all existing non-default tools for the user with the provided list.
-   * Default tools are always preserved and cannot be replaced.
-   * Tools are persisted to the database and handlers are registered in the handler registry.
-   *
-   * @param userId The user identifier
-   * @param tools List of tools to register for the user
-   * @return Either error messages or success with tool count
-   */
-  def updateTools(userId: String, tools: List[DynamicTool]): Either[List[String], Int] = {
-    require(userId.nonEmpty, "userId cannot be empty")
-
-    logger.info(s"Updating tools for user $userId: ${tools.size} tools provided")
-
-    // Validate all tools first
-    val validationResults = tools.map(DynamicTool.validate)
-    val errors = validationResults.collect { case Left(error) => error }
-
-    if (errors.nonEmpty) {
-      logger.warn(s"Tool validation failed for user $userId: ${errors.mkString(", ")}")
-      Left(errors)
-    } else {
-      // Check for duplicate tool names
-      val toolNames = tools.map(_.name)
-      val duplicates = toolNames.groupBy(identity).filter(_._2.size > 1).keys.toList
-
-      if (duplicates.nonEmpty) {
-        logger.warn(s"Duplicate tool names for user $userId: ${duplicates.mkString(", ")}")
-        Left(List(s"Duplicate tool names: ${duplicates.mkString(", ")}"))
-      } else {
-        // Check if any custom tools conflict with default tool names
-        val defaultToolNames = defaultTools.map(_.name).toSet
-        val conflicts = toolNames.filter(defaultToolNames.contains)
-
-        if (conflicts.nonEmpty) {
-          logger.warn(s"Tool name conflicts with defaults for user $userId: ${conflicts.mkString(", ")}")
-          Left(List(s"Tool names conflict with default tools: ${conflicts.mkString(", ")}"))
-        } else {
-          // All validations passed, persist to database
-          val nonDefaultTools = tools.filterNot(_.isDefault)
-
-          Try {
-            // Persist to database
-            val persistFuture = toolsDAO.replaceToolsForUser(userId, nonDefaultTools)
-            Await.result(persistFuture, dbTimeout)
-
-            // Register handlers in handler registry
-            nonDefaultTools.foreach { tool =>
-              if (tool.handler != null) {
-                handlerRegistry.put(tool.name, tool.handler)
-              }
-            }
-
-            // Update cache
-            userToolsCache.put(userId, nonDefaultTools)
-
-            logger.info(s"Successfully updated ${nonDefaultTools.size} custom tools for user $userId: ${nonDefaultTools.map(_.name).mkString(", ")}")
-            nonDefaultTools.size
-          } match {
-            case Success(count) => Right(count)
-            case Failure(ex) =>
-              logger.error(s"Failed to persist tools for user $userId", ex)
-              Left(List(s"Database error: ${ex.getMessage}"))
-          }
-        }
-      }
-    }
-  }
-
-  /**
-   * Get all tools for a specific user (default + custom).
-   *
-   * This method uses a cache-aside pattern:
-   * 1. Check cache first
-   * 2. If not in cache, load from database
-   * 3. Associate handlers from registry
-   * 4. Update cache
-   *
-   * @param userId The user identifier
-   * @return List of all tools available to the user
-   */
-  def getToolsForUser(userId: String): List[DynamicTool] = {
-    // Check cache first
-    val customTools = Option(userToolsCache.get(userId)) match {
-      case Some(cached) =>
-        logger.debug(s"Cache hit for user $userId tools")
-        cached
-
-      case None =>
-        // Cache miss - load from database
-        logger.debug(s"Cache miss for user $userId, loading from database")
-        Try {
-          val loadFuture = toolsDAO.getToolsForUser(userId)
-          val toolsFromDb = Await.result(loadFuture, dbTimeout)
-
-          // Associate handlers from registry
-          val toolsWithHandlers = toolsFromDb.map { tool =>
-            val handler = Option(handlerRegistry.get(tool.name)).orNull
-            tool.copy(handler = handler)
-          }
-
-          // Update cache
-          userToolsCache.put(userId, toolsWithHandlers)
-          toolsWithHandlers
-        } match {
-          case Success(tools) => tools
-          case Failure(ex) =>
-            logger.error(s"Failed to load tools from database for user $userId", ex)
-            List.empty // Return empty on failure, default tools will still be available
-        }
-    }
-
-    val allTools = defaultTools ++ customTools
-
-    logger.debug(s"Retrieved ${allTools.size} tools for user $userId (${defaultTools.size} default + ${customTools.size} custom)")
-    allTools
-  }
-
-  /**
-   * Get only custom (non-default) tools for a user.
-   *
-   * @param userId The user identifier
-   * @return List of custom tools for the user
-   */
-  def getCustomToolsForUser(userId: String): List[DynamicTool] = {
-    // This leverages getToolsForUser which handles cache/database logic
-    getToolsForUser(userId).filterNot(_.isDefault)
-  }
-
-  /**
-   * Get default tools available to all users.
-   *
-   * @return List of default tools
-   */
-  def getDefaultTools: List[DynamicTool] = defaultTools
-
-  /**
-   * Remove all custom tools for a user (revert to defaults only).
-   *
-   * @param userId The user identifier
-   * @return Number of tools removed
-   */
-  def clearUserTools(userId: String): Int = {
-    Try {
-      val deleteFuture = toolsDAO.deleteAllToolsForUser(userId)
-      val removed = Await.result(deleteFuture, dbTimeout)
-
-      // Clear cache
-      userToolsCache.remove(userId)
-
-      logger.info(s"Cleared $removed custom tools for user $userId from database")
-      removed
-    } match {
-      case Success(count) => count
-      case Failure(ex) =>
-        logger.error(s"Failed to clear tools for user $userId", ex)
-        0
-    }
-  }
-
-  /**
-   * Get tool names for a user.
-   *
-   * @param userId The user identifier
-   * @return List of tool names available to the user
-   */
-  def getToolNamesForUser(userId: String): List[String] = {
-    getToolsForUser(userId).map(_.name)
-  }
-
-  /**
-   * Check if a user has a specific tool.
-   *
-   * @param userId The user identifier
-   * @param toolName The tool name to check
-   * @return True if the user has access to the tool
-   */
-  def hasToolForUser(userId: String, toolName: String): Boolean = {
-    getToolsForUser(userId).exists(_.name == toolName)
-  }
-
-  /**
-   * Get statistics about registered tools.
-   *
-   * @return Map with statistics
-   */
-  def getStats: Map[String, Any] = {
-    val usersWithTools = Try {
-      val usersFuture = toolsDAO.getUsersWithTools
-      Await.result(usersFuture, dbTimeout)
-    }.getOrElse(List.empty)
-
-    Map(
-      "defaultToolCount" -> defaultTools.size,
-      "totalUsers" -> usersWithTools.size,
-      "defaultToolNames" -> defaultTools.map(_.name),
-      "usersWithCustomTools" -> usersWithTools,
-      "cachedUsers" -> userToolsCache.size()
-    )
-  }
-
-  /**
-   * Register a handler for a tool name.
-   * This is useful when loading tools from database and need to associate handlers.
-   *
-   * @param toolName The tool name
-   * @param handler The handler function
-   */
-  def registerHandler(toolName: String, handler: ToolHandler): Unit = {
-    handlerRegistry.put(toolName, handler)
-    logger.debug(s"Registered handler for tool: $toolName")
-  }
-
-  /**
-   * Close the database connection pool.
-   * Call this when shutting down the application.
-   */
-  def close(): Unit = {
-    logger.info("Closing ToolsService database connection")
-    toolsDAO.close()
-  }
-
-  /**
-   * Convert user's tools to McpTool format for MCP SDK.
-   *
-   * @param userId The user identifier
-   * @return List of McpTool instances
-   */
-  def getMcpToolsForUser(userId: String): List[McpTool] = {
-    val dynamicTools = getToolsForUser(userId)
-    val convertedTools = dynamicTools.map(DynamicTool.toMcpTool)
-
-    // Log any conversion failures
-    convertedTools.collect {
-      case Failure(ex) =>
-        logger.error(s"Failed to convert dynamic tool to MCP tool: ${ex.getMessage}")
-    }
-
-    // Return only successful conversions
-    convertedTools.collect {
-      case Success(mcpTool) => mcpTool
-    }
-  }
-
-  /**
-   * Create an McpService instance for a specific user.
-   *
-   * This combines default tools with user-specific tools.
-   *
-   * @param userId The user identifier
-   * @return McpService instance with user's tools
-   */
-  def createServiceForUser(userId: String): McpService = {
-    new McpService {
-      override val tools: Seq[McpTool] = getMcpToolsForUser(userId)
-    }
-  }
-}
 
 object ToolsService {
+
+  sealed trait ToolsServiceError {
+    def message: String
+  }
+  final case class AlreadyExists(message: String) extends ToolsServiceError
+  final case class ValidationError(message: String) extends ToolsServiceError
+  final case class ConflictError(message: String) extends ToolsServiceError
+  final case class DatabaseError(message: String) extends ToolsServiceError
+
   /**
    * Singleton instance of ToolsService.
    *
@@ -363,4 +106,204 @@ object ToolsService {
    */
   @deprecated("Use ToolsService.instance instead", "1.0.0")
   def apply(config: Config)(implicit ec: ExecutionContext): ToolsService = instance
+}
+
+
+class ToolsService(config: Config)(implicit ec: ExecutionContext) {
+  private val logger: Logger = LoggerFactory.getLogger(classOf[ToolsService])
+
+  // Default tools (from configuration)
+  private val defaultTools: List[DynamicTool] = Seq(
+    EchoTool().tool,
+    SystemInfoTool().tool
+  ).map(tool => DynamicTool.fromMcpTool(tool, isDefault = true)).toList
+
+  // Handler registry: Maps tool names to their handlers
+  // Since handlers are not persisted, we need a registry to associate them
+  private val handlerRegistry = new ConcurrentHashMap[String, ToolHandler]()
+
+  // Database DAO
+  private val toolsDAO = ToolsDAO(config)
+
+  logger.info(s"ToolsService initialized with ${defaultTools.size} default tools: ${defaultTools.map(_.name).mkString(", ")}")
+  logger.info("Database persistence enabled for custom tools")
+
+  /**
+   * Create a new tool for a user.
+   *
+   * Validates the tool and persists it to the database. Handlers are registered
+   * in the handler registry for later use.
+   *
+   * @param userId The user identifier
+   * @param tool The tool to create
+   * @return Future[Either[ToolsServiceError, DynamicTool]] with created tool including id
+   */
+  def createTool(userId: String, tool: DynamicTool): Future[Either[ToolsService.ToolsServiceError, DynamicTool]] = {
+    require(userId.nonEmpty, "userId cannot be empty")
+
+    logger.info(s"Creating tool ${tool.name} for user $userId")
+
+    for {
+      _ <- DynamicTool.validate(tool) match {
+        case Left(error) => Future.successful(Left(ToolsService.ValidationError(error)))
+        case Right(_) => Future.successful(Right(()))
+      }
+      _ <- if (defaultTools.map(_.name).toSet.contains(tool.name))
+        Future.successful(Left(ToolsService.ConflictError(s"Tool name conflicts with default tool: ${tool.name}")))
+      else Future.successful(Right(()))
+      result <- toolsDAO.createTool(userId, tool).map { createdTool =>
+        if (tool.handler != null) handlerRegistry.put(tool.name, tool.handler)
+        logger.info(s"Successfully created tool ${tool.name} with id ${createdTool.id} for user $userId")
+        Right(createdTool)
+      }.recover { case ex =>
+        logger.error(s"Failed to create tool ${tool.name} for user $userId", ex)
+        Left(ToolsService.DatabaseError(s"Database error: ${ex.getMessage}"))
+      }
+    } yield result
+
+  }
+
+  /**
+   * Delete a tool by id for a user.
+   *
+   * @param userId The user identifier
+   * @param toolId The tool id to delete
+   * @return Future[Either[ToolsServiceError, Int]] with number of deleted tools
+   */
+  def deleteTool(userId: String, toolId: Long): Future[Either[ToolsService.ToolsServiceError, Int]] = {
+    require(userId.nonEmpty, "userId cannot be empty")
+
+    logger.info(s"Deleting tool with id $toolId for user $userId")
+
+    toolsDAO.deleteToolById(userId, toolId).map { count =>
+      if (count > 0) {
+        logger.info(s"Successfully deleted tool with id $toolId for user $userId")
+        Right(count)
+      } else {
+        logger.warn(s"Tool with id $toolId not found for user $userId")
+        Left(ToolsService.ValidationError(s"Tool with id $toolId not found"))
+      }
+    }.recover { case ex =>
+      logger.error(s"Failed to delete tool with id $toolId for user $userId", ex)
+      Left(ToolsService.DatabaseError(s"Database error: ${ex.getMessage}"))
+    }
+  }
+
+  /**
+   * Get all tools for a user (default + custom).
+   *
+   * @param userId The user identifier
+   * @return Future[Either[ToolsServiceError, List[DynamicTool]]] with all tools
+   */
+  def getTools(userId: String): Future[Either[ToolsService.ToolsServiceError, List[DynamicTool]]] = {
+    require(userId.nonEmpty, "userId cannot be empty")
+
+    logger.debug(s"Getting all tools for user $userId")
+
+    toolsDAO.getToolsForUser(userId).map { customTools =>
+      val toolsWithHandlers = customTools.map { tool =>
+        val handler = Option(handlerRegistry.get(tool.name)).orNull
+        tool.copy(handler = handler)
+      }
+      Right(defaultTools ++ toolsWithHandlers)
+    }.recover { case ex =>
+      logger.error(s"Failed to get tools for user $userId", ex)
+      Left(ToolsService.DatabaseError(s"Database error: ${ex.getMessage}"))
+    }
+  }
+
+  /**
+   * Get a specific tool by id for a user.
+   *
+   * @param userId The user identifier
+   * @param toolId The tool id to retrieve
+   * @return Future[Either[ToolsServiceError, DynamicTool]] with the tool
+   */
+  def getTool(userId: String, toolId: Long): Future[Either[ToolsService.ToolsServiceError, DynamicTool]] = {
+    require(userId.nonEmpty, "userId cannot be empty")
+
+    logger.debug(s"Getting tool with id $toolId for user $userId")
+
+    toolsDAO.getToolById(userId, toolId).map {
+      case Some(tool) =>
+        val handler = Option(handlerRegistry.get(tool.name)).orNull
+        val toolWithHandler = tool.copy(handler = handler)
+        Right(toolWithHandler)
+      case None =>
+        logger.warn(s"Tool with id $toolId not found for user $userId")
+        Left(ToolsService.ValidationError(s"Tool with id $toolId not found"))
+    }.recover { case ex =>
+      logger.error(s"Failed to get tool with id $toolId for user $userId", ex)
+      Left(ToolsService.DatabaseError(s"Database error: ${ex.getMessage}"))
+    }
+  }
+
+  /**
+   * Register a handler for a tool name.
+   * This is useful when loading tools from database and need to associate handlers.
+   *
+   * @param toolName The tool name
+   * @param handler The handler function
+   */
+  def registerHandler(toolName: String, handler: ToolHandler): Unit = {
+    handlerRegistry.put(toolName, handler)
+    logger.debug(s"Registered handler for tool: $toolName")
+  }
+
+  /**
+   * Close the database connection pool.
+   * Call this when shutting down the application.
+   */
+  def close(): Unit = {
+    logger.info("Closing ToolsService database connection")
+    toolsDAO.close()
+  }
+
+  /**
+   * Get default tools available to all users.
+   *
+   * @return List of default tools
+   */
+  def getDefaultTools: List[DynamicTool] = defaultTools
+
+  /**
+   * Convert user's tools to McpTool format for MCP SDK.
+   *
+   * @param userId The user identifier
+   * @return Future[List] of McpTool instances
+   */
+  def getMcpToolsForUser(userId: String): Future[List[McpTool]] = {
+    getTools(userId).map {
+      case Right(dynamicTools) =>
+        val convertedTools = dynamicTools.map(DynamicTool.toMcpTool)
+        // Log any conversion failures
+        convertedTools.collect {
+          case Failure(ex) =>
+            logger.error(s"Failed to convert dynamic tool to MCP tool: ${ex.getMessage}")
+        }
+        // Return only successful conversions
+        convertedTools.collect {
+          case Success(mcpTool) => mcpTool
+        }
+      case Left(err) =>
+        logger.error(s"Failed to get tools for user $userId: ${err.message}")
+        List.empty
+    }
+  }
+
+  /**
+   * Create an McpService instance for a specific user.
+   *
+   * This combines default tools with user-specific tools.
+   *
+   * @param userId The user identifier
+   * @return Future[McpService] instance with user's tools
+   */
+  def createServiceForUser(userId: String): Future[McpService] = {
+    getMcpToolsForUser(userId).map { mcpTools =>
+      new McpService {
+        override val tools: Seq[McpTool] = mcpTools
+      }
+    }
+  }
 }
