@@ -3,6 +3,7 @@ package app.dragon.turnstile.controller
 import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.db.DatabaseMigration
 import app.dragon.turnstile.mcp.{StdioMcpServer, StreamingHttpMcpServer}
+import app.dragon.turnstile.service.ToolsService
 import com.typesafe.config.Config
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorSystem, Behavior}
@@ -14,6 +15,7 @@ object Guardian {
   val grpcConfig: Config = ApplicationConfig.grpcConfig
   val mcpStdioConfig: Config = ApplicationConfig.rootConfig.getConfig("turnstile.mcp-stdio")
   val mcpStreamingConfig: Config = ApplicationConfig.rootConfig.getConfig("turnstile.mcp-streaming")
+  val databaseConfig: Config = ApplicationConfig.rootConfig.getConfig("turnstile.database.db")
 
   def apply(): Behavior[Nothing] =
     Behaviors.setup[Nothing] { context =>
@@ -45,7 +47,7 @@ object Guardian {
 
       // Start GRPC server
       GreeterServer.start(grpcHost, grpcPort, context.system)
-
+      
       // Start MCP Stdio server if enabled
       if (mcpStdioConfig.getBoolean("enabled")) {
         try {

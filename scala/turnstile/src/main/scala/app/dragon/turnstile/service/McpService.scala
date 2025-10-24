@@ -59,7 +59,8 @@ trait McpService {
  * To add new tools:
  * 1. Create a new class extending McpToolProvider in the tools package
  * 2. Add the tool instance to the `tools` sequence below
- */
+ 
+
 class DefaultMcpService(config: Config) extends McpService {
   private val logger: Logger = LoggerFactory.getLogger(classOf[ DefaultMcpService])
 
@@ -72,15 +73,9 @@ class DefaultMcpService(config: Config) extends McpService {
   )
 }
 
-object McpService {
-  /**
-   * Create the default MCP service implementation
-   */
-  def apply(config: Config): McpService = new DefaultMcpService(config)
 
-  /**
-   * Create a custom MCP service with additional tools
-   */
+object McpService {
+  def apply(config: Config): McpService = new DefaultMcpService(config)
   def withTools(config: Config, additionalTools: McpTool*): McpService = {
     val baseService = new DefaultMcpService(config)
     new McpService {
@@ -88,3 +83,4 @@ object McpService {
     }
   }
 }
+*/

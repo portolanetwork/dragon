@@ -50,8 +50,8 @@ class StdioMcpServer(config: Config)(implicit system: ActorSystem[?]) {
   private val serverName = config.getString("name")
   private val serverVersion = config.getString("version")
 
-  // Create the ToolsService for dynamic tool management
-  private val toolsService = ToolsService(config)
+  // Use the singleton ToolsService instance for dynamic tool management
+  private val toolsService = ToolsService.instance
 
   // Initialize demo tools for default user
   initializeDemoTools()
@@ -138,7 +138,7 @@ class StdioMcpServer(config: Config)(implicit system: ActorSystem[?]) {
     logger.info("Stopping MCP Stdio Server")
     try {
       transportProvider.closeGracefully().block()
-      toolsService.close() // Close database connection pool
+      // Note: Don't close singleton toolsService here - it's shared across the application
       logger.info("MCP Stdio Server stopped gracefully")
     } catch {
       case ex: Exception =>

@@ -31,7 +31,7 @@ import app.dragon.turnstile.service.{McpTool, ToolHandler}
  * @param serverName The name of the server (from config)
  * @param serverVersion The version of the server (from config)
  */
-class SystemInfoTool(serverName: String, serverVersion: String) extends McpToolProvider {
+class SystemInfoTool() extends McpToolProvider {
 
   override def tool: McpTool = {
     val schema = createToolSchemaBuilder(
@@ -50,7 +50,6 @@ class SystemInfoTool(serverName: String, serverVersion: String) extends McpToolP
 
       val info =
         s"""System Information:
-           |Server: $serverName v$serverVersion
            |Java Version: ${System.getProperty("java.version")}
            |Java Vendor: ${System.getProperty("java.vendor")}
            |OS Name: ${System.getProperty("os.name")}
@@ -81,9 +80,7 @@ object SystemInfoTool {
   /**
    * Create a new SystemInfoTool instance
    *
-   * @param serverName The name of the server
-   * @param serverVersion The version of the server
    */
-  def apply(serverName: String, serverVersion: String): SystemInfoTool =
-    new SystemInfoTool(serverName, serverVersion)
+  def apply(): SystemInfoTool =
+    new SystemInfoTool()
 }

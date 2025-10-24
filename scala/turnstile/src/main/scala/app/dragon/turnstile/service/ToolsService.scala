@@ -1,6 +1,8 @@
 package app.dragon.turnstile.service
 
+import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.db.ToolsDAO
+import app.dragon.turnstile.service.tools.{EchoTool, SystemInfoTool}
 import com.typesafe.config.Config
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -55,10 +57,11 @@ class ToolsService(config: Config)(implicit ec: ExecutionContext) {
   private val dbTimeout = 10.seconds
 
   // Default tools (from configuration)
-  private val defaultService = new DefaultMcpService(config)
-  private val defaultTools: List[DynamicTool] = defaultService.tools
-    .map(tool => DynamicTool.fromMcpTool(tool, isDefault = true))
-    .toList
+  //private val defaultService = new DefaultMcpService(config)
+  private val defaultTools: List[DynamicTool] = Seq(
+    EchoTool().tool,
+    SystemInfoTool().tool
+  ).map(tool => DynamicTool.fromMcpTool(tool, isDefault = true)).toList
 
   // User-specific custom tools - in-memory cache (userId -> List[DynamicTool])
   // This is a cache layer on top of database for performance
@@ -337,11 +340,27 @@ class ToolsService(config: Config)(implicit ec: ExecutionContext) {
 
 object ToolsService {
   /**
-   * Create a new ToolsService instance
+   * Singleton instance of ToolsService.
    *
-   * @param config Application configuration
-   * @param ec Execution context for async database operations
-   * @return ToolsService instance
+   * Initializes lazily on first access with:
+   * - Config loaded directly from ApplicationConfig.rootConfig
+   * - Global ExecutionContext for async database operations
+   *
+   * This ensures a single shared instance across the application with
+   * consistent database connection pooling and caching.
    */
-  def apply(config: Config)(implicit ec: ExecutionContext): ToolsService = new ToolsService(config)
+  lazy val instance: ToolsService = {
+    implicit val ec: ExecutionContext = ExecutionContext.global
+    val config = ApplicationConfig.rootConfig
+    new ToolsService(config)
+  }
+
+  /**
+   * Legacy factory method for backwards compatibility.
+   * Now returns the singleton instance, ignoring the provided config.
+   *
+   * @deprecated Use ToolsService.instance instead
+   */
+  @deprecated("Use ToolsService.instance instead", "1.0.0")
+  def apply(config: Config)(implicit ec: ExecutionContext): ToolsService = instance
 }
