@@ -1,4 +1,4 @@
-package app.dragon.turnstile.client
+package app.dragon.turnstile.example
 
 import io.modelcontextprotocol.client.{McpClient, McpSyncClient}
 import io.modelcontextprotocol.client.transport.{ServerParameters, StdioClientTransport}

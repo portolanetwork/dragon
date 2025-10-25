@@ -1,4 +1,4 @@
-package app.dragon.turnstile.client
+package app.dragon.turnstile.example
 
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.typesafe.config.ConfigFactory

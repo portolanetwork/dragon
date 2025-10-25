@@ -68,6 +68,7 @@ object Dependencies {
     "com.google.protobuf" % "protobuf-java-util" % protobufJavaUtilVersion,
     // MCP (Model Context Protocol)
     "io.modelcontextprotocol.sdk" % "mcp" % mcpSdkVersion,
+    "io.modelcontextprotocol.sdk" % "mcp-core" % mcpSdkVersion,
     // Database - Slick ORM with PostgreSQL
     "com.typesafe.slick" %% "slick" % slickVersion,
     "com.typesafe.slick" %% "slick-hikaricp" % slickVersion,

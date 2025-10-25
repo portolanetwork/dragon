@@ -10,7 +10,7 @@ import org.apache.pekko.http.scaladsl.model.*
 import org.apache.pekko.http.scaladsl.model.headers.RawHeader
 import org.apache.pekko.http.scaladsl.model.sse.ServerSentEvent
 import org.apache.pekko.http.scaladsl.server.Directives.*
-import org.apache.pekko.http.scaladsl.server.{Directive0, Route}
+import org.apache.pekko.http.scaladsl.server.{Directive0, ExceptionHandler, Route}
 import org.apache.pekko.stream.scaladsl.{BroadcastHub, Keep, Source, SourceQueueWithComplete}
 import org.apache.pekko.stream.{OverflowStrategy, QueueOfferResult}
 import org.apache.pekko.util.ByteString
@@ -110,7 +110,6 @@ class PekkoHttpStreamableServerTransportProvider(
   keepAliveInterval: Option[FiniteDuration],
   sslConfig: Option[SslConfig]
 )(implicit system: ActorSystem[?]) extends McpStreamableServerTransportProvider {
-
   private val logger: Logger = LoggerFactory.getLogger(classOf[PekkoHttpStreamableServerTransportProvider])
   private implicit val ec: ExecutionContext = system.executionContext
 
@@ -144,6 +143,18 @@ class PekkoHttpStreamableServerTransportProvider(
       juc.TimeUnit.MILLISECONDS
     )
     scheduler
+  }
+
+  // Global ExceptionHandler to ensure all errors return application/json
+  private val jsonExceptionHandler = ExceptionHandler {
+    case ex: Exception =>
+      extractUri { uri =>
+        val errorJson = s"{\"error\":\"${ex.getMessage.replaceAll("\"", "'".toString)}\"}"
+        complete(HttpResponse(
+          StatusCodes.InternalServerError,
+          entity = HttpEntity(ContentTypes.`application/json`, errorJson)
+        ))
+      }
   }
 
   override def protocolVersions(): java.util.List[String] = {
@@ -271,7 +282,7 @@ class PekkoHttpStreamableServerTransportProvider(
     complete(
       HttpResponse(
         status,
-        entity = HttpEntity(ContentTypes.`text/plain(UTF-8)`, message)
+        entity = HttpEntity(ContentTypes.`application/json`, message)
       )
     )
   }
@@ -444,7 +455,7 @@ class PekkoHttpStreamableServerTransportProvider(
                 // No Accept header - require text/event-stream
                 logger.warn(s"GET request rejected: missing Accept header. Session: $sessionId")
                 createSseErrorResponse(StatusCodes.BadRequest, "text/event-stream required in Accept header")
-              case (Some(accept), Some(sessionId)) if !accept.contains("text/event-stream") =>
+              case (Some(accept), Some(sessionId)) if !accept.toLowerCase.contains("text/event-stream") =>
                 // Accept header present but wrong type
                 logger.warn(s"GET request rejected: invalid Accept header: $accept. Session: $sessionId")
                 createSseErrorResponse(StatusCodes.BadRequest, s"text/event-stream required in Accept header, got: $accept")
@@ -527,8 +538,7 @@ class PekkoHttpStreamableServerTransportProvider(
         HttpResponse(
           StatusCodes.OK,
           headers = List(
-            RawHeader("Cache-Control", "no-cache"),
-            RawHeader("Connection", "keep-alive")
+            RawHeader("Cache-Control", "no-cache")
           ),
           entity = HttpEntity.Chunked.fromData(
             MediaTypes.`text/event-stream`.toContentType,
@@ -551,16 +561,20 @@ class PekkoHttpStreamableServerTransportProvider(
    */
   private def handlePost(): Route = {
     if (isClosing) {
-      complete(StatusCodes.ServiceUnavailable -> "Server is shutting down")
+      // Explicitly set Content-Type to application/json for service unavailable
+      complete(HttpResponse(StatusCodes.ServiceUnavailable, entity = HttpEntity(ContentTypes.`application/json`, "{\"error\":\"Server is shutting down\"}")))
     } else {
       extractRequest { httpRequest =>
         optionalHeaderValueByName("Accept") { acceptOpt =>
           entity(as[String]) { body =>
+            logger.debug(s"POST request received with body: $body")
             acceptOpt match {
-              case Some(accept) if accept.contains("text/event-stream") =>
-                handlePostWithBody(httpRequest, body, accept.contains("application/json"))
+              case Some(accept) if accept.toLowerCase.contains("text/event-stream") =>
+                handlePostWithBody(httpRequest, body, accept.toLowerCase.contains("application/json"))
               case _ =>
-                complete(StatusCodes.BadRequest -> "text/event-stream required in Accept header")
+                logger.warn(s"POST request rejected: invalid Accept header: $acceptOpt")
+                // Explicitly set Content-Type to application/json for bad request
+                complete(HttpResponse(StatusCodes.BadRequest, entity = HttpEntity(ContentTypes.`application/json`, "{\"error\":\"text/event-stream required in Accept header\"}")))
             }
           }
         }
@@ -585,7 +599,8 @@ class PekkoHttpStreamableServerTransportProvider(
         // Handle initialize request
         case request: McpSchema.JSONRPCRequest if request.method() == McpSchema.METHOD_INITIALIZE =>
           if (!acceptsJson) {
-            complete(StatusCodes.BadRequest -> "application/json required in Accept header for initialize")
+            // Explicitly set Content-Type to application/json for bad request
+            complete(HttpResponse(StatusCodes.BadRequest, entity = HttpEntity(ContentTypes.`application/json`, "{\"error\":\"application/json required in Accept header for initialize\"}")))
           } else {
             val initRequest = jsonMapper.convertValue(request.params(), new TypeRef[McpSchema.InitializeRequest]() {})
             val init = sessionFactory.startSession(initRequest)
@@ -619,7 +634,7 @@ class PekkoHttpStreamableServerTransportProvider(
 
         // Handle other requests (require session ID)
         case _ =>
-          val sessionIdOpt = httpRequest.headers.find(_.name() == HttpHeaders.MCP_SESSION_ID).map(_.value())
+          val sessionIdOpt = httpRequest.headers.find(_.name().equalsIgnoreCase(HttpHeaders.MCP_SESSION_ID)).map(_.value())
           logger.debug(s"Non-initialize message received, session ID present: ${sessionIdOpt.isDefined}, active sessions: ${sessions.size()}")
 
           sessionIdOpt match {
@@ -653,7 +668,8 @@ class PekkoHttpStreamableServerTransportProvider(
     } catch {
       case ex: Exception =>
         logger.error(s"Failed to deserialize message: ${ex.getMessage}")
-        createErrorResponse(StatusCodes.BadRequest, s"Invalid message format: ${ex.getMessage}", -32700)
+        // Explicitly set Content-Type to application/json for deserialization errors
+        complete(HttpResponse(StatusCodes.BadRequest, entity = HttpEntity(ContentTypes.`application/json`, s"{\"error\":\"Invalid message format: ${ex.getMessage}\"}")))
     }
   }
 
@@ -717,8 +733,7 @@ class PekkoHttpStreamableServerTransportProvider(
             HttpResponse(
               StatusCodes.OK,
               headers = List(
-                RawHeader("Cache-Control", "no-cache"),
-                RawHeader("Connection", "keep-alive")
+                RawHeader("Cache-Control", "no-cache")
               ),
               entity = HttpEntity.Chunked.fromData(
                 MediaTypes.`text/event-stream`.toContentType,
@@ -740,7 +755,7 @@ class PekkoHttpStreamableServerTransportProvider(
       complete(StatusCodes.MethodNotAllowed)
     } else {
       extractRequest { httpRequest =>
-        httpRequest.headers.find(_.name() == HttpHeaders.MCP_SESSION_ID).map(_.value()) match {
+        httpRequest.headers.find(_.name().equalsIgnoreCase(HttpHeaders.MCP_SESSION_ID)).map(_.value()) match {
           case Some(sessionId) =>
             sessions.get(sessionId) match {
               case null =>
