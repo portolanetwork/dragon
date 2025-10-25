@@ -1,7 +1,7 @@
 package app.dragon.turnstile.service
 
 import app.dragon.turnstile.utils.JsonUtils
-import dragon.turnstile.api.v1.{CreateToolRequest, ListToolsRequest, Tool, ToolList, TurnstileService}
+import dragon.turnstile.api.v1.{CreateMcpServerRequest, CreateToolRequest, ListMcpServersRequest, ListToolsRequest, McpServer, McpServerList, Tool, ToolList, TurnstileService}
 import org.apache.pekko.actor.typed.ActorSystem
 import com.google.protobuf.timestamp.Timestamp
 import org.slf4j.{Logger, LoggerFactory}
@@ -9,7 +9,7 @@ import io.grpc.Status
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Try, Success, Failure}
+import scala.util.{Failure, Success, Try}
 
 /**
  * Companion object for TurnstileServiceImpl.
@@ -88,6 +88,39 @@ class TurnstileServiceImpl(system: ActorSystem[_]) extends TurnstileService {
   }
 
   /**
+   * Create a new MCP server registration.
+   *
+   * @param request CreateMcpServerRequest containing name and url
+   * @return Future[McpServer] containing the created MCP server info
+   */
+  override def createMcpServer(
+    request: CreateMcpServerRequest
+  ): Future[McpServer] = {
+    logger.info(s"Received CreateMcpServer request for name: ${request.name}, url: ${request.url}")
+
+    // Validate request
+    if (request.name.isEmpty) {
+      logger.warn("CreateMcpServer request with empty name")
+      return Future.failed(Status.INVALID_ARGUMENT.withDescription("name cannot be empty").asRuntimeException())
+    }
+    if (request.url.isEmpty) {
+      logger.warn("CreateMcpServer request with empty url")
+      return Future.failed(Status.INVALID_ARGUMENT.withDescription("url cannot be empty").asRuntimeException())
+    }
+
+    // Generate UUID for the MCP server
+    val serverUuid = UUID.nameUUIDFromBytes(s"${request.name}:${request.url}".getBytes("UTF-8")).toString
+
+    logger.info(s"Successfully created MCP server ${request.name} with uuid ${serverUuid}")
+
+    Future.successful(McpServer(
+      uuid = serverUuid,
+      name = request.name,
+      url = request.url
+    ))
+  }
+
+  /**
    * Create a new custom tool for a user.
    *
    * This method creates a new custom tool from the request, validates it,
@@ -151,7 +184,7 @@ class TurnstileServiceImpl(system: ActorSystem[_]) extends TurnstileService {
   ): Either[TurnstileServiceError, String] = {
     schemaStruct match {
       case Some(struct) =>
-        JsonUtils.structToJsonString(struct) match {
+        JsonUtils.structToString(struct) match {
           case Success(json) => Right(json)
           case Failure(ex) =>
             Left(TurnstileServiceError.ValidationError(s"Failed to convert schema to JSON: ${ex.getMessage}"))
@@ -221,7 +254,7 @@ class TurnstileServiceImpl(system: ActorSystem[_]) extends TurnstileService {
     val timestamp = Timestamp(seconds = now, nanos = 0)
 
     // Convert JSON string to protobuf Struct
-    val schemaStruct = JsonUtils.jsonStringToStruct(dynamicTool.schemaJson) match {
+    val schemaStruct = JsonUtils.stringToStruct(dynamicTool.schemaJson) match {
       case Success(struct) => Some(struct)
       case Failure(ex) =>
         logger.warn(s"Failed to parse schema JSON for tool ${dynamicTool.name}: ${ex.getMessage}")
@@ -229,8 +262,8 @@ class TurnstileServiceImpl(system: ActorSystem[_]) extends TurnstileService {
     }
 
     Tool(
-      toolUuid = toolUuid,
-      toolName = dynamicTool.name,
+      uuid = toolUuid,
+      name = dynamicTool.name,
       description = dynamicTool.description,
       schemaJson = schemaStruct,
       createdTime = Some(timestamp),
@@ -238,4 +271,5 @@ class TurnstileServiceImpl(system: ActorSystem[_]) extends TurnstileService {
     )
   }
 
+  override def listMcpServers(in: ListMcpServersRequest): Future[McpServerList] = ???
 }

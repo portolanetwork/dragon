@@ -148,9 +148,11 @@ class ToolsService(config: Config)(implicit ec: ExecutionContext) {
         case Left(error) => Future.successful(Left(ToolsService.ValidationError(error)))
         case Right(_) => Future.successful(Right(()))
       }
+      
       _ <- if (defaultTools.map(_.name).toSet.contains(tool.name))
         Future.successful(Left(ToolsService.ConflictError(s"Tool name conflicts with default tool: ${tool.name}")))
-      else Future.successful(Right(()))
+          else Future.successful(Right(()))
+      
       result <- toolsDAO.createTool(userId, tool).map { createdTool =>
         if (tool.handler != null) handlerRegistry.put(tool.name, tool.handler)
         logger.info(s"Successfully created tool ${tool.name} with id ${createdTool.id} for user $userId")
