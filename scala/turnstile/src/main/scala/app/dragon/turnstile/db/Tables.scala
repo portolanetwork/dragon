@@ -1,66 +1,75 @@
 package app.dragon.turnstile.db
 
 import app.dragon.turnstile.db.TurnstilePostgresProfile.api.{*, given}
-import app.dragon.turnstile.db.TurnstilePostgresProfile.TurnstileAPI.playJsonTypeMapper
-import play.api.libs.json.JsValue
 
 import java.sql.Timestamp
 
 /**
- * Slick table definitions for tools persistence.
+ * Slick table definitions for MCP server persistence.
  *
  * Database Schema:
- * - user_tools: Stores user-specific custom tools
+ * - mcp_servers: Stores user-registered MCP servers
  *   - id: Auto-incrementing primary key
  *   - user_id: User identifier
- *   - tool_name: Unique tool name (per user)
- *   - description: Tool description
- *   - schema_json: JSON schema for tool parameters
+ *   - uuid: Server UUID (unique per user)
+ *   - name: Server name
+ *   - url: Server URL
+ *   - client_id: OAuth client ID (optional)
+ *   - client_secret: OAuth client secret (optional)
  *   - created_at: Timestamp of creation
  *   - updated_at: Timestamp of last update
  *
  * Indexes:
- * - idx_user_tools_user_id: Fast lookup by user
- * - idx_user_tools_user_tool: Unique constraint on (user_id, tool_name)
+ * - idx_mcp_servers_user_id: Fast lookup by user
+ * - idx_mcp_servers_user_uuid: Unique constraint on (user_id, uuid)
  */
 
 /**
- * User tools table row representation
+ * MCP server table row representation
  *
  * @param id Auto-incrementing primary key
  * @param userId User identifier
- * @param toolName Tool name (unique per user)
- * @param description Tool description
- * @param schemaJson JSON schema as Play JSON JsValue (stored as JSONB in PostgreSQL)
+ * @param uuid Server UUID (unique per user)
+ * @param name Server name
+ * @param url Server URL
+ * @param clientId OAuth client ID (optional)
+ * @param clientSecret OAuth client secret (optional)
  * @param createdAt Creation timestamp
  * @param updatedAt Last update timestamp
  */
-case class UserToolRow(
+case class McpServerRow(
   id: Long = 0L,
   userId: String,
-  toolName: String,
-  description: String,
-  schemaJson: JsValue,
+  uuid: String,
+  name: String,
+  url: String,
+  clientId: Option[String] = None,
+  clientSecret: Option[String] = None,
   createdAt: Timestamp = new Timestamp(System.currentTimeMillis()),
   updatedAt: Timestamp = new Timestamp(System.currentTimeMillis())
 )
 
 /**
- * Slick table definition for user_tools using JSONB for schema storage
+ * Slick table definition for mcp_servers
  */
-class UserToolsTable(tag: Tag) extends Table[UserToolRow](tag, "user_tools") {
+class McpServersTable(tag: Tag) extends Table[McpServerRow](tag, "mcp_servers") {
   def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
   def userId = column[String]("user_id")
-  def toolName = column[String]("tool_name")
-  def description = column[String]("description")
-  def schemaJson = column[JsValue]("schema_json") // JSONB column
+  def uuid = column[String]("uuid")
+  def name = column[String]("name")
+  def url = column[String]("url")
+  def clientId = column[Option[String]]("client_id")
+  def clientSecret = column[Option[String]]("client_secret")
   def createdAt = column[Timestamp]("created_at")
   def updatedAt = column[Timestamp]("updated_at")
 
-  // Unique index on (user_id, tool_name)
-  def idx = index("idx_user_tools_user_tool", (userId, toolName), unique = true)
+  // Index on user_id for fast lookup
+  def idxUserId = index("idx_mcp_servers_user_id", userId)
 
-  def * = (id, userId, toolName, description, schemaJson, createdAt, updatedAt).mapTo[UserToolRow]
+  // Unique index on (user_id, uuid)
+  def idxUserUuid = index("idx_mcp_servers_user_uuid", (userId, uuid), unique = true)
+
+  def * = (id, userId, uuid, name, url, clientId, clientSecret, createdAt, updatedAt).mapTo[McpServerRow]
 }
 
 /**
@@ -68,7 +77,7 @@ class UserToolsTable(tag: Tag) extends Table[UserToolRow](tag, "user_tools") {
  */
 object Tables {
   /**
-   * User tools table query
+   * MCP servers table query
    */
-  val userTools = TableQuery[UserToolsTable]
+  val mcpServers = TableQuery[McpServersTable]
 }

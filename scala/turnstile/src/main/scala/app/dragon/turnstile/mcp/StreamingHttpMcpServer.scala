@@ -1,6 +1,6 @@
 package app.dragon.turnstile.mcp
 
-import app.dragon.turnstile.service.{McpService, ToolsService, ToolsServiceExample}
+import app.dragon.turnstile.service.{McpService, ToolsService}
 import com.typesafe.config.Config
 import io.modelcontextprotocol.json.McpJsonMapper
 import io.modelcontextprotocol.server.{McpServer, McpSyncServer}
@@ -59,12 +59,9 @@ class StreamingHttpMcpServer(config: Config)(implicit system: ActorSystem[?]) {
   private val host = config.getString("host")
   private val port = config.getInt("port")
 
-  // Use the singleton ToolsService instance for dynamic tool management
+  // Use the singleton ToolsService instance for tool management
   private val toolsService = ToolsService.instance
-
-  // Initialize demo tools for default user
-  initializeDemoTools()
-
+  
   // Create the service layer for tool handlers (using default user)
   private val mcpServiceFut = toolsService.createServiceForUser("default")
 
@@ -132,28 +129,6 @@ class StreamingHttpMcpServer(config: Config)(implicit system: ActorSystem[?]) {
     builder.build()
   }
 
-  /**
-   * Initialize demo tools for the default user
-   */
-  private def initializeDemoTools(): Unit = {
-    logger.info("Initializing demo tools for default user...")
-
-    val demoTools = List(
-      ToolsServiceExample.createGreetingTool,
-      ToolsServiceExample.createCalculatorTool,
-      ToolsServiceExample.createWeatherTool
-    )
-
-    // Create each demo tool individually
-    demoTools.foreach { tool =>
-      toolsService.createTool("default", tool).map {
-        case Right(created) =>
-          logger.info(s"Successfully registered demo tool ${created.name} with id ${created.id}")
-        case Left(err) =>
-          logger.warn(s"Failed to register demo tool ${tool.name}: ${err.message}")
-      }
-    }
-  }
 
   /**
    * Get the ToolsService instance (for external access)

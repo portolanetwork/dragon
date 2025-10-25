@@ -19,9 +19,6 @@ option go_package = "dragon/turnstile/api/v1";
 service TurnstileService {
     rpc ListMcpServers (ListMcpServersRequest)  returns (McpServerList) {}
     rpc CreateMcpServer (CreateMcpServerRequest) returns (McpServer) {}
-
-    rpc ListTools (ListToolsRequest) returns (ToolList) {}
-    rpc CreateTool (CreateToolRequest) returns (Tool) {}
 }
 
 // MCP Servers
@@ -45,35 +42,5 @@ message McpServer {
     string uuid = 1;
     string name = 2;
     string url = 3;
-}
-
-// Tools
-
-message ListToolsRequest {
-    string user_id = 1;
-    //string page_size = 2;
-    //string page_token = 3;
-}
-
-message CreateToolRequest {
-    string userId = 1;
-    string tool_name = 2;
-    string description = 3;
-    google.protobuf.Struct schema_json = 4;
-}
-
-
-message ToolList {
-    repeated Tool tools = 1;
-    string next_page_token = 2;
-}
-
-message Tool {
-    string uuid = 1;
-    string name = 2;
-    string description = 3;
-    google.protobuf.Struct schema_json = 4;
-    google.protobuf.Timestamp created_time = 5;
-    google.protobuf.Timestamp updated_time = 6;
 }
 

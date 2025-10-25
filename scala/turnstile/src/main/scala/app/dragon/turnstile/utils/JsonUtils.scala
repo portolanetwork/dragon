@@ -42,6 +42,17 @@ object JsonUtils {
   }
 
   /**
+   * Convert a Java Map to a protobuf Struct.
+   *
+   * @param map The Java Map to convert
+   * @return Try[Struct] containing the converted Struct or a Failure
+   */
+  def mapToStruct(map: java.util.Map[String, Object]): Try[Struct] = Try {
+    val jsonString = objectMapper.writeValueAsString(map)
+    stringToStruct(jsonString).get
+  }
+
+  /**
    * Parse a JSON schema string into a McpSchema.JsonSchema.
    *
    * @param json The JSON schema as a string

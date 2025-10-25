@@ -18,7 +18,7 @@ import scala.util.{Failure, Success, Try}
  * Migrations are located in: src/main/resources/db/migration/
  * Files follow Flyway naming convention: V<version>__<description>.sql
  *
- * Example: V1__create_user_tools_table.sql
+ * Example: V1__create_mcp_servers_table.sql
  */
 object DatabaseMigration {
   private val logger: Logger = LoggerFactory.getLogger(DatabaseMigration.getClass)

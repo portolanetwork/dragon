@@ -1,12 +1,14 @@
 package app.dragon.turnstile.controller
 
 import app.dragon.turnstile.service.TurnstileServiceImpl
+import app.dragon.turnstile.config.ApplicationConfig
 import dragon.turnstile.api.v1.{TurnstileService, TurnstileServiceHandler}
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.grpc.scaladsl.{ServerReflection, ServiceHandler}
 import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse}
 import org.slf4j.{Logger, LoggerFactory}
+import slick.jdbc.JdbcBackend.Database
 
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{ExecutionContext, Future}
@@ -33,6 +35,9 @@ class TurnstileServer private(system: ActorSystem[Nothing]) {
   def run(host: String, port: Int): Future[Http.ServerBinding] = {
     implicit val sys = system
     implicit val ec: ExecutionContext = system.executionContext
+
+    // Create database instance
+    implicit val db: Database = Database.forConfig("turnstile.database.db", ApplicationConfig.rootConfig)
 
     // Create service implementations
     val turnstileServiceImpl = new TurnstileServiceImpl(system)
