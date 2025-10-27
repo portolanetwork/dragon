@@ -10,7 +10,7 @@ import org.apache.pekko.http.scaladsl.model.*
 import org.apache.pekko.http.scaladsl.model.headers.RawHeader
 import org.apache.pekko.http.scaladsl.model.sse.ServerSentEvent
 import org.apache.pekko.http.scaladsl.server.Directives.*
-import org.apache.pekko.http.scaladsl.server.{Directive0, ExceptionHandler, Route}
+import org.apache.pekko.http.scaladsl.server.{Directive0, ExceptionHandler, Rejection, RejectionHandler, Route}
 import org.apache.pekko.stream.scaladsl.{BroadcastHub, Keep, Source, SourceQueueWithComplete}
 import org.apache.pekko.stream.{OverflowStrategy, QueueOfferResult}
 import org.apache.pekko.util.ByteString
@@ -156,6 +156,23 @@ class PekkoHttpStreamableServerTransportProvider(
         ))
       }
   }
+
+  // Global RejectionHandler to ensure all rejections return application/json
+  private val jsonRejectionHandler = RejectionHandler.newBuilder()
+    .handleNotFound {
+      complete(HttpResponse(
+        StatusCodes.NotFound,
+        entity = HttpEntity(ContentTypes.`application/json`, "{\"error\":\"Not Found\"}")
+      ))
+    }
+    .handleAll[Rejection] { rejections =>
+      val errorMsg = rejections.map(_.toString).mkString(", ")
+      complete(HttpResponse(
+        StatusCodes.BadRequest,
+        entity = HttpEntity(ContentTypes.`application/json`, s"{\"error\":\"$errorMsg\"}")
+      ))
+    }
+    .result()
 
   override def protocolVersions(): java.util.List[String] = {
     List(
@@ -399,31 +416,23 @@ class PekkoHttpStreamableServerTransportProvider(
    * Create the Pekko HTTP route handling GET, POST, DELETE, OPTIONS
    */
   private def createRoute(): Route = {
-    addCorsHeaders {
-      path(mcpEndpoint.stripPrefix("/")) {
-        options {
-          handleOptions()
-        } ~
-        get {
-          handleGet()
-        } ~
-        post {
-          handlePost()
-        } ~
-        delete {
-          handleDelete()
-        }
-      } ~
-      path("messages") {
-        // Cloud connector compatibility endpoint
-        options {
-          handleOptions()
-        } ~
-        post {
-          handlePost()
-        } ~
-        get {
-          handleGet()
+    handleExceptions(jsonExceptionHandler) {
+      handleRejections(jsonRejectionHandler) {
+        addCorsHeaders {
+          path(mcpEndpoint.stripPrefix("/")) {
+            options {
+              handleOptions()
+            } ~
+            get {
+              handleGet()
+            } ~
+            post {
+              handlePost()
+            } ~
+            delete {
+              handleDelete()
+            }
+          }
         }
       }
     }

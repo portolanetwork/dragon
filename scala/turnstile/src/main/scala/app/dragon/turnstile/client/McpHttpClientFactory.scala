@@ -199,4 +199,83 @@ object McpHttpClientFactory {
     // Build and wrap in Scala client
     new McpAsyncClient(configuredClient.build())
   }
+
+  /**
+   * Create an enhanced streamable HTTP client with full async API support.
+   *
+   * This method returns StreamableHttpMcpAsyncClient which provides access to
+   * advanced features like:
+   * - Custom request builders
+   * - Async request customizers (for dynamic auth headers, etc.)
+   * - Change consumers for reactive notifications
+   * - Logging and progress handlers
+   * - Sampling and elicitation support
+   *
+   * Example:
+   * {{{
+   * val client = McpHttpClientFactory.createEnhancedStreamableHttpClient(
+   *   serverUrl = "http://localhost:8082/mcp",
+   *   clientName = "my-app",
+   *   clientVersion = "1.0.0"
+   * ) { builder =>
+   *   builder
+   *     .withToolsChangeHandler { tools =>
+   *       println(s"Tools updated: ${tools.map(_.name).mkString(", ")}")
+   *     }
+   *     .withLoggingHandler { notification =>
+   *       println(s"Server log: ${notification.data}")
+   *     }
+   * }
+   * }}}
+   *
+   * @param serverUrl          the URL of the MCP server
+   * @param clientName         the name of this client application
+   * @param clientVersion      the version of this client application
+   * @param requestTimeout     timeout for individual requests
+   * @param initTimeout        timeout for initialization
+   * @param builderConfig      function to configure the builder with additional options
+   * @param ec                 execution context for async operations
+   * @return a configured StreamableHttpMcpAsyncClient
+   */
+  def createEnhancedStreamableHttpClient(
+      serverUrl: String,
+      clientName: String = "scala-mcp-client",
+      clientVersion: String = "1.0.0",
+      requestTimeout: Duration = Duration.ofSeconds(60),
+      initTimeout: Duration = Duration.ofSeconds(30),
+      builderConfig: StreamableHttpMcpAsyncClient.Builder => StreamableHttpMcpAsyncClient.Builder = identity
+  )(implicit ec: ExecutionContext): StreamableHttpMcpAsyncClient = {
+
+    logger.info(s"Creating enhanced streamable HTTP MCP client for server: $serverUrl")
+
+    // Create base builder
+    val baseBuilder = StreamableHttpMcpAsyncClient.builder()
+      .serverUrl(serverUrl)
+      .clientInfo(clientName, clientVersion)
+      .requestTimeout(requestTimeout)
+      .initializationTimeout(initTimeout)
+
+    // Apply custom configuration and build
+    builderConfig(baseBuilder).build()
+  }
+
+  /**
+   * Get a builder for creating a fully customized StreamableHttpMcpAsyncClient.
+   *
+   * This provides direct access to the builder for maximum flexibility.
+   *
+   * Example:
+   * {{{
+   * val client = McpHttpClientFactory.streamableHttpClientBuilder()
+   *   .serverUrl("http://localhost:8082/mcp")
+   *   .clientInfo("my-app", "1.0.0")
+   *   .requestTimeout(Duration.ofSeconds(30))
+   *   .withToolsChangeHandler { tools => /* ... */ }
+   *   .asyncRequestCustomizer(myCustomizer)
+   *   .build()
+   * }}}
+   */
+  def streamableHttpClientBuilder()(implicit ec: ExecutionContext): StreamableHttpMcpAsyncClient.Builder = {
+    StreamableHttpMcpAsyncClient.builder()
+  }
 }
