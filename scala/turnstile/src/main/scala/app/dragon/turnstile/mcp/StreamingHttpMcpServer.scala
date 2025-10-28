@@ -1,6 +1,6 @@
 package app.dragon.turnstile.mcp
 
-import app.dragon.turnstile.service.{McpService, ToolsService}
+import app.dragon.turnstile.service.ToolsService
 import com.typesafe.config.Config
 import io.modelcontextprotocol.json.McpJsonMapper
 import io.modelcontextprotocol.server.{McpServer, McpSyncServer}
@@ -61,9 +61,6 @@ class StreamingHttpMcpServer(config: Config)(implicit system: ActorSystem[?]) {
 
   // Use the singleton ToolsService instance for tool management
   private val toolsService = ToolsService.instance
-  
-  // Create the service layer for tool handlers (using default user)
-  private val mcpServiceFut = toolsService.createServiceForUser("default")
 
   // Create the JSON mapper
   private val jsonMapper = McpJsonMapper.getDefault
@@ -101,13 +98,13 @@ class StreamingHttpMcpServer(config: Config)(implicit system: ActorSystem[?]) {
   }
 
   // Build the sync server using the SDK builder pattern
-  private val mcpServerFut = mcpServiceFut.map { mcpService =>
+  private val mcpServer = {
     var builder = McpServer.sync(transportProvider)
       .serverInfo(serverName, serverVersion)
 
     // Register all tools from the service
     // Convert stateless handlers to session-based handlers
-    mcpService.getToolsWithHandlers.foreach { case (tool, statelessHandler) =>
+    toolsService.getToolsWithHandlers("default").foreach { case (tool, statelessHandler) =>
       // Wrap the stateless handler to work with session-based API
       val sessionHandler = new java.util.function.BiFunction[
         io.modelcontextprotocol.server.McpSyncServerExchange,
@@ -139,32 +136,30 @@ class StreamingHttpMcpServer(config: Config)(implicit system: ActorSystem[?]) {
    * Start the MCP streaming HTTP server
    */
   def start(): Unit = {
-    mcpServerFut.foreach { mcpServer =>
-      logger.info(s"Starting MCP Streamable HTTP Server: $serverName v$serverVersion")
-      logger.info("Using Streamable HTTP transport (MCP 2025-03-26)")
+    logger.info(s"Starting MCP Streamable HTTP Server: $serverName v$serverVersion")
+    logger.info("Using Streamable HTTP transport (MCP 2025-03-26)")
 
-      val protocol = if (sslConfig.exists(_.enabled)) "https" else "http"
-      logger.info(s"Server will be available at $protocol://$host:$port/mcp")
+    val protocol = if (sslConfig.exists(_.enabled)) "https" else "http"
+    logger.info(s"Server will be available at $protocol://$host:$port/mcp")
 
-      if (sslConfig.exists(_.enabled)) {
-        logger.info(s"HTTPS/TLS enabled")
-        logger.info(s"  KeyStore: ${sslConfig.get.keyStorePath}")
-        logger.info(s"  KeyStore Type: ${sslConfig.get.keyStoreType}")
-      }
-
-      logger.info("Streamable HTTP Protocol Flow:")
-      logger.info("  1. POST to /mcp with initialize request (Accept: application/json, text/event-stream)")
-      logger.info("  2. Receive mcp-session-id in response header")
-      logger.info("  3. GET /mcp with mcp-session-id header to establish SSE stream (Accept: text/event-stream)")
-      logger.info("  4. POST to /mcp with mcp-session-id header to send requests/responses/notifications")
-      logger.info("")
-      logger.info("Cloud Connector Compatibility: /messages endpoint mirrors /mcp functionality")
-
-      transportProvider.start()
-
-      logger.info("MCP Streaming HTTP Server started successfully")
-      logger.info("Available tools: " + mcpServer.listTools().asScala.map(_.name()).mkString(", "))
+    if (sslConfig.exists(_.enabled)) {
+      logger.info(s"HTTPS/TLS enabled")
+      logger.info(s"  KeyStore: ${sslConfig.get.keyStorePath}")
+      logger.info(s"  KeyStore Type: ${sslConfig.get.keyStoreType}")
     }
+
+    logger.info("Streamable HTTP Protocol Flow:")
+    logger.info("  1. POST to /mcp with initialize request (Accept: application/json, text/event-stream)")
+    logger.info("  2. Receive mcp-session-id in response header")
+    logger.info("  3. GET /mcp with mcp-session-id header to establish SSE stream (Accept: text/event-stream)")
+    logger.info("  4. POST to /mcp with mcp-session-id header to send requests/responses/notifications")
+    logger.info("")
+    logger.info("Cloud Connector Compatibility: /messages endpoint mirrors /mcp functionality")
+
+    transportProvider.start()
+
+    logger.info("MCP Streaming HTTP Server started successfully")
+    logger.info("Available tools: " + mcpServer.listTools().asScala.map(_.name()).mkString(", "))
   }
 
   /**

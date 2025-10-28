@@ -3,6 +3,8 @@ package app.dragon.turnstile.service
 import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.service.tools.{EchoTool, SystemInfoTool}
 import com.typesafe.config.Config
+import io.modelcontextprotocol.common.McpTransportContext
+import io.modelcontextprotocol.spec.McpSchema
 import org.slf4j.{Logger, LoggerFactory}
 
 import java.util.concurrent.ConcurrentHashMap
@@ -12,15 +14,30 @@ import scala.jdk.CollectionConverters.*
 import scala.util.{Failure, Success, Try}
 
 /**
+ * Type alias for MCP tool handler functions
+ */
+type ToolHandler = (McpTransportContext, McpSchema.CallToolRequest) => McpSchema.CallToolResult
+
+/**
+ * Represents an MCP tool with its definition and handler
+ */
+case class McpTool(
+  name: String,
+  description: String,
+  schema: McpSchema.Tool,
+  handler: ToolHandler
+)
+
+/**
  * Service for managing MCP tools.
  *
  * This service provides access to default (built-in) MCP tools
- * and creates McpService instances for use with MCP servers.
+ * and handlers for use with MCP servers.
  *
  * Key features:
  * - Default (built-in) tools available to all users
  * - Thread-safe concurrent access
- * - McpService creation for MCP server integration
+ * - Java BiFunction handlers for MCP SDK compatibility
  *
  * Example usage:
  * {{{
@@ -29,8 +46,8 @@ import scala.util.{Failure, Success, Try}
  * // Get all default tools
  * val tools = toolsService.getTools("user123")
  *
- * // Create an McpService instance for a user
- * val mcpServiceFut = toolsService.createServiceForUser("user123")
+ * // Get tools with handlers for MCP server integration
+ * val toolsWithHandlers = toolsService.getToolsWithHandlers("user123")
  * }}}
  */
 
@@ -51,15 +68,6 @@ object ToolsService {
     val config = ApplicationConfig.rootConfig
     new ToolsService(config)
   }
-
-  /**
-   * Legacy factory method for backwards compatibility.
-   * Now returns the singleton instance, ignoring the provided config.
-   *
-   * @deprecated Use ToolsService.instance instead
-   */
-  @deprecated("Use ToolsService.instance instead", "1.0.0")
-  def apply(config: Config)(implicit ec: ExecutionContext): ToolsService = instance
 }
 
 
@@ -95,17 +103,24 @@ class ToolsService(config: Config)(implicit ec: ExecutionContext) {
   def getDefaultTools: List[McpTool] = defaultTools
 
   /**
-   * Create an McpService instance for a specific user.
-   *
-   * Currently returns default tools for all users.
+   * Get all tools with their handlers as Java BiFunction for SDK compatibility.
+   * This method converts the Scala handlers to Java BiFunction format required by the MCP SDK.
    *
    * @param userId The user identifier
-   * @return Future[McpService] instance with user's tools
+   * @return List of tuples containing tool schema and Java BiFunction handler
    */
-  def createServiceForUser(userId: String): Future[McpService] = {
+  def getToolsWithHandlers(userId: String):
+    List[(McpSchema.Tool, java.util.function.BiFunction[McpTransportContext, McpSchema.CallToolRequest, McpSchema.CallToolResult])] = {
     require(userId.nonEmpty, "userId cannot be empty")
-    Future.successful(new McpService {
-      override val tools: Seq[McpTool] = defaultTools
-    })
+
+    val userTools = getTools(userId)
+
+    userTools.map { tool =>
+      val javaHandler = new java.util.function.BiFunction[McpTransportContext, McpSchema.CallToolRequest, McpSchema.CallToolResult] {
+        override def apply(ctx: McpTransportContext, req: McpSchema.CallToolRequest): McpSchema.CallToolResult =
+          tool.handler(ctx, req)
+      }
+      (tool.schema, javaHandler)
+    }
   }
 }

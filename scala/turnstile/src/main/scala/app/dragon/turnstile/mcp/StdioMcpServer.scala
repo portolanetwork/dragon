@@ -1,6 +1,6 @@
 package app.dragon.turnstile.mcp
 
-import app.dragon.turnstile.service.{McpService, ToolsService}
+import app.dragon.turnstile.service.ToolsService
 import com.typesafe.config.Config
 import io.modelcontextprotocol.json.McpJsonMapper
 import io.modelcontextprotocol.server.McpServer
@@ -53,10 +53,6 @@ class StdioMcpServer(config: Config)(implicit system: ActorSystem[?]) {
   // Use the singleton ToolsService instance for tool management
   private val toolsService = ToolsService.instance
 
-
-  // Create the service layer for tool handlers (using default user)
-  private val mcpServiceFut: scala.concurrent.Future[McpService] = toolsService.createServiceForUser("default")
-
   // Create the JSON mapper for MCP protocol
   private val jsonMapper = McpJsonMapper.getDefault
 
@@ -65,13 +61,13 @@ class StdioMcpServer(config: Config)(implicit system: ActorSystem[?]) {
 
   // Build the session-based sync server using the SDK builder pattern
   // This creates a session-based server (not stateless) which supports streaming
-  private val mcpServerFut: scala.concurrent.Future[io.modelcontextprotocol.server.McpSyncServer] = mcpServiceFut.map { mcpService =>
+  private val mcpServer = {
     var builder = McpServer.sync(transportProvider)
       .serverInfo(serverName, serverVersion)
 
     // Register all tools from the service
     // Convert stateless handlers to session-based handlers
-    mcpService.getToolsWithHandlers.foreach { case (tool, statelessHandler) =>
+    toolsService.getToolsWithHandlers("default").foreach { case (tool, statelessHandler) =>
       // Wrap the stateless handler to work with session-based API
       val sessionHandler = new java.util.function.BiFunction[
         io.modelcontextprotocol.server.McpSyncServerExchange,
@@ -104,12 +100,10 @@ class StdioMcpServer(config: Config)(implicit system: ActorSystem[?]) {
    * The server automatically starts listening on stdin/stdout when created
    */
   def start(): Unit = {
-    mcpServerFut.foreach { mcpServer =>
-      logger.info(s"Starting MCP Stdio Server: $serverName v$serverVersion")
-      logger.info("MCP Server using streaming stdio transport (StdioServerTransportProvider)")
-      logger.info("Server will communicate via stdin/stdout with non-blocking message processing")
-      logger.info("Available tools: " + mcpServer.listTools().asScala.map(_.name()).mkString(", "))
-    }
+    logger.info(s"Starting MCP Stdio Server: $serverName v$serverVersion")
+    logger.info("MCP Server using streaming stdio transport (StdioServerTransportProvider)")
+    logger.info("Server will communicate via stdin/stdout with non-blocking message processing")
+    logger.info("Available tools: " + mcpServer.listTools().asScala.map(_.name()).mkString(", "))
   }
 
   /**

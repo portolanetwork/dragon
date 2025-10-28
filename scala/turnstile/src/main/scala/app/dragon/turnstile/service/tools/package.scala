@@ -60,11 +60,11 @@ package app.dragon.turnstile.service
  * }
  * }}}
  *
- * 5. Register the tool in DefaultMcpService:
+ * 5. Register the tool in ToolsService:
  * {{{
- * override val tools: Seq[McpTool] = Seq(
+ * private val defaultTools: List[McpTool] = List(
  *   EchoTool().tool,
- *   SystemInfoTool(serverName, serverVersion).tool,
+ *   SystemInfoTool().tool,
  *   MyCustomTool().tool  // Add your tool here
  * )
  * }}}
