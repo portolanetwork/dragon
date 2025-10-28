@@ -1,6 +1,7 @@
-package app.dragon.turnstile.service
+package app.dragon.turnstile.utils
 
 import io.grpc.Status
+
 import scala.concurrent.{ExecutionContext, Future}
 
 object ServiceValidationUtil {

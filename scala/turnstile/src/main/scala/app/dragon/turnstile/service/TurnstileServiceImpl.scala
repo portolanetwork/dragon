@@ -9,7 +9,7 @@ import java.sql.Timestamp
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
-import app.dragon.turnstile.service.ServiceValidationUtil._
+import app.dragon.turnstile.utils.ServiceValidationUtil._
 
 /**
  * Companion object for TurnstileServiceImpl.
