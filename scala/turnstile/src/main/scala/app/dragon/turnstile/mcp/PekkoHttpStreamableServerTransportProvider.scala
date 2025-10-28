@@ -10,7 +10,7 @@ import org.apache.pekko.http.scaladsl.model.*
 import org.apache.pekko.http.scaladsl.model.headers.RawHeader
 import org.apache.pekko.http.scaladsl.model.sse.ServerSentEvent
 import org.apache.pekko.http.scaladsl.server.Directives.*
-import org.apache.pekko.http.scaladsl.server.{Directive0, ExceptionHandler, Rejection, RejectionHandler, Route}
+import org.apache.pekko.http.scaladsl.server.{Directive0, ExceptionHandler, Rejection, RejectionHandler, Route, StandardRoute}
 import org.apache.pekko.stream.scaladsl.{BroadcastHub, Keep, Source, SourceQueueWithComplete}
 import org.apache.pekko.stream.{OverflowStrategy, QueueOfferResult}
 import org.apache.pekko.util.ByteString
@@ -547,7 +547,7 @@ class PekkoHttpStreamableServerTransportProvider(
         HttpResponse(
           StatusCodes.OK,
           headers = List(
-            RawHeader("Cache-Control", "no-cache")
+            RawHeader("Cache-Control", "no-cache"),
           ),
           entity = HttpEntity.Chunked.fromData(
             MediaTypes.`text/event-stream`.toContentType,
@@ -629,7 +629,10 @@ class PekkoHttpStreamableServerTransportProvider(
               complete(
                 HttpResponse(
                   StatusCodes.OK,
-                  headers = List(RawHeader(HttpHeaders.MCP_SESSION_ID, sessionId)),
+                  headers = List(
+                    RawHeader(HttpHeaders.MCP_SESSION_ID, sessionId),
+                    //RawHeader(HttpHeaders.CONTENT_TYPE, "text/event-stream")
+                  ),
                   entity = HttpEntity(ContentTypes.`application/json`, jsonResponse)
                 )
               )
@@ -691,11 +694,13 @@ class PekkoHttpStreamableServerTransportProvider(
     message match {
       case response: McpSchema.JSONRPCResponse =>
         session.accept(response).contextWrite(ctx => ctx.put(McpTransportContext.KEY, transportContext)).block()
-        complete(StatusCodes.Accepted)
+        //complete(StatusCodes.Accepted)
+        acceptedJson("ack")
 
       case notification: McpSchema.JSONRPCNotification =>
         session.accept(notification).contextWrite(ctx => ctx.put(McpTransportContext.KEY, transportContext)).block()
-        complete(StatusCodes.Accepted)
+        //complete(StatusCodes.Accepted)
+        acceptedJson("ack")
 
       case request: McpSchema.JSONRPCRequest =>
         // Use the listening transport if available, otherwise create per-request stream
@@ -706,7 +711,8 @@ class PekkoHttpStreamableServerTransportProvider(
             session.responseStream(request, transport)
               .contextWrite(ctx => ctx.put(McpTransportContext.KEY, transportContext))
               .block()
-            complete(StatusCodes.Accepted)
+            //complete(StatusCodes.Accepted)
+            acceptedJson("ack")
           } catch {
             case ex: Exception =>
               logger.error(s"Failed to handle request: ${ex.getMessage}", ex)
@@ -753,6 +759,18 @@ class PekkoHttpStreamableServerTransportProvider(
         }
     }
   }
+
+  private def acceptedJson(message: String): StandardRoute =
+    complete(
+      HttpResponse(
+        StatusCodes.Accepted,
+        entity = HttpEntity(
+          ContentTypes.`application/json`,
+          s"""{"jsonrpc":"2.0","result":"$message"}"""
+        )
+      )
+    )
+
 
   /**
    * Handle DELETE requests for session deletion

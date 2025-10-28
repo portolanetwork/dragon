@@ -24,7 +24,7 @@ object TurnstileMcpClient {
     logger.info("Starting Turnstile MCP HTTP Client...")
 
     // Parse command line arguments
-    val serverUrl = if (args.nonEmpty) args(0) else "http://localhost:8081/mcp"
+    val serverUrl = if (args.nonEmpty) args(0) else "http://localhost:8082/mcp"
 
     logger.info(s"Connecting to MCP server at: $serverUrl")
 
@@ -254,6 +254,7 @@ object TurnstileMcpClient {
     val request = HttpRequest.newBuilder()
       .uri(URI.create(serverUrl))
       .header("Content-Type", "application/json")
+      .header("Accept", "application/json,text/event-stream")
       .POST(HttpRequest.BodyPublishers.ofString(requestJson))
       .timeout(Duration.ofSeconds(10))
       .build()

@@ -17,6 +17,7 @@
     </appender>
 
     <logger name="app.dragon.turnstile" level="DEBUG" />
+    <logger name="io.modelcontextprotocol.client" level="DEBUG" />
 
     <root level="INFO">
         <appender-ref ref="ASYNC"/>

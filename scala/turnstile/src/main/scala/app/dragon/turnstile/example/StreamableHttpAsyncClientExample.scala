@@ -1,38 +1,35 @@
 package app.dragon.turnstile.example
 
-import app.dragon.turnstile.client.StreamableHttpMcpAsyncClient
-import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer
-import io.modelcontextprotocol.common.McpTransportContext
+import io.modelcontextprotocol.client.{McpAsyncClient, McpClient}
+import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport
 import io.modelcontextprotocol.spec.McpSchema
-import org.reactivestreams.Publisher
 import org.slf4j.{Logger, LoggerFactory}
 import reactor.core.publisher.Mono
 
-import java.net.URI
 import java.net.http.HttpRequest
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.jdk.CollectionConverters.*
 import scala.util.{Failure, Success}
 
 /**
- * Comprehensive example demonstrating StreamableHttpMcpAsyncClient features.
+ * Comprehensive example demonstrating the official MCP Java SDK's McpAsyncClient with HTTP streaming transport.
  *
  * This example shows:
- * - Creating a client with streamable HTTP transport (not SSE)
- * - Custom request headers
- * - Async request customization for dynamic authentication
- * - Reactive change handlers for tools, resources, and prompts
+ * - Creating a client with the official HttpClientStreamableHttpTransport
+ * - Using McpClient.async() factory method for client creation
+ * - Custom request headers via HttpRequest.Builder
+ * - Reactive change handlers for tools, resources, and prompts using Function<T, Mono<Void>>
  * - Logging and progress notification handlers
- * - Context-aware requests
- * - Proper lifecycle management
+ * - Proper lifecycle management with graceful shutdown
+ * - Converting Reactor Mono results to Scala Futures
  *
  * Usage:
  * {{{
  * # Basic usage
- * sbt "runMain app.dragon.turnstile.example.StreamableHttpAsyncClientExample http://localhost:8082/mcp"
+ * sbt "runMain app.dragon.turnstile.example.StreamableHttpAsyncClientExample http://localhost:8082"
  *
- * # With authentication
- * sbt "runMain app.dragon.turnstile.example.StreamableHttpAsyncClientExample http://localhost:8082/mcp --auth"
+ * # With custom endpoint
+ * sbt "runMain app.dragon.turnstile.example.StreamableHttpAsyncClientExample http://localhost:8082 /custom-mcp"
  * }}}
  */
 object StreamableHttpAsyncClientExample {
@@ -41,57 +38,81 @@ object StreamableHttpAsyncClientExample {
 
   implicit val ec: ExecutionContext = ExecutionContext.global
 
+  /**
+   * Convert Reactor Mono to Scala Future.
+   * This bridges the gap between the reactive Java API and Scala's Future-based API.
+   */
+  private def monoToFuture[T](mono: Mono[T]): Future[T] = {
+    val promise = Promise[T]()
+    mono.subscribe(
+      value => promise.success(value),
+      error => promise.failure(error)
+    )
+    promise.future
+  }
+
   def main(args: Array[String]): Unit = {
     // Parse arguments
+    //val serverUrl = args.headOption.getOrElse("https://demo-day.mcp.cloudflare.com/") // SSE only
+    //val serverUrl = args.headOption.getOrElse("https://localhost:8083/")
+    //val serverUrl = args.headOption.getOrElse("https://mcp.deepwiki.com/mcp")
     val serverUrl = args.headOption.getOrElse("http://localhost:8082/mcp")
-    val withAuth = args.contains("--auth")
+    val endpoint = args.lift(1).getOrElse("/mcp")
+    //val endpoint = args.lift(1).getOrElse("/sse") // des not support sse transport
 
     logger.info("=" * 80)
-    logger.info("StreamableHttpMcpAsyncClient - Comprehensive Example")
+    logger.info("Official MCP Java SDK - McpAsyncClient with HTTP Streaming")
     logger.info("=" * 80)
     logger.info(s"Server URL: $serverUrl")
-    logger.info(s"Authentication: ${if (withAuth) "enabled" else "disabled"}")
+    logger.info(s"Endpoint: $endpoint")
     logger.info("")
 
-    // Create the client based on configuration
-    val client = if (withAuth) {
-      createAuthenticatedClient(serverUrl)
-    } else {
-      createBasicClient(serverUrl)
-    }
+    // Create the client
+    val client = createClient(serverUrl, endpoint)
 
-    // Execute the workflow
+    // Execute the workflow - convert Reactor Mono to Scala Future
     val workflow: Future[Unit] = for {
       // 1. Initialize the connection
-      initResult <- client.initialize()
+      initResult <- monoToFuture(client.initialize()).recoverWith {
+        case e: Exception =>
+          logger.error("Failed to initialize client:", e)
+          logger.error(s"Server URL: $serverUrl, Endpoint: $endpoint")
+          Future.failed(e)
+      }
       _ = logInitialization(initResult)
 
+/*
       // 2. List and display tools
-      tools <- client.listTools()
-      _ = logTools(tools)
+      toolsResult <- monoToFuture(client.listTools())
+      _ = logTools(toolsResult.tools().asScala.toList)
 
       // 3. Call a tool if available
-      _ <- callToolIfAvailable(client, tools)
+      _ <- callToolIfAvailable(client, toolsResult.tools().asScala.toList)
 
       // 4. List and display resources
-      resources <- client.listResources().recover {
-        case e: Exception =>
-          logger.warn(s"Failed to list resources: ${e.getMessage}")
-          List.empty
-      }
+      resources <- monoToFuture(client.listResources())
+        .map(_.resources().asScala.toList)
+        .recover {
+          case e: Exception =>
+            logger.warn(s"Failed to list resources: ${e.getMessage}")
+            List.empty
+        }
       _ = logResources(resources)
 
       // 5. List and display prompts
-      prompts <- client.listPrompts().recover {
-        case e: Exception =>
-          logger.warn(s"Failed to list prompts: ${e.getMessage}")
-          List.empty
-      }
+      prompts <- monoToFuture(client.listPrompts())
+        .map(_.prompts().asScala.toList)
+        .recover {
+          case e: Exception =>
+            logger.warn(s"Failed to list prompts: ${e.getMessage}")
+            List.empty
+        }
       _ = logPrompts(prompts)
 
       // 6. Demonstrate ping
-      _ <- client.ping()
+      _ <- monoToFuture(client.ping())
       _ = logger.info("✓ Ping successful")
+*/
 
     } yield ()
 
@@ -102,7 +123,7 @@ object StreamableHttpAsyncClientExample {
         logger.info("=" * 80)
         logger.info("✓ Workflow completed successfully")
         logger.info("=" * 80)
-        client.closeGracefully().onComplete { _ =>
+        monoToFuture(client.closeGracefully()).onComplete { _ =>
           logger.info("✓ Client closed gracefully")
           System.exit(0)
         }
@@ -121,110 +142,70 @@ object StreamableHttpAsyncClientExample {
   }
 
   /**
-   * Create a basic client with standard features:
-   * - Change handlers for reactive notifications
+   * Create a client using the official MCP Java SDK with HttpClientStreamableHttpTransport.
+   *
+   * This demonstrates:
+   * - Building HttpClientStreamableHttpTransport with custom configuration
+   * - Using McpClient.async() factory method
+   * - Adding reactive change handlers using Function<T, Mono<Void>>
+   * - Custom HTTP headers via HttpRequest.Builder
    * - Logging and progress handlers
-   * - Custom headers
    */
-  private def createBasicClient(serverUrl: String): StreamableHttpMcpAsyncClient = {
-    logger.info("Creating basic StreamableHttpMcpAsyncClient...")
+  private def createClient(serverUrl: String, endpoint: String): McpAsyncClient = {
+    logger.info("Creating McpAsyncClient with HttpClientStreamableHttpTransport...")
 
     // Custom request builder with static headers
     val requestBuilder = HttpRequest.newBuilder()
       .header("X-Client-Type", "scala-example")
-      .header("X-Client-Feature", "streamable-http")
+      .header("X-Client-Feature", "official-mcp-sdk")
+      .header("Content-Type", "application/json")
+      .header("Accept", "application/json,text/event-stream")
+      .header("User-Agent", "Turnstile-MCP-Client/1.0.0")
 
-    StreamableHttpMcpAsyncClient.builder()
-      .serverUrl(serverUrl)
-      .clientInfo("streamable-http-example", "1.0.0")
+    // Build the HTTP streaming transport
+    val transport = HttpClientStreamableHttpTransport.builder(serverUrl)
+      .endpoint(endpoint)
+      //.requestBuilder(requestBuilder)
+      .connectTimeout(java.time.Duration.ofSeconds(10))
+      .resumableStreams(true)
+      .build()
+
+    // Build the async client using the official McpClient factory
+    McpClient.async(transport)
       .requestTimeout(java.time.Duration.ofSeconds(30))
       .initializationTimeout(java.time.Duration.ofSeconds(15))
-      .customRequestBuilder(requestBuilder)
-      .withToolsChangeHandler { tools =>
-        logger.info(s"[NOTIFICATION] Tools changed: ${tools.map(_.name()).mkString(", ")}")
-      }
-      .withResourcesChangeHandler { resources =>
-        logger.info(s"[NOTIFICATION] Resources changed: ${resources.map(_.uri()).mkString(", ")}")
-      }
-      .withPromptsChangeHandler { prompts =>
-        logger.info(s"[NOTIFICATION] Prompts changed: ${prompts.map(_.name()).mkString(", ")}")
-      }
-      .withLoggingHandler { notification =>
-        val level = notification.level()
-        val data = notification.data()
-        logger.info(s"[SERVER LOG - $level] $data")
-      }
-      .withProgressHandler { notification =>
-        val progress = notification.progress()
-        val total = notification.total()
-        val progressStr = if (total != null) s"$progress / $total" else s"$progress"
-        logger.info(s"[PROGRESS] ${notification.progressToken()}: $progressStr")
-      }
+      .clientInfo(new McpSchema.Implementation("turnstile-scala-example", "1.0.0"))
+      .toolsChangeConsumer(tools =>
+        Mono.fromRunnable(() =>
+          logger.info(s"[NOTIFICATION] Tools changed: ${tools.asScala.map(_.name()).mkString(", ")}")
+        )
+      )
+      .resourcesChangeConsumer(resources =>
+        Mono.fromRunnable(() =>
+          logger.info(s"[NOTIFICATION] Resources changed: ${resources.asScala.map(_.uri()).mkString(", ")}")
+        )
+      )
+      .promptsChangeConsumer(prompts =>
+        Mono.fromRunnable(() =>
+          logger.info(s"[NOTIFICATION] Prompts changed: ${prompts.asScala.map(_.name()).mkString(", ")}")
+        )
+      )
+      .loggingConsumer(notification =>
+        Mono.fromRunnable(() => {
+          val level = notification.level()
+          val data = notification.data()
+          logger.info(s"[SERVER LOG - $level] $data")
+        })
+      )
+      .progressConsumer(notification =>
+        Mono.fromRunnable(() => {
+          val progress = notification.progress()
+          val total = notification.total()
+          val progressStr = if (total != null) s"$progress / $total" else s"$progress"
+          logger.info(s"[PROGRESS] ${notification.progressToken()}: $progressStr")
+        })
+      )
       .build()
-  }
-
-  /**
-   * Create an authenticated client with async request customization.
-   *
-   * This demonstrates how to add dynamic authentication headers
-   * (e.g., OAuth tokens fetched asynchronously).
-   */
-  private def createAuthenticatedClient(serverUrl: String): StreamableHttpMcpAsyncClient = {
-    logger.info("Creating authenticated StreamableHttpMcpAsyncClient...")
-
-    // Create async request customizer for dynamic authentication
-    val authCustomizer = new McpAsyncHttpClientRequestCustomizer {
-      override def customize(
-          builder: HttpRequest.Builder,
-          method: String,
-          endpoint: URI,
-          body: String,
-          context: McpTransportContext
-      ): Publisher[HttpRequest.Builder] = {
-        // Simulate async token fetch
-        Mono.fromCallable(() => {
-          logger.debug(s"Fetching auth token for request: $method $endpoint")
-          fetchAccessToken(context)
-        }).map { token =>
-          logger.debug(s"Adding auth header with token: ${token.take(10)}...")
-          builder.copy()
-            .header("Authorization", s"Bearer $token")
-            .header("X-Request-ID", java.util.UUID.randomUUID().toString)
-        }
-      }
-    }
-
-    StreamableHttpMcpAsyncClient.builder()
-      .serverUrl(serverUrl)
-      .clientInfo("streamable-http-auth-example", "1.0.0")
-      .requestTimeout(java.time.Duration.ofSeconds(30))
-      .asyncRequestCustomizer(authCustomizer)
-      .withToolsChangeHandler { tools =>
-        logger.info(s"[NOTIFICATION] Tools changed: ${tools.map(_.name()).mkString(", ")}")
-      }
-      .withLoggingHandler { notification =>
-        logger.info(s"[SERVER LOG] ${notification.data()}")
-      }
-      .build()
-  }
-
-  /**
-   * Simulate fetching an access token asynchronously.
-   *
-   * In a real application, this would:
-   * - Fetch from an OAuth provider
-   * - Read from a token cache with refresh logic
-   * - Retrieve from context-specific storage
-   */
-  private def fetchAccessToken(context: McpTransportContext): String = {
-    // In production, you might extract user info from context
-    val userId = Option(context.get("user_id")).map(_.toString).getOrElse("anonymous")
-
-    // Simulate token fetch delay
-    Thread.sleep(100)
-
-    // Generate a mock token
-    s"mock-token-${userId}-${System.currentTimeMillis()}"
   }
 
   /**
@@ -337,7 +318,7 @@ object StreamableHttpAsyncClientExample {
    * Call a tool if any are available.
    */
   private def callToolIfAvailable(
-      client: StreamableHttpMcpAsyncClient,
+      client: McpAsyncClient,
       tools: List[McpSchema.Tool]
   ): Future[Unit] = {
     if (tools.isEmpty) {
@@ -354,13 +335,16 @@ object StreamableHttpAsyncClientExample {
     logger.info(s"CALLING TOOL: ${toolToCall.name()}")
     logger.info("=" * 80)
 
+    // Create the tool call request
     val arguments = if (toolToCall.name() == "echo") {
-      Map("message" -> "Hello from StreamableHttpMcpAsyncClient!")
+      java.util.Map.of("message", "Hello from Official MCP Java SDK!")
     } else {
-      Map.empty[String, Any]
+      java.util.Collections.emptyMap[String, Object]()
     }
 
-    client.callTool(toolToCall.name(), arguments).map { result =>
+    val callToolRequest = new McpSchema.CallToolRequest(toolToCall.name(), arguments)
+
+    monoToFuture(client.callTool(callToolRequest)).map { result =>
       logger.info(s"Tool call successful:")
 
       if (result.content() != null) {
