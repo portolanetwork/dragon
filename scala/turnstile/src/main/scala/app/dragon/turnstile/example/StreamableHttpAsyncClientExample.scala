@@ -81,7 +81,7 @@ object StreamableHttpAsyncClientExample {
       }
       _ = logInitialization(initResult)
 
-/*
+
       // 2. List and display tools
       toolsResult <- monoToFuture(client.listTools())
       _ = logTools(toolsResult.tools().asScala.toList)
@@ -112,7 +112,6 @@ object StreamableHttpAsyncClientExample {
       // 6. Demonstrate ping
       _ <- monoToFuture(client.ping())
       _ = logger.info("✓ Ping successful")
-*/
 
     } yield ()
 

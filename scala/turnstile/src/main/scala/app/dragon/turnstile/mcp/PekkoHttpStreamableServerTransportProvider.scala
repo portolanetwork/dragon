@@ -16,6 +16,7 @@ import org.apache.pekko.stream.{OverflowStrategy, QueueOfferResult}
 import org.apache.pekko.util.ByteString
 import org.slf4j.{Logger, LoggerFactory}
 import reactor.core.publisher.Mono
+import scalapb.options.ScalapbProto.message
 
 import java.time.Duration
 import java.util.{UUID, concurrent as juc}
@@ -574,7 +575,7 @@ class PekkoHttpStreamableServerTransportProvider(
       complete(HttpResponse(StatusCodes.ServiceUnavailable, entity = HttpEntity(ContentTypes.`application/json`, "{\"error\":\"Server is shutting down\"}")))
     } else {
       extractRequest { httpRequest =>
-        optionalHeaderValueByName("Accept") { acceptOpt =>
+        optionalHeaderValueByName(HttpHeaders.ACCEPT) { acceptOpt =>
           entity(as[String]) { body =>
             logger.debug(s"POST request received with body: $body")
             acceptOpt match {
@@ -609,7 +610,26 @@ class PekkoHttpStreamableServerTransportProvider(
         case request: McpSchema.JSONRPCRequest if request.method() == McpSchema.METHOD_INITIALIZE =>
           if (!acceptsJson) {
             // Explicitly set Content-Type to application/json for bad request
-            complete(HttpResponse(StatusCodes.BadRequest, entity = HttpEntity(ContentTypes.`application/json`, "{\"error\":\"application/json required in Accept header for initialize\"}")))
+            /*
+            val jsonResponse = jsonMapper.writeValueAsString(
+              new McpSchema.JSONRPCResponse(
+                McpSchema.JSONRPC_VERSION,
+                request.id(),
+                null,
+                new McpSchema.JSONRPCResponse.JSONRPCError(-32600, "application/json required in Accept header for initialize", null)
+              )
+            )
+
+            //complete(HttpResponse(StatusCodes.BadRequest, entity = HttpEntity(ContentTypes.`application/json`, "{\"error\":\"application/json required in Accept header for initialize\"}")))
+            complete(
+              HttpResponse(
+                StatusCodes.BadRequest,
+                entity = HttpEntity(ContentTypes.`application/json`, jsonResponse)
+              )
+
+             */
+            createErrorResponse(StatusCodes.BadRequest, "application/json required in Accept header for initialize", -32600)
+
           } else {
             val initRequest = jsonMapper.convertValue(request.params(), new TypeRef[McpSchema.InitializeRequest]() {})
             val init = sessionFactory.startSession(initRequest)
@@ -629,10 +649,7 @@ class PekkoHttpStreamableServerTransportProvider(
               complete(
                 HttpResponse(
                   StatusCodes.OK,
-                  headers = List(
-                    RawHeader(HttpHeaders.MCP_SESSION_ID, sessionId),
-                    //RawHeader(HttpHeaders.CONTENT_TYPE, "text/event-stream")
-                  ),
+                  headers = List(RawHeader(HttpHeaders.MCP_SESSION_ID, sessionId)),
                   entity = HttpEntity(ContentTypes.`application/json`, jsonResponse)
                 )
               )
@@ -659,6 +676,8 @@ class PekkoHttpStreamableServerTransportProvider(
                   handleSessionMessage(session, message, transportContext, sessionId)
               }
             case None =>
+              // TODO: Not sure about this!
+
               // Workaround for buggy clients that don't include mcp-session-id header
               // (e.g., MCP Inspector in proxy mode may strip headers)
               // Per spec, session ID SHOULD be included, but for robustness in single-session
@@ -695,12 +714,14 @@ class PekkoHttpStreamableServerTransportProvider(
       case response: McpSchema.JSONRPCResponse =>
         session.accept(response).contextWrite(ctx => ctx.put(McpTransportContext.KEY, transportContext)).block()
         //complete(StatusCodes.Accepted)
-        acceptedJson("ack")
+        //acceptedJson("ack")
+        completeAccepted()
 
       case notification: McpSchema.JSONRPCNotification =>
         session.accept(notification).contextWrite(ctx => ctx.put(McpTransportContext.KEY, transportContext)).block()
         //complete(StatusCodes.Accepted)
-        acceptedJson("ack")
+        //acceptedJson("ack")
+        completeAccepted()
 
       case request: McpSchema.JSONRPCRequest =>
         // Use the listening transport if available, otherwise create per-request stream
@@ -712,7 +733,8 @@ class PekkoHttpStreamableServerTransportProvider(
               .contextWrite(ctx => ctx.put(McpTransportContext.KEY, transportContext))
               .block()
             //complete(StatusCodes.Accepted)
-            acceptedJson("ack")
+            //acceptedJson("ack")
+            completeAccepted()
           } catch {
             case ex: Exception =>
               logger.error(s"Failed to handle request: ${ex.getMessage}", ex)
@@ -760,13 +782,14 @@ class PekkoHttpStreamableServerTransportProvider(
     }
   }
 
-  private def acceptedJson(message: String): StandardRoute =
+
+  private def completeAccepted(): StandardRoute =
     complete(
       HttpResponse(
         StatusCodes.Accepted,
         entity = HttpEntity(
           ContentTypes.`application/json`,
-          s"""{"jsonrpc":"2.0","result":"$message"}"""
+          ""
         )
       )
     )
