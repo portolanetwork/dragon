@@ -123,4 +123,30 @@ class ToolsService(config: Config)(implicit ec: ExecutionContext) {
       (tool.schema, javaHandler)
     }
   }
+  
+  def getAsyncToolsSpec(userId: String):
+    List[io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification] = {
+    require(userId.nonEmpty, "userId cannot be empty")
+
+    val userTools = getTools(userId)
+
+    userTools.map { tool =>
+      io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification.builder()
+        .tool(tool.schema)
+        .callHandler(new java.util.function.BiFunction[
+          io.modelcontextprotocol.server.McpAsyncServerExchange,
+          io.modelcontextprotocol.spec.McpSchema.CallToolRequest,
+          reactor.core.publisher.Mono[io.modelcontextprotocol.spec.McpSchema.CallToolResult]
+        ] {
+          override def apply(
+            exchange: io.modelcontextprotocol.server.McpAsyncServerExchange,
+            req: io.modelcontextprotocol.spec.McpSchema.CallToolRequest
+          ): reactor.core.publisher.Mono[io.modelcontextprotocol.spec.McpSchema.CallToolResult] = {
+            // Wrap the stateless handler result in a Mono
+            reactor.core.publisher.Mono.fromSupplier(() => tool.handler.apply(exchange.transportContext(), req))
+          }
+        })
+        .build()
+    }
+  }
 }

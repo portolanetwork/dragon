@@ -3,7 +3,9 @@ package app.dragon.turnstile.mcp
 import app.dragon.turnstile.service.ToolsService
 import com.typesafe.config.Config
 import io.modelcontextprotocol.json.McpJsonMapper
-import io.modelcontextprotocol.server.{McpServer, McpSyncServer}
+import io.modelcontextprotocol.server.{McpAsyncServer, McpServer}
+import io.modelcontextprotocol.spec.McpSchema
+import reactor.core.publisher.Mono
 import org.apache.pekko.actor.typed.ActorSystem
 import org.slf4j.{Logger, LoggerFactory}
 import scala.jdk.CollectionConverters.*
@@ -97,40 +99,20 @@ class StreamingHttpMcpServer(config: Config)(implicit system: ActorSystem[?]) {
     builderWithSsl.build()
   }
 
-  // Build the sync server using the SDK builder pattern
-  private val mcpServer = {
-    var builder = McpServer.sync(transportProvider)
+  // Build the async server with capabilities configuration
+  private val mcpServer: McpAsyncServer = {
+    McpServer
+      .async(transportProvider)
       .serverInfo(serverName, serverVersion)
-
-    // Register all tools from the service
-    // Convert stateless handlers to session-based handlers
-    toolsService.getToolsWithHandlers("default").foreach { case (tool, statelessHandler) =>
-      // Wrap the stateless handler to work with session-based API
-      val sessionHandler = new java.util.function.BiFunction[
-        io.modelcontextprotocol.server.McpSyncServerExchange,
-        io.modelcontextprotocol.spec.McpSchema.CallToolRequest,
-        io.modelcontextprotocol.spec.McpSchema.CallToolResult
-      ] {
-        override def apply(
-          exchange: io.modelcontextprotocol.server.McpSyncServerExchange,
-          req: io.modelcontextprotocol.spec.McpSchema.CallToolRequest
-        ): io.modelcontextprotocol.spec.McpSchema.CallToolResult = {
-          // Extract transport context from exchange and delegate to stateless handler
-          statelessHandler.apply(exchange.transportContext(), req)
-        }
-      }
-
-      builder = builder.toolCall(tool, sessionHandler)
-    }
-
-    builder.build()
+      .capabilities(McpSchema.ServerCapabilities.builder()
+        .resources(false, true)  // Enable resource support with subscribe capability
+        .tools(true)             // Enable tool support
+        .prompts(true)           // Enable prompt support
+        .logging()               // Enable logging support
+        .completions()           // Enable completions support
+        .build())
+      .build()
   }
-
-
-  /**
-   * Get the ToolsService instance (for external access)
-   */
-  def getToolsService: ToolsService = toolsService
 
   /**
    * Start the MCP streaming HTTP server
@@ -156,10 +138,23 @@ class StreamingHttpMcpServer(config: Config)(implicit system: ActorSystem[?]) {
     logger.info("")
     logger.info("Cloud Connector Compatibility: /messages endpoint mirrors /mcp functionality")
 
+    // Start the transport provider
     transportProvider.start()
 
+    // Register all tools dynamically
+    logger.info("Registering tools...")
+
+    toolsService.getAsyncToolsSpec("default").foreach { toolSpec =>
+      mcpServer.addTool(toolSpec)
+        .doOnSuccess(_ => logger.info(s"Tool registered: ${toolSpec.tool().name()}"))
+        .doOnError(ex => logger.error(s"Failed to register tool: ${toolSpec.tool().name()}", ex))
+        .subscribe()
+    }
+
     logger.info("MCP Streaming HTTP Server started successfully")
-    logger.info("Available tools: " + mcpServer.listTools().asScala.map(_.name()).mkString(", "))
+    // listTools() returns a Flux in the async API, so we need to collect it
+    val tools = mcpServer.listTools().collectList().block()
+    logger.info("Available tools: " + tools.asScala.map(_.name()).mkString(", "))
   }
 
   /**
@@ -168,7 +163,15 @@ class StreamingHttpMcpServer(config: Config)(implicit system: ActorSystem[?]) {
   def stop(): Unit = {
     logger.info("Stopping MCP Streaming HTTP Server")
     try {
+      // Close the async server gracefully
+      mcpServer.closeGracefully()
+        .doOnSuccess(_ => logger.info("MCP server closed"))
+        .doOnError(ex => logger.error("Error closing MCP server", ex))
+        .subscribe()
+
+      // Close the transport provider
       transportProvider.closeGracefully().block()
+
       // Note: Don't close singleton toolsService here - it's shared across the application
       logger.info("MCP Streaming HTTP Server stopped gracefully")
     } catch {
