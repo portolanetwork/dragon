@@ -870,7 +870,9 @@ class PekkoHttpStreamableServerTransportProvider(
           val jsonText = jsonMapper.writeValueAsString(message)
           val eventId = if (messageId != null) messageId else sessionId
           val event = ServerSentEvent(data = jsonText, eventType = Some(MESSAGE_EVENT_TYPE), id = Some(eventId))
-
+              
+              logger.debug(s"Sending message to session $sessionId: $jsonText")
+              
           val promise = Promise[Unit]()
 
           queue.offer(event).onComplete {

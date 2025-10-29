@@ -226,7 +226,23 @@ object StreamableHttpAsyncClientExample {
             ""
           }
           val message = if (notification.message() != null) s" - ${notification.message()}" else ""
-          logger.info(s"[$timestamp] [PROGRESS] ${notification.progressToken()}: $progressStr $percentage$message")
+
+          // Extract correlation metadata if present
+          val meta = notification.meta()
+          val correlationInfo = if (meta != null && !meta.isEmpty) {
+            val parts = List(
+              Option(meta.get("toolName")).map(v => s"tool=$v"),
+              Option(meta.get("iteration")).map(v => s"iter=$v"),
+              Option(meta.get("elapsedSeconds"))
+                .map(_.asInstanceOf[Double])
+                .map(v => f"elapsed=$v%.1fs")
+            ).flatten
+            if (parts.nonEmpty) s" [${parts.mkString(", ")}]" else ""
+          } else {
+            ""
+          }
+
+          logger.info(s"[$timestamp] [PROGRESS] ${notification.progressToken()}: $progressStr $percentage$message$correlationInfo")
         })
       )
       .build()
