@@ -571,7 +571,7 @@ class PekkoHttpStreamableServerTransportProvider(
       // Explicitly set Content-Type to application/json for service unavailable
       complete(HttpResponse(StatusCodes.ServiceUnavailable, entity = HttpEntity(ContentTypes.`application/json`, "{\"error\":\"Server is shutting down\"}")))
     } else {
-      extractRequest { httpRequest: HttpRequest =>
+      extractRequest { httpRequest =>
         optionalHeaderValueByName(HttpHeaders.ACCEPT) { acceptOpt =>
           entity(as[String]) { body =>
             logger.debug(s"POST request received with body: $body")
@@ -607,24 +607,6 @@ class PekkoHttpStreamableServerTransportProvider(
         case request: McpSchema.JSONRPCRequest if request.method() == McpSchema.METHOD_INITIALIZE =>
           if (!acceptsJson) {
             // Explicitly set Content-Type to application/json for bad request
-            /*
-            val jsonResponse = jsonMapper.writeValueAsString(
-              new McpSchema.JSONRPCResponse(
-                McpSchema.JSONRPC_VERSION,
-                request.id(),
-                null,
-                new McpSchema.JSONRPCResponse.JSONRPCError(-32600, "application/json required in Accept header for initialize", null)
-              )
-            )
-
-            //complete(HttpResponse(StatusCodes.BadRequest, entity = HttpEntity(ContentTypes.`application/json`, "{\"error\":\"application/json required in Accept header for initialize\"}")))
-            complete(
-              HttpResponse(
-                StatusCodes.BadRequest,
-                entity = HttpEntity(ContentTypes.`application/json`, jsonResponse)
-              )
-
-             */
             createErrorResponse(StatusCodes.BadRequest, "application/json required in Accept header for initialize", -32600)
 
           } else {

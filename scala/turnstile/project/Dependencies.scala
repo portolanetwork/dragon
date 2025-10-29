@@ -69,6 +69,7 @@ object Dependencies {
     // MCP (Model Context Protocol)
     "io.modelcontextprotocol.sdk" % "mcp" % mcpSdkVersion,
     "io.modelcontextprotocol.sdk" % "mcp-core" % mcpSdkVersion,
+    "io.modelcontextprotocol.sdk" % "mcp-spring-webflux" % mcpSdkVersion,
     // Database - Slick ORM with PostgreSQL
     "com.typesafe.slick" %% "slick" % slickVersion,
     "com.typesafe.slick" %% "slick-hikaricp" % slickVersion,
@@ -82,7 +83,10 @@ object Dependencies {
     "org.apache.pekko" %% "pekko-actor-testkit-typed" % pekkoVersion % Test,
     "org.scalamock" %% "scalamock" % scalaMockVersion % Test,
     "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-    "com.h2database" % "h2" % "2.3.232" % Test  // H2 for testing
+    "com.h2database" % "h2" % "2.3.232" % Test,  // H2 for testing
+
+    "org.springframework" % "spring-context" % "6.2.1",
+
   )
 
   val dependencyOverrides = Seq()
