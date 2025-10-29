@@ -396,7 +396,7 @@ object StreamableHttpAsyncClientExample {
       case _ =>
         (java.util.Collections.emptyMap[String, Object](), "unknown")
     }
-
+  
     val callToolRequest = new McpSchema.CallToolRequest(toolToCall.name(), arguments)
 
     val startTime = System.currentTimeMillis()

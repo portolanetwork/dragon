@@ -353,10 +353,7 @@ class PekkoHttpStreamableServerTransportProvider(
           case Success(sslContext) =>
             logger.info(s"Starting HTTPS Streaming MCP Server on https://$host:$port$mcpEndpoint")
             val httpsConnectionContext = org.apache.pekko.http.scaladsl.ConnectionContext.httpsServer(sslContext)
-            Http()(system)
-              .newServerAt(host, port)
-              .enableHttps(httpsConnectionContext)
-              .bind(route)
+            Http()(system).newServerAt(host, port).enableHttps(httpsConnectionContext).bind(route)
 
           case Failure(ex) =>
             logger.error("Failed to create SSL context, falling back to HTTP", ex)
@@ -574,7 +571,7 @@ class PekkoHttpStreamableServerTransportProvider(
       // Explicitly set Content-Type to application/json for service unavailable
       complete(HttpResponse(StatusCodes.ServiceUnavailable, entity = HttpEntity(ContentTypes.`application/json`, "{\"error\":\"Server is shutting down\"}")))
     } else {
-      extractRequest { httpRequest =>
+      extractRequest { httpRequest: HttpRequest =>
         optionalHeaderValueByName(HttpHeaders.ACCEPT) { acceptOpt =>
           entity(as[String]) { body =>
             logger.debug(s"POST request received with body: $body")
