@@ -1,20 +1,22 @@
 package app.dragon.turnstile.examples
 
+import app.dragon.turnstile.actor.{ActorLookup, McpActor}
 import app.dragon.turnstile.examples.{PekkoToSpringRequestAdapter, SpringToPekkoResponseAdapter}
-import app.dragon.turnstile.examples.{HandlerMetadata, HeaderBasedRouter, WebFluxHandlerRegistry}
+import app.dragon.turnstile.examples.HeaderBasedRouter
 import app.dragon.turnstile.service.ToolsService
 import io.modelcontextprotocol.json.McpJsonMapper
 import io.modelcontextprotocol.server.transport.WebFluxStreamableServerTransportProvider
 import io.modelcontextprotocol.server.{McpAsyncServer, McpServer}
 import io.modelcontextprotocol.spec.McpSchema
-import org.apache.pekko.actor.typed.ActorSystem
+import org.apache.pekko.actor.typed.{ActorSystem, Scheduler}
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
+import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
 import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.model.*
 import org.apache.pekko.http.scaladsl.server.Directives.*
 import org.apache.pekko.http.scaladsl.server.Route
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
-import org.apache.pekko.util.ByteString
+import org.apache.pekko.util.{ByteString, Timeout}
 import org.slf4j.{Logger, LoggerFactory}
 import org.springframework.http.server.reactive.ServerHttpRequest.Builder
 import org.springframework.http.server.reactive.{HttpHandler, ServerHttpRequest, ServerHttpResponse}
@@ -91,79 +93,22 @@ object EmbeddedMcpServer {
     val mcpEndpoint = "/mcp"
 
     try {
-      // 1. Create WebFluxHandlerRegistry to manage multiple handlers
-      val handlerRegistry = new WebFluxHandlerRegistry()
 
-      // 2. Create multiple MCP servers with different configurations
-      //    Demonstrating multi-tenant setup where different handlers serve different purposes
-
-      // Handler A: Default handler for general use
-      val (mcpServerA, handlerA) = createMcpServerAndHandler(
-        serverName = "MCP Server A (Default)",
-        serverVersion = "1.0.0",
-        toolNamespace = "default"
-      )
-      handlerRegistry.register(
-        "default",
-        handlerA,
-        Some(HandlerMetadata(
-          id = "default",
-          tags = Map("type" -> "general", "priority" -> "high"),
-          description = Some("Default MCP server for general requests")
-        ))
+      // 3. Create HeaderBasedRouter with dynamic handler creation for session affinity
+      val handlerFactory: (String => HttpHandler) = actorId =>
+        EmbeddedMcpServer.createMcpServerAndHandler(
+          serverName = actorId,
+          serverVersion = "1.0.0",
+          toolNamespace = "default"
+        )._2
+      
+      val router = HeaderBasedRouter(
+        handlerFactory = handlerFactory
       )
 
-      // Handler B: Premium handler (example: with additional tools or resources)
-      val (mcpServerB, handlerB) = createMcpServerAndHandler(
-        serverName = "MCP Server B (Premium)",
-        serverVersion = "1.0.0",
-        toolNamespace = "default"
-      )
-      handlerRegistry.register(
-        "premium",
-        handlerB,
-        Some(HandlerMetadata(
-          id = "premium",
-          tags = Map("type" -> "premium", "priority" -> "high"),
-          description = Some("Premium MCP server with additional features")
-        ))
-      )
-
-      // Handler C: Experimental handler (example: testing new features)
-      val (mcpServerC, handlerC) = createMcpServerAndHandler(
-        serverName = "MCP Server C (Experimental)",
-        serverVersion = "2.0.0-beta",
-        toolNamespace = "default"
-      )
-      handlerRegistry.register(
-        "experimental",
-        handlerC,
-        Some(HandlerMetadata(
-          id = "experimental",
-          tags = Map("type" -> "experimental", "priority" -> "low"),
-          description = Some("Experimental MCP server for testing new features")
-        ))
-      )
-
-      logger.info(s"✓ Registered ${handlerRegistry.size()} handlers: ${handlerRegistry.getAllIds().mkString(", ")}")
-
-      // 3. Create HeaderBasedRouter with session affinity strategy
-      //    This allows dynamic routing based on mcp-session-id header
-      val (router, sessionAffinity) = HeaderBasedRouter.withSessionAffinity(
-        registry = handlerRegistry,
-        routingHeader = "mcp-session-id",
-        defaultHandler = Some("default")
-      )
-
-      logger.info(s"✓ Configured header-based router with session affinity")
+      logger.info(s"✓ Configured header-based router (dynamic handler creation)")
       logger.info(s"  Routing header: mcp-session-id")
-      logger.info(s"  Default handler: default")
       logger.info(s"  Fallback enabled: true")
-
-      // Optional: Pre-register session affinities
-      // Example: specific sessions go to specific handlers
-      // sessionAffinity.registerSession("test-session-123", "premium")
-      // sessionAffinity.registerSession("beta-test-456", "experimental")
 
       // 4. Create Pekko HTTP route with the router
       val route = createRoutedPekkoHttpRoute(router, mcpEndpoint)
@@ -178,15 +123,6 @@ object EmbeddedMcpServer {
           logger.info(s"✓ HTTP Server: Apache Pekko HTTP")
           logger.info(s"✓ MCP Transport: Spring WebFlux (multiple instances)")
           logger.info(s"✓ Routing Strategy: Header-based with session affinity")
-
-          logger.info("")
-          logger.info("Handler Registry:")
-          handlerRegistry.getAllIds().foreach { id =>
-            handlerRegistry.getMetadata(id).foreach { meta =>
-              logger.info(s"  - $id: ${meta.description.getOrElse("No description")}")
-              meta.tags.foreach { case (k, v) => logger.info(s"      $k=$v") }
-            }
-          }
 
           logger.info("")
           logger.info("Protocol endpoints:")
@@ -210,26 +146,7 @@ object EmbeddedMcpServer {
       scala.io.StdIn.readLine()
 
       logger.info("Shutting down MCP server...")
-
-      // 6. Graceful shutdown
-      mcpServerA.closeGracefully()
-        .doOnSuccess(_ => logger.info("MCP server A closed"))
-        .doOnError(ex => logger.error("Error closing MCP server A", ex))
-        .subscribe()
-
-      mcpServerB.closeGracefully()
-        .doOnSuccess(_ => logger.info("MCP server B closed"))
-        .doOnError(ex => logger.error("Error closing MCP server B", ex))
-        .subscribe()
-
-      mcpServerC.closeGracefully()
-        .doOnSuccess(_ => logger.info("MCP server C closed"))
-        .doOnError(ex => logger.error("Error closing MCP server C", ex))
-        .subscribe()
-
-      // Clear registry
-      handlerRegistry.clear()
-
+      
       // Terminate actor system
       system.terminate()
       Await.result(system.whenTerminated, 10.seconds)
@@ -249,7 +166,7 @@ object EmbeddedMcpServer {
    *
    * @return (McpAsyncServer, HttpHandler) tuple
    */
-  private def createMcpServerAndHandler(
+  def createMcpServerAndHandler(
     serverName: String,
     serverVersion: String,
     toolNamespace: String
@@ -300,33 +217,31 @@ object EmbeddedMcpServer {
     router: HeaderBasedRouter,
     mcpEndpoint: String
   )(implicit system: ActorSystem[?], ec: ExecutionContext): Route = {
+    implicit val timeout: Timeout = Timeout(10.seconds)
+    implicit val scheduler: Scheduler = system.scheduler
+    implicit val sharding: ClusterSharding = ClusterSharding(system)
     path(mcpEndpoint.stripPrefix("/")) {
       extractRequest { pekkoRequest =>
-        complete {
-          // Use router to select the appropriate handler
-          router.route(pekkoRequest).flatMap {
-            case Right(httpHandler) =>
-              // Handler found - convert and execute
-              val springRequest = new PekkoToSpringRequestAdapter(pekkoRequest)
-              val springResponse = new SpringToPekkoResponseAdapter()
-
-              val handlerMono = httpHandler.handle(springRequest, springResponse)
-
-              // Convert Java CompletableFuture to Scala Future
-              import scala.jdk.FutureConverters.*
-
-              val javaFuture = handlerMono
-                .subscribeOn(Schedulers.boundedElastic())
-                .toFuture
-
-              javaFuture.asScala.flatMap { _ =>
-                springResponse.getPekkoResponse()
-              }
-
-            case Left(errorResponse) =>
-              // Router returned an error (no handler found)
-              Future.successful(errorResponse)
-          }
+        onSuccess(router.route(pekkoRequest)) {
+          case routeResult: router.RouteLookupResult =>
+            val mcpActorId = routeResult.mcpActorId
+            val entityRef = ActorLookup.getMcpActor(mcpActorId)
+            val askFuture = pekkoRequest.method.value match {
+              case "GET" =>
+                entityRef.ask[Either[McpActor.McpActorError, HttpResponse]](replyTo => McpActor.McpGetRequest(pekkoRequest, replyTo))
+              case "POST" =>
+                entityRef.ask[Either[McpActor.McpActorError, HttpResponse]](replyTo => McpActor.McpPostRequest(pekkoRequest, replyTo))
+              case "DELETE" =>
+                entityRef.ask[Either[McpActor.McpActorError, HttpResponse]](replyTo => McpActor.McpDeleteRequest(pekkoRequest, replyTo))
+              case other =>
+                // Return 405 Method Not Allowed for unsupported methods
+                scala.concurrent.Future.successful(Left(McpActor.ProcessingError(s"Method $other not supported")))
+            }
+            onSuccess(askFuture) {
+              case Right(httpResponse) => complete(httpResponse)
+              case Left(McpActor.ProcessingError(msg)) => complete(HttpResponse(500, entity = msg))
+            }
+          case _ => complete(HttpResponse(404, entity = "Route not found"))
         }
       }
     }
@@ -466,9 +381,10 @@ class SpringToPekkoResponseAdapter()(implicit system: ActorSystem[?], ec: Execut
     val statusCode = statusCodeRef.get().value()
     val pekkoStatus = StatusCode.int2StatusCode(statusCode)
 
-    // Convert Spring headers to Pekko headers
+    // Convert Spring headers to Pekko headers, but exclude Content-Type and Content-Length (set via entity)
     val pekkoHeaders = headersRef.get().asScala.flatMap { case (name, values) =>
-      values.asScala.map(value => headers.RawHeader(name, value))
+      if (name.equalsIgnoreCase("Content-Type") || name.equalsIgnoreCase("Content-Length")) Nil
+      else values.asScala.map(value => headers.RawHeader(name, value))
     }.toList
 
     // Determine content type
