@@ -1,7 +1,7 @@
 package app.dragon.turnstile.service
 
 import app.dragon.turnstile.config.ApplicationConfig
-import app.dragon.turnstile.service.tools.{EchoTool, SystemInfoTool}
+import app.dragon.turnstile.service.tools.{ActorTool, EchoTool, SystemInfoTool}
 import com.typesafe.config.Config
 import io.modelcontextprotocol.common.McpTransportContext
 import io.modelcontextprotocol.spec.McpSchema
@@ -77,7 +77,8 @@ class ToolsService(config: Config)(implicit ec: ExecutionContext) {
   // Default tools (built-in)
   private val defaultTools: List[McpTool] = List(
     EchoTool().tool,
-    SystemInfoTool().tool
+    SystemInfoTool().tool,
+    ActorTool().tool
   )
 
   logger.info(s"ToolsService initialized with ${defaultTools.size} default tools: ${defaultTools.map(_.name).mkString(", ")}")
