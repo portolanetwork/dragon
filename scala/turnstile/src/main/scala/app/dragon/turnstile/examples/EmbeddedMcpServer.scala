@@ -1,5 +1,7 @@
-package app.dragon.turnstile.example
+package app.dragon.turnstile.examples
 
+import app.dragon.turnstile.examples.{PekkoToSpringRequestAdapter, SpringToPekkoResponseAdapter}
+import app.dragon.turnstile.examples.{HandlerMetadata, HeaderBasedRouter, WebFluxHandlerRegistry}
 import app.dragon.turnstile.service.ToolsService
 import io.modelcontextprotocol.json.McpJsonMapper
 import io.modelcontextprotocol.server.transport.WebFluxStreamableServerTransportProvider
@@ -11,7 +13,7 @@ import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.model.*
 import org.apache.pekko.http.scaladsl.server.Directives.*
 import org.apache.pekko.http.scaladsl.server.Route
-import org.apache.pekko.stream.scaladsl.{Sink, Source, StreamConverters}
+import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.apache.pekko.util.ByteString
 import org.slf4j.{Logger, LoggerFactory}
 import org.springframework.http.server.reactive.ServerHttpRequest.Builder
@@ -22,7 +24,6 @@ import reactor.core.publisher.Flux
 import reactor.core.scheduler.Schedulers
 
 import java.net.{InetSocketAddress, URI}
-import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.duration.*
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
@@ -30,46 +31,45 @@ import scala.jdk.CollectionConverters.*
 import scala.util.{Failure, Success}
 
 /**
- * Embedded MCP Server Example using WebFluxStreamableServerTransportProvider with Pekko HTTP.
+ * Decoupled Embedded MCP Server using header-based routing to multiple WebFlux handlers.
  *
- * This example demonstrates how to:
- * 1. Create a WebFluxStreamableServerTransportProvider from the MCP Java SDK
- * 2. Bridge Spring WebFlux's reactive HTTP handling with Apache Pekko HTTP server
- * 3. Route requests from Pekko HTTP to the WebFlux MCP transport provider
- * 4. Handle bidirectional streaming between the two frameworks
+ * This example demonstrates a decoupled architecture where:
+ * 1. Pekko HTTP server receives requests
+ * 2. HeaderBasedRouter examines headers (like mcp-session-id)
+ * 3. WebFluxHandlerRegistry provides the appropriate handler
+ * 4. Request is forwarded to the selected WebFlux MCP transport
  *
  * Architecture:
- * - Apache Pekko HTTP: HTTP server and routing layer
- * - Spring WebFlux: MCP transport provider (via WebFluxStreamableServerTransportProvider)
- * - Adapter layer: Converts between Pekko HTTP and Spring WebFlux request/response formats
- * - McpAsyncServer: MCP protocol server with async/reactive API (Project Reactor)
- * - ToolsService: Manages tool registration and handlers
+ * {{{
+ * Client Request
+ *      ↓
+ * Pekko HTTP Server
+ *      ↓
+ * HeaderBasedRouter (examines mcp-session-id)
+ *      ↓
+ * WebFluxHandlerRegistry
+ *      ↓
+ * Selected WebFlux HttpHandler
+ *      ↓
+ * PekkoToSpringRequestAdapter
+ *      ↓
+ * MCP Transport (Spring WebFlux)
+ *      ↓
+ * SpringToPekkoResponseAdapter
+ *      ↓
+ * Client Response
+ * }}}
  *
- * Why Bridge Two Frameworks?
- * This example shows how to integrate Spring WebFlux's MCP transport provider into a
- * Pekko-based application. This is useful when:
- * - Your application is built on Pekko/Akka but you want to use Spring's MCP transport
- * - You need to integrate with existing Pekko HTTP infrastructure
- * - You want to leverage Spring's MCP ecosystem while maintaining Pekko's actor model
- *
- * MCP Protocol Flow (Streamable HTTP):
- * 1. Client POST /mcp with initialize request → Server returns session ID
- * 2. Client GET /mcp with session ID → Server establishes SSE stream
- * 3. Client POST /mcp with session ID → Server processes requests
- * 4. Server sends responses via SSE stream
+ * Benefits:
+ * - **Multi-tenancy**: Route different sessions to different MCP server instances
+ * - **Load balancing**: Distribute load across multiple handlers
+ * - **A/B testing**: Route to experimental vs stable implementations
+ * - **Session affinity**: Maintain sticky sessions to specific handlers
+ * - **Dynamic scaling**: Add/remove handlers at runtime
  *
  * Usage:
  * {{{
- * scala> sbt "runMain app.dragon.turnstile.examples.EmbeddedMcpServer"
- * }}}
- *
- * Test with curl:
- * {{{
- * # Initialize session
- * curl -X POST http://localhost:8082/mcp \
- *   -H "Content-Type: application/json" \
- *   -H "Accept: application/json, text/event-stream" \
- *   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+ * scala> sbt "runMain app.dragon.turnstile.example.EmbeddedMcpServer"
  * }}}
  */
 object EmbeddedMcpServer {
@@ -83,78 +83,121 @@ object EmbeddedMcpServer {
     )
     implicit val ec: ExecutionContext = system.executionContext
 
-    logger.info("Starting Embedded MCP Server Example with WebFlux Transport Provider")
+    logger.info("Starting Decoupled Embedded MCP Server with Header-Based Routing")
 
     // Configuration
-    val serverName = "Embedded Turnstile MCP Server"
-    val serverVersion = "1.0.0"
     val host = "0.0.0.0"
     val port = 8082
     val mcpEndpoint = "/mcp"
 
     try {
-      // 1. Create JSON mapper for MCP protocol serialization
-      val jsonMapper = McpJsonMapper.getDefault
+      // 1. Create WebFluxHandlerRegistry to manage multiple handlers
+      val handlerRegistry = new WebFluxHandlerRegistry()
 
-      // 2. Create Spring WebFlux transport provider
-      //    This is the official MCP Java SDK transport for Spring WebFlux
-      val transportProvider = WebFluxStreamableServerTransportProvider.builder()
-        .jsonMapper(jsonMapper)
-        .disallowDelete(false)
-        .build()
+      // 2. Create multiple MCP servers with different configurations
+      //    Demonstrating multi-tenant setup where different handlers serve different purposes
 
-      // 3. Build MCP async server with capabilities
-      val mcpServer: McpAsyncServer = McpServer
-        .async(transportProvider)
-        .serverInfo(serverName, serverVersion)
-        .capabilities(McpSchema.ServerCapabilities.builder()
-          .resources(false, true)  // Enable resources with subscribe capability
-          .tools(true)             // Enable tools
-          .prompts(true)           // Enable prompts
-          .logging()               // Enable logging
-          .completions()           // Enable completions
-          .build())
-        .build()
+      // Handler A: Default handler for general use
+      val (mcpServerA, handlerA) = createMcpServerAndHandler(
+        serverName = "MCP Server A (Default)",
+        serverVersion = "1.0.0",
+        toolNamespace = "default"
+      )
+      handlerRegistry.register(
+        "default",
+        handlerA,
+        Some(HandlerMetadata(
+          id = "default",
+          tags = Map("type" -> "general", "priority" -> "high"),
+          description = Some("Default MCP server for general requests")
+        ))
+      )
 
-      // 4. Register tools from ToolsService
-      val toolsService = ToolsService.instance
-      logger.info("Registering tools...")
+      // Handler B: Premium handler (example: with additional tools or resources)
+      val (mcpServerB, handlerB) = createMcpServerAndHandler(
+        serverName = "MCP Server B (Premium)",
+        serverVersion = "1.0.0",
+        toolNamespace = "default"
+      )
+      handlerRegistry.register(
+        "premium",
+        handlerB,
+        Some(HandlerMetadata(
+          id = "premium",
+          tags = Map("type" -> "premium", "priority" -> "high"),
+          description = Some("Premium MCP server with additional features")
+        ))
+      )
 
-      toolsService.getAsyncToolsSpec("default").foreach { toolSpec =>
-        mcpServer.addTool(toolSpec)
-          .doOnSuccess(_ => logger.info(s"Tool registered: ${toolSpec.tool().name()}"))
-          .doOnError(ex => logger.error(s"Failed to register tool: ${toolSpec.tool().name()}", ex))
-          .subscribe()
-      }
+      // Handler C: Experimental handler (example: testing new features)
+      val (mcpServerC, handlerC) = createMcpServerAndHandler(
+        serverName = "MCP Server C (Experimental)",
+        serverVersion = "2.0.0-beta",
+        toolNamespace = "default"
+      )
+      handlerRegistry.register(
+        "experimental",
+        handlerC,
+        Some(HandlerMetadata(
+          id = "experimental",
+          tags = Map("type" -> "experimental", "priority" -> "low"),
+          description = Some("Experimental MCP server for testing new features")
+        ))
+      )
 
-      // 5. Get the Spring WebFlux RouterFunction from the transport provider
-      val routerFunction = transportProvider.getRouterFunction()
-      val httpHandler = RouterFunctions.toHttpHandler(routerFunction)
+      logger.info(s"✓ Registered ${handlerRegistry.size()} handlers: ${handlerRegistry.getAllIds().mkString(", ")}")
 
-      // 6. Create Pekko HTTP route that adapts to Spring WebFlux HttpHandler
-      val route = createPekkoToWebFluxRoute(httpHandler, mcpEndpoint)
+      // 3. Create HeaderBasedRouter with session affinity strategy
+      //    This allows dynamic routing based on mcp-session-id header
+      val (router, sessionAffinity) = HeaderBasedRouter.withSessionAffinity(
+        registry = handlerRegistry,
+        routingHeader = "mcp-session-id",
+        defaultHandler = Some("default")
+      )
 
-      // 7. Start the Pekko HTTP server
+      logger.info(s"✓ Configured header-based router with session affinity")
+      logger.info(s"  Routing header: mcp-session-id")
+      logger.info(s"  Default handler: default")
+      logger.info(s"  Fallback enabled: true")
+
+      // Optional: Pre-register session affinities
+      // Example: specific sessions go to specific handlers
+      // sessionAffinity.registerSession("test-session-123", "premium")
+      // sessionAffinity.registerSession("beta-test-456", "experimental")
+
+      // 4. Create Pekko HTTP route with the router
+      val route = createRoutedPekkoHttpRoute(router, mcpEndpoint)
+
+      // 5. Start the Pekko HTTP server
       logger.info(s"Starting Pekko HTTP server on http://$host:$port$mcpEndpoint")
-      logger.info(s"Using Spring WebFlux transport provider for MCP protocol")
       val bindingFuture = Http().newServerAt(host, port).bind(route)
 
       bindingFuture.onComplete {
         case Success(binding) =>
-          logger.info(s"✓ MCP Server started successfully at http://$host:$port$mcpEndpoint")
-          logger.info(s"✓ Server name: $serverName v$serverVersion")
+          logger.info(s"✓ Decoupled MCP Server started successfully at http://$host:$port$mcpEndpoint")
           logger.info(s"✓ HTTP Server: Apache Pekko HTTP")
-          logger.info(s"✓ MCP Transport: Spring WebFlux (via WebFluxStreamableServerTransportProvider)")
+          logger.info(s"✓ MCP Transport: Spring WebFlux (multiple instances)")
+          logger.info(s"✓ Routing Strategy: Header-based with session affinity")
 
-          // List registered tools
-          val tools = mcpServer.listTools().collectList().block()
-          logger.info(s"✓ Available tools (${tools.size()}): ${tools.asScala.map(_.name()).mkString(", ")}")
+          logger.info("")
+          logger.info("Handler Registry:")
+          handlerRegistry.getAllIds().foreach { id =>
+            handlerRegistry.getMetadata(id).foreach { meta =>
+              logger.info(s"  - $id: ${meta.description.getOrElse("No description")}")
+              meta.tags.foreach { case (k, v) => logger.info(s"      $k=$v") }
+            }
+          }
 
           logger.info("")
           logger.info("Protocol endpoints:")
           logger.info(s"  POST http://$host:$port$mcpEndpoint - Initialize session, send requests")
           logger.info(s"  GET  http://$host:$port$mcpEndpoint - Establish SSE stream")
           logger.info(s"  DELETE http://$host:$port$mcpEndpoint - Close session")
+          logger.info("")
+          logger.info("Routing behavior:")
+          logger.info("  - Requests without mcp-session-id → 'default' handler")
+          logger.info("  - New sessions → routed to 'default' handler initially")
+          logger.info("  - Sessions can be dynamically routed to different handlers")
           logger.info("")
           logger.info("Press ENTER to stop the server...")
 
@@ -168,66 +211,121 @@ object EmbeddedMcpServer {
 
       logger.info("Shutting down MCP server...")
 
-      // 8. Graceful shutdown
-      mcpServer.closeGracefully()
-        .doOnSuccess(_ => logger.info("MCP server closed"))
-        .doOnError(ex => logger.error("Error closing MCP server", ex))
+      // 6. Graceful shutdown
+      mcpServerA.closeGracefully()
+        .doOnSuccess(_ => logger.info("MCP server A closed"))
+        .doOnError(ex => logger.error("Error closing MCP server A", ex))
         .subscribe()
 
-      transportProvider.closeGracefully().block()
+      mcpServerB.closeGracefully()
+        .doOnSuccess(_ => logger.info("MCP server B closed"))
+        .doOnError(ex => logger.error("Error closing MCP server B", ex))
+        .subscribe()
+
+      mcpServerC.closeGracefully()
+        .doOnSuccess(_ => logger.info("MCP server C closed"))
+        .doOnError(ex => logger.error("Error closing MCP server C", ex))
+        .subscribe()
+
+      // Clear registry
+      handlerRegistry.clear()
 
       // Terminate actor system
       system.terminate()
       Await.result(system.whenTerminated, 10.seconds)
 
-      logger.info("✓ Embedded MCP Server stopped")
+      logger.info("✓ Decoupled Embedded MCP Server stopped")
 
     } catch {
       case ex: Exception =>
-        logger.error("Failed to start embedded MCP server", ex)
+        logger.error("Failed to start decoupled embedded MCP server", ex)
         system.terminate()
         System.exit(1)
     }
   }
 
   /**
-   * Create a Pekko HTTP route that adapts requests to Spring WebFlux HttpHandler.
+   * Create an MCP server instance with its HttpHandler.
    *
-   * This adapter converts between Pekko HTTP and Spring WebFlux's reactive HTTP abstractions:
-   * - Pekko HttpRequest → Spring ServerHttpRequest
-   * - Spring ServerHttpResponse → Pekko HttpResponse
-   *
-   * Supports:
-   * - All HTTP methods (GET, POST, DELETE, OPTIONS)
-   * - Request/response headers
-   * - Streaming request bodies
-   * - Streaming response bodies (including SSE)
+   * @return (McpAsyncServer, HttpHandler) tuple
    */
-  private def createPekkoToWebFluxRoute(
-    httpHandler: HttpHandler,
+  private def createMcpServerAndHandler(
+    serverName: String,
+    serverVersion: String,
+    toolNamespace: String
+  ): (McpAsyncServer, HttpHandler) = {
+    val jsonMapper = McpJsonMapper.getDefault
+
+    // Create WebFlux transport provider
+    val transportProvider = WebFluxStreamableServerTransportProvider.builder()
+      .jsonMapper(jsonMapper)
+      .disallowDelete(false)
+      .build()
+
+    // Build MCP async server
+    val mcpServer: McpAsyncServer = McpServer
+      .async(transportProvider)
+      .serverInfo(serverName, serverVersion)
+      .capabilities(McpSchema.ServerCapabilities.builder()
+        .resources(false, true)
+        .tools(true)
+        .prompts(true)
+        .logging()
+        .completions()
+        .build())
+      .build()
+
+    // Register tools
+    val toolsService = ToolsService.instance
+    toolsService.getAsyncToolsSpec(toolNamespace).foreach { toolSpec =>
+      mcpServer.addTool(toolSpec)
+        .doOnSuccess(_ => logger.debug(s"[$serverName] Tool registered: ${toolSpec.tool().name()}"))
+        .doOnError(ex => logger.error(s"[$serverName] Failed to register tool: ${toolSpec.tool().name()}", ex))
+        .subscribe()
+    }
+
+    // Get HttpHandler from transport provider
+    val routerFunction = transportProvider.getRouterFunction()
+    val httpHandler = RouterFunctions.toHttpHandler(routerFunction)
+
+    logger.info(s"✓ Created MCP server: $serverName v$serverVersion")
+
+    (mcpServer, httpHandler)
+  }
+
+  /**
+   * Create a Pekko HTTP route that uses HeaderBasedRouter to route to different handlers.
+   */
+  private def createRoutedPekkoHttpRoute(
+    router: HeaderBasedRouter,
     mcpEndpoint: String
   )(implicit system: ActorSystem[?], ec: ExecutionContext): Route = {
     path(mcpEndpoint.stripPrefix("/")) {
       extractRequest { pekkoRequest =>
-        // Convert Pekko request to Spring WebFlux ServerHttpRequest
-        val springRequest = new PekkoToSpringRequestAdapter(pekkoRequest)
-        val springResponse = new SpringToPekkoResponseAdapter()
-
-        // Execute the Spring WebFlux handler
-        val handlerMono = httpHandler.handle(springRequest, springResponse)
-
-        // Convert the response to Pekko HTTP format
         complete {
-          // Convert Java CompletableFuture to Scala Future
-          import scala.jdk.FutureConverters.*
+          // Use router to select the appropriate handler
+          router.route(pekkoRequest).flatMap {
+            case Right(httpHandler) =>
+              // Handler found - convert and execute
+              val springRequest = new PekkoToSpringRequestAdapter(pekkoRequest)
+              val springResponse = new SpringToPekkoResponseAdapter()
 
-          val javaFuture = handlerMono
-            .subscribeOn(Schedulers.boundedElastic())
-            .toFuture
+              val handlerMono = httpHandler.handle(springRequest, springResponse)
 
-          javaFuture.asScala.flatMap { _ =>
-            // Get the response that was written to our adapter
-            springResponse.getPekkoResponse()
+              // Convert Java CompletableFuture to Scala Future
+              import scala.jdk.FutureConverters.*
+
+              val javaFuture = handlerMono
+                .subscribeOn(Schedulers.boundedElastic())
+                .toFuture
+
+              javaFuture.asScala.flatMap { _ =>
+                springResponse.getPekkoResponse()
+              }
+
+            case Left(errorResponse) =>
+              // Router returned an error (no handler found)
+              Future.successful(errorResponse)
           }
         }
       }
@@ -304,11 +402,9 @@ class PekkoToSpringRequestAdapter(pekkoRequest: HttpRequest)(implicit system: Ac
 
   override def getRemoteAddress(): InetSocketAddress = {
     // Pekko HTTP doesn't expose remote address in HttpRequest directly
-    // Return a placeholder or extract from headers if needed
     new InetSocketAddress("0.0.0.0", 0)
   }
 
-  // Unsupported optional methods
   override def getCookies(): org.springframework.util.MultiValueMap[String, org.springframework.http.HttpCookie] = {
     new org.springframework.util.LinkedMultiValueMap[String, org.springframework.http.HttpCookie]()
   }
@@ -370,10 +466,9 @@ class SpringToPekkoResponseAdapter()(implicit system: ActorSystem[?], ec: Execut
     val statusCode = statusCodeRef.get().value()
     val pekkoStatus = StatusCode.int2StatusCode(statusCode)
 
-    // Convert Spring headers to Pekko headers, filtering out Content-Type and Content-Length
+    // Convert Spring headers to Pekko headers
     val pekkoHeaders = headersRef.get().asScala.flatMap { case (name, values) =>
-      if (name.equalsIgnoreCase("Content-Type") || name.equalsIgnoreCase("Content-Length")) Nil
-      else values.asScala.map(value => headers.RawHeader(name, value))
+      values.asScala.map(value => headers.RawHeader(name, value))
     }.toList
 
     // Determine content type
@@ -402,21 +497,14 @@ class SpringToPekkoResponseAdapter()(implicit system: ActorSystem[?], ec: Execut
       val statusCode = statusCodeRef.get().value()
       val pekkoStatus = StatusCode.int2StatusCode(statusCode)
 
-      // Convert Spring headers to Pekko headers, filtering out Content-Type and Content-Length
       val pekkoHeaders = headersRef.get().asScala.flatMap { case (name, values) =>
-        if (name.equalsIgnoreCase("Content-Type") || name.equalsIgnoreCase("Content-Length")) Nil
-        else values.asScala.map(value => headers.RawHeader(name, value))
+        values.asScala.map(value => headers.RawHeader(name, value))
       }.toList
-
-      // Determine content type
-      val contentType = Option(headersRef.get().getContentType)
-        .map(mt => ContentType.parse(mt.toString).toOption.getOrElse(ContentTypes.`application/octet-stream`))
-        .getOrElse(ContentTypes.`application/octet-stream`)
 
       val response = HttpResponse(
         status = pekkoStatus,
         headers = pekkoHeaders,
-        entity = HttpEntity.Empty.withContentType(contentType)
+        entity = HttpEntity.Empty
       )
 
       responsePromise.success(response)
