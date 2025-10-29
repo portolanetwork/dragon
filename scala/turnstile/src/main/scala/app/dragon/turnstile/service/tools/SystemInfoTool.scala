@@ -1,6 +1,9 @@
 package app.dragon.turnstile.service.tools
 
-import app.dragon.turnstile.service.{McpTool, ToolHandler}
+import app.dragon.turnstile.service.{McpTool, SyncToolHandler}
+import io.modelcontextprotocol.server.McpAsyncServerExchange
+import io.modelcontextprotocol.spec.McpSchema
+import reactor.core.publisher.Mono
 
 /**
  * System info tool - returns detailed system information about the server.
@@ -41,7 +44,7 @@ class SystemInfoTool() extends McpToolProvider {
       .inputSchema(createObjectSchema()) // No arguments required
       .build()
 
-    val handler: ToolHandler = (_, _) => {
+    val handler: SyncToolHandler = (_, _) => {
       val runtime = Runtime.getRuntime
       val totalMemory = runtime.totalMemory()
       val freeMemory = runtime.freeMemory()
@@ -67,11 +70,16 @@ class SystemInfoTool() extends McpToolProvider {
       createTextResult(info)
     }
 
+    // Async handler wraps the sync handler for compatibility
+    val asyncHandler: (McpAsyncServerExchange, McpSchema.CallToolRequest) => Mono[McpSchema.CallToolResult] =
+      (exchange, request) => Mono.fromSupplier(() => handler(exchange.transportContext(), request))
+
     McpTool(
       name = "system_info",
       description = "Returns system information",
       schema = schema,
-      handler = handler
+      syncHandler = handler,
+      asyncHandler = asyncHandler
     )
   }
 }

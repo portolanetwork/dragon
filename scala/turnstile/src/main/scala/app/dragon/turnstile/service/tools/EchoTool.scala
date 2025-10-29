@@ -1,6 +1,9 @@
 package app.dragon.turnstile.service.tools
 
-import app.dragon.turnstile.service.{McpTool, ToolHandler}
+import app.dragon.turnstile.service.{McpTool, SyncToolHandler}
+import io.modelcontextprotocol.server.McpAsyncServerExchange
+import io.modelcontextprotocol.spec.McpSchema
+import reactor.core.publisher.Mono
 
 /**
  * Echo tool - echoes back the provided message.
@@ -40,7 +43,7 @@ class EchoTool extends McpToolProvider {
       ))
       .build()
 
-    val handler: ToolHandler = (_, request) => {
+    val handler: SyncToolHandler = (_, request) => {
       val message = getStringArg(request, "message")
 
       logger.debug(s"Echo tool called with message: $message")
@@ -48,11 +51,16 @@ class EchoTool extends McpToolProvider {
       createTextResult(s"Echo: $message")
     }
 
+    // Async handler wraps the sync handler for compatibility
+    val asyncHandler: (McpAsyncServerExchange, McpSchema.CallToolRequest) => Mono[McpSchema.CallToolResult] =
+      (exchange, request) => Mono.fromSupplier(() => handler(exchange.transportContext(), request))
+
     McpTool(
       name = "echo",
       description = "Echoes back messages",
       schema = schema,
-      handler = handler
+      syncHandler = handler,
+      asyncHandler = asyncHandler
     )
   }
 }

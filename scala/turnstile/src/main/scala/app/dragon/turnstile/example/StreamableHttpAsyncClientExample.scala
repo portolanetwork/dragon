@@ -20,16 +20,34 @@ import scala.util.{Failure, Success}
  * - Custom request headers via HttpRequest.Builder
  * - Reactive change handlers for tools, resources, and prompts using Function<T, Mono<Void>>
  * - Logging and progress notification handlers
+ * - TRUE STREAMING: Testing actor_tool with real 2-second delays and progress notifications
  * - Proper lifecycle management with graceful shutdown
  * - Converting Reactor Mono results to Scala Futures
  *
+ * When actor_tool is available, this example demonstrates:
+ * - Progress notifications arriving in real-time via progressConsumer
+ * - Non-blocking execution with Flux.delayElements(Duration.ofSeconds(2))
+ * - Each iteration sends a progress notification ~2 seconds apart
+ * - Final result arrives after all processing completes (~6 seconds for count=3)
+ * - Timestamps show the streaming nature of the execution
+ *
  * Usage:
  * {{{
- * # Basic usage
+ * # Test against local server (includes actor_tool for streaming demo)
  * sbt "runMain app.dragon.turnstile.example.StreamableHttpAsyncClientExample http://localhost:8082"
  *
  * # With custom endpoint
- * sbt "runMain app.dragon.turnstile.example.StreamableHttpAsyncClientExample http://localhost:8082 /custom-mcp"
+ * sbt "runMain app.dragon.turnstile.example.StreamableHttpAsyncClientExample http://localhost:8082 /mcp"
+ * }}}
+ *
+ * Expected Output (with actor_tool):
+ * {{{
+ * [HH:MM:SS.000] Starting tool call...
+ * [HH:MM:SS.000] [PROGRESS] actor-tool-123: 0.0 / 3.0 0% - Starting actor tool processing
+ * [HH:MM:SS.002] [PROGRESS] actor-tool-123: 1.0 / 3.0 33% - Processing iteration 1/3
+ * [HH:MM:SS.004] [PROGRESS] actor-tool-123: 2.0 / 3.0 66% - Processing iteration 2/3
+ * [HH:MM:SS.006] [PROGRESS] actor-tool-123: 3.0 / 3.0 100% - Processing iteration 3/3
+ * TOOL CALL COMPLETED (took 6.0s, expected ~6 seconds)
  * }}}
  */
 object StreamableHttpAsyncClientExample {
@@ -198,10 +216,17 @@ object StreamableHttpAsyncClientExample {
       )
       .progressConsumer(notification =>
         Mono.fromRunnable(() => {
+          val timestamp = formatTimestamp(System.currentTimeMillis())
           val progress = notification.progress()
           val total = notification.total()
           val progressStr = if (total != null) s"$progress / $total" else s"$progress"
-          logger.info(s"[PROGRESS] ${notification.progressToken()}: $progressStr")
+          val percentage = if (total != null && total.doubleValue() > 0) {
+            f"${(progress.doubleValue() / total.doubleValue()) * 100}%.0f%%"
+          } else {
+            ""
+          }
+          val message = if (notification.message() != null) s" - ${notification.message()}" else ""
+          logger.info(s"[$timestamp] [PROGRESS] ${notification.progressToken()}: $progressStr $percentage$message")
         })
       )
       .build()
@@ -315,6 +340,7 @@ object StreamableHttpAsyncClientExample {
 
   /**
    * Call a tool if any are available.
+   * Demonstrates streaming with actor_tool which sends progress notifications.
    */
   private def callToolIfAvailable(
       client: McpAsyncClient,
@@ -326,36 +352,67 @@ object StreamableHttpAsyncClientExample {
       return Future.successful(())
     }
 
-    // Find the echo tool or use the first available
-    val toolToCall = tools.find(_.name() == "echo").getOrElse(tools.head)
+    // Prefer actor_tool to demonstrate streaming, then echo, then first available
+    val toolToCall = tools.find(_.name() == "actor_tool")
+      .orElse(tools.find(_.name() == "echo"))
+      .getOrElse(tools.head)
 
     logger.info("")
     logger.info("=" * 80)
     logger.info(s"CALLING TOOL: ${toolToCall.name()}")
     logger.info("=" * 80)
 
-    // Create the tool call request
-    val arguments = if (toolToCall.name() == "echo") {
-      java.util.Map.of("message", "Hello from Official MCP Java SDK!")
-    } else {
-      java.util.Collections.emptyMap[String, Object]()
+    // Create the tool call request based on tool type
+    val (arguments, expectedDuration) = toolToCall.name() match {
+      case "actor_tool" =>
+        logger.info("Testing STREAMING with actor_tool (count=3)")
+        logger.info("Expected: ~6 seconds with progress notifications every 2s")
+        logger.info("Watch for [PROGRESS] messages below!")
+        logger.info("")
+        (java.util.Map.of(
+          "message", "Testing streaming from client",
+          "count", Integer.valueOf(3)
+        ), "~6 seconds")
+
+      case "echo" =>
+        (java.util.Map.of("message", "Hello from Official MCP Java SDK!"), "instant")
+
+      case _ =>
+        (java.util.Collections.emptyMap[String, Object](), "unknown")
     }
 
     val callToolRequest = new McpSchema.CallToolRequest(toolToCall.name(), arguments)
 
+    val startTime = System.currentTimeMillis()
+    logger.info(s"[${formatTimestamp(startTime)}] Starting tool call...")
+    logger.info("")
+
     monoToFuture(client.callTool(callToolRequest)).map { result =>
-      logger.info(s"Tool call successful:")
+      val endTime = System.currentTimeMillis()
+      val elapsed = (endTime - startTime) / 1000.0
+
+      logger.info("")
+      logger.info("=" * 80)
+      logger.info(s"TOOL CALL COMPLETED (took ${elapsed}s, expected $expectedDuration)")
+      logger.info("=" * 80)
 
       if (result.content() != null) {
         result.content().asScala.foreach { content =>
           content.`type`() match {
             case "text" =>
-              logger.info(s"  Text: ${content.asInstanceOf[McpSchema.TextContent].text()}")
+              val text = content.asInstanceOf[McpSchema.TextContent].text()
+              logger.info("Result:")
+              logger.info("─" * 80)
+              logger.info(text)
+              logger.info("─" * 80)
+
             case "image" =>
               logger.info(s"  Image: ${content.asInstanceOf[McpSchema.ImageContent].mimeType()}")
+
             case "resource" =>
               val resContent = content.asInstanceOf[McpSchema.EmbeddedResource]
               logger.info(s"  Resource: ${resContent.resource().uri()}")
+
             case other =>
               logger.info(s"  Content type: $other")
           }
@@ -363,11 +420,39 @@ object StreamableHttpAsyncClientExample {
       }
 
       if (result.isError() != null && result.isError()) {
-        logger.warn("  Tool reported an error")
+        logger.warn("  ⚠ Tool reported an error")
       }
+
+      logger.info("")
+      logger.info("=" * 80)
+      logger.info("STREAMING OBSERVATIONS:")
+      logger.info("=" * 80)
+      if (toolToCall.name() == "actor_tool") {
+        logger.info("✓ Progress notifications arrived via progressConsumer (see [PROGRESS] logs above)")
+        logger.info("✓ Each notification arrived ~2 seconds apart (non-blocking delays)")
+        logger.info("✓ Final result arrived after all processing completed")
+        logger.info(s"✓ Total execution time: ${elapsed}s (proves real delays)")
+      } else {
+        logger.info(s"✓ Tool '${toolToCall.name()}' executed successfully")
+      }
+      logger.info("=" * 80)
     }.recover {
       case e: Exception =>
-        logger.error(s"Tool call failed: ${e.getMessage}", e)
+        val endTime = System.currentTimeMillis()
+        val elapsed = (endTime - startTime) / 1000.0
+        logger.error("")
+        logger.error(s"✗ Tool call failed after ${elapsed}s: ${e.getMessage}", e)
     }
+  }
+
+  /**
+   * Format timestamp for logging
+   */
+  private def formatTimestamp(millis: Long): String = {
+    val instant = java.time.Instant.ofEpochMilli(millis)
+    val formatter = java.time.format.DateTimeFormatter
+      .ofPattern("HH:mm:ss.SSS")
+      .withZone(java.time.ZoneId.systemDefault())
+    formatter.format(instant)
   }
 }

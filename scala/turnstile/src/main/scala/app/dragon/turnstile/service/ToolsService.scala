@@ -16,7 +16,8 @@ import scala.util.{Failure, Success, Try}
 /**
  * Type alias for MCP tool handler functions
  */
-type ToolHandler = (McpTransportContext, McpSchema.CallToolRequest) => McpSchema.CallToolResult
+type SyncToolHandler = (McpTransportContext, McpSchema.CallToolRequest) => McpSchema.CallToolResult
+type AsyncToolHandler = (io.modelcontextprotocol.server.McpAsyncServerExchange, McpSchema.CallToolRequest) => reactor.core.publisher.Mono[McpSchema.CallToolResult]
 
 /**
  * Represents an MCP tool with its definition and handler
@@ -25,7 +26,8 @@ case class McpTool(
   name: String,
   description: String,
   schema: McpSchema.Tool,
-  handler: ToolHandler
+  syncHandler: SyncToolHandler,
+  asyncHandler: AsyncToolHandler,
 )
 
 /**
@@ -119,18 +121,16 @@ class ToolsService(config: Config)(implicit ec: ExecutionContext) {
     userTools.map { tool =>
       val javaHandler = new java.util.function.BiFunction[McpTransportContext, McpSchema.CallToolRequest, McpSchema.CallToolResult] {
         override def apply(ctx: McpTransportContext, req: McpSchema.CallToolRequest): McpSchema.CallToolResult =
-          tool.handler(ctx, req)
+          tool.syncHandler(ctx, req)
       }
       (tool.schema, javaHandler)
     }
   }
-  
+
   def getAsyncToolsSpec(userId: String):
-    List[io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification] = {
+  List[io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification] = {
     require(userId.nonEmpty, "userId cannot be empty")
-
     val userTools = getTools(userId)
-
     userTools.map { tool =>
       io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification.builder()
         .tool(tool.schema)
@@ -143,8 +143,7 @@ class ToolsService(config: Config)(implicit ec: ExecutionContext) {
             exchange: io.modelcontextprotocol.server.McpAsyncServerExchange,
             req: io.modelcontextprotocol.spec.McpSchema.CallToolRequest
           ): reactor.core.publisher.Mono[io.modelcontextprotocol.spec.McpSchema.CallToolResult] = {
-            // Wrap the stateless handler result in a Mono
-            reactor.core.publisher.Mono.fromSupplier(() => tool.handler.apply(exchange.transportContext(), req))
+            tool.asyncHandler(exchange, req)
           }
         })
         .build()

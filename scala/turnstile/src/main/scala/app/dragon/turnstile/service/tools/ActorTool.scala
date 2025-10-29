@@ -1,7 +1,10 @@
 package app.dragon.turnstile.service.tools
 
-import app.dragon.turnstile.service.{McpTool, ToolHandler}
+import app.dragon.turnstile.service.{McpTool, SyncToolHandler}
+import io.modelcontextprotocol.server.McpAsyncServerExchange
 import io.modelcontextprotocol.spec.McpSchema
+import reactor.core.publisher.{Flux, Mono}
+import java.time.Duration
 
 /**
  * Actor tool - demonstrates streaming/async capabilities with a simple actor-style message response.
@@ -63,7 +66,7 @@ class ActorTool extends McpToolProvider {
       ))
       .build()
 
-    val handler: ToolHandler = (_, request) => {
+    val handler: SyncToolHandler = (_, request) => {
       val message = getStringArg(request, "message", "ping")
       val count = Math.min(Math.max(getIntArg(request, "count", 1), 1), 10) // Clamp to 1-10
 
@@ -82,7 +85,7 @@ class ActorTool extends McpToolProvider {
         s"",
         s"📨 Received Message: \"$message\"",
         s""
-      )
+      ) 
 
       // Simulate stream of message processing
       val streamParts = (1 to count).flatMap { i =>
@@ -112,11 +115,73 @@ class ActorTool extends McpToolProvider {
       createTextResult(response)
     }
 
+    // Async handler sends notifications for each step
+    val asyncHandler: (McpAsyncServerExchange, McpSchema.CallToolRequest) => Mono[McpSchema.CallToolResult] =
+      (exchange, request) => {
+        val message = getStringArg(request, "message", "ping")
+        val count = Math.min(Math.max(getIntArg(request, "count", 1), 1), 10)
+        val actorName = "TurnstileActor"
+        val progressToken = s"actor-tool-${System.currentTimeMillis()}"
+
+        // Emit a progress notification for each step, 1 per second
+        val notificationFlux = Flux.range(1, count)
+          .delayElements(Duration.ofSeconds(1))
+          .flatMap { i =>
+            val notification = new McpSchema.ProgressNotification(
+              progressToken,
+              Double.box(i.toDouble),
+              Double.box(count.toDouble),
+              s"[$actorName] Processed '$message' ($i/$count)",
+              null
+            )
+            exchange.progressNotification(notification)
+          }
+
+        // After all notifications, return the final result
+        notificationFlux.`then`(
+          Mono.fromSupplier(() => {
+            val timestamp = System.currentTimeMillis()
+            val headerParts = Seq(
+              s"🎭 Actor System Response (Streaming Demo)",
+              s"Actor: $actorName",
+              s"Timestamp: $timestamp",
+              s"Message Count: $count",
+              s"",
+              s"📨 Received Message: \"$message\"",
+              s""
+            )
+            val streamParts = (1 to count).flatMap { i =>
+              Seq(
+                s"[Stream $i/$count] Processing...",
+                s"  ├─ Message validated",
+                s"  ├─ Actor state updated",
+                s"  └─ Response: \"$actorName processed '$message' (iteration $i)\"",
+                if (i < count) "" else s""
+              )
+            }
+            val footerParts = Seq(
+              s"✅ Processing Complete",
+              s"   Total messages processed: $count",
+              s"   Status: SUCCESS",
+              s"",
+              s"ℹ️  Streaming Note:",
+              s"   This tool demonstrates async/reactive patterns. The handler is wrapped in a Mono",
+              s"   by the MCP async server, enabling non-blocking execution, reactive composition,",
+              s"   and backpressure handling. For true multi-message streaming over time,",
+              s"   use Server-Sent Events (SSE) via the streamable HTTP transport."
+            )
+            val response = (headerParts ++ streamParts ++ footerParts).mkString("\n")
+            createTextResult(response)
+          })
+        )
+      }
+
     McpTool(
       name = "actor_tool",
       description = "Demonstrates streaming/async capabilities with actor-style messaging",
       schema = schema,
-      handler = handler
+      syncHandler = handler,
+      asyncHandler = asyncHandler
     )
   }
 }

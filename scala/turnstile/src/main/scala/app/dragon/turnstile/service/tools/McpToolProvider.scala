@@ -1,6 +1,6 @@
 package app.dragon.turnstile.service.tools
 
-import app.dragon.turnstile.service.{McpTool, ToolHandler}
+import app.dragon.turnstile.service.{McpTool, SyncToolHandler}
 import io.modelcontextprotocol.spec.McpSchema
 import org.slf4j.{Logger, LoggerFactory}
 
