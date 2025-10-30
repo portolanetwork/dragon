@@ -8,7 +8,7 @@ object ActorLookup {
   
   def getMcpActor(
     mcpActorId: String
-  )(implicit sharding: ClusterSharding): EntityRef[McpActor.Message] =
-    sharding.entityRefFor(McpActor.TypeKey, mcpActorId)
+  )(implicit sharding: ClusterSharding): EntityRef[McpServerActor.Message] =
+    sharding.entityRefFor(McpServerActor.TypeKey, mcpActorId)
 
 }

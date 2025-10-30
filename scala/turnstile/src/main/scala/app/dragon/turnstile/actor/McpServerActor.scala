@@ -1,6 +1,6 @@
 package app.dragon.turnstile.actor
 
-import app.dragon.turnstile.server.{PekkoToSpringRequestAdapter, SpringToPekkoResponseAdapter, TurnstileMcpServer}
+import app.dragon.turnstile.server.{PekkoToSpringRequestAdapter, SpringToPekkoResponseAdapter, TurnstileStreamingHttpMcpServer}
 import com.google.rpc.context.AttributeContext.Response
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
@@ -12,26 +12,26 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 import scala.jdk.FutureConverters.*
 
-case class McpActorId(userId: String, mcpActorId: String) {
-  override def toString: String = s"$userId-$mcpActorId"
+case class McpServerActorId(userId: String, mcpServerActorId: String) {
+  override def toString: String = s"$userId-$mcpServerActorId"
 }
 
-object McpActorId {
-  def fromString(entityId: String): McpActorId = {
+object McpServerActorId {
+  def fromString(entityId: String): McpServerActorId = {
     val Array(userId, mcpActorId) = entityId.split("-", 2)
-    McpActorId(userId, mcpActorId)
+    McpServerActorId(userId, mcpActorId)
   }
 }
 
-object McpActor {
-  val TypeKey: EntityTypeKey[McpActor.Message] =
-    EntityTypeKey[McpActor.Message]("McpActor")
+object McpServerActor {
+  val TypeKey: EntityTypeKey[McpServerActor.Message] =
+    EntityTypeKey[McpServerActor.Message]("McpActor")
 
   def initSharding(system: ActorSystem[_]): Unit =
     ClusterSharding(system).init(Entity(TypeKey) { entityContext =>
-      val id = McpActorId.fromString(entityContext.entityId)
+      val id = McpServerActorId.fromString(entityContext.entityId)
 
-      McpActor(id.userId, id.mcpActorId)
+      McpServerActor(id.userId, id.mcpServerActorId)
     })
 
   def getEntityId(userId: String, chatId: String): String =
@@ -56,28 +56,28 @@ object McpActor {
       Behaviors.setup { context =>
         implicit val system: ActorSystem[Nothing] = context.system
         // Fix: instantiate the class with 'new' instead of as a function
-        val turnstileMcpServer = TurnstileMcpServer()
+        val turnstileMcpServer = TurnstileStreamingHttpMcpServer()
 
-        new McpActor(context, buffer, userId, mcpActorId).activeState(turnstileMcpServer)
+        new McpServerActor(context, buffer, userId, mcpActorId).activeState(turnstileMcpServer)
       }
     }
   }
 }
 
-class McpActor(
-  context: ActorContext[McpActor.Message],
-  buffer: StashBuffer[McpActor.Message],
+class McpServerActor(
+  context: ActorContext[McpServerActor.Message],
+  buffer: StashBuffer[McpServerActor.Message],
   userId: String,
   mcpActorId: String,
 ) {
-  import McpActor._
+  import McpServerActor._
 
   // Provide required implicits for adapters
   implicit val system: ActorSystem[?] = context.system
   implicit val ec: scala.concurrent.ExecutionContext = context.executionContext
 
   def activeState(
-    turnstileMcpServer: TurnstileMcpServer
+    turnstileMcpServer: TurnstileStreamingHttpMcpServer
   ): Behavior[Message] = {
     Behaviors.receiveMessagePartial {
       handleMcpGetRequest(turnstileMcpServer)
@@ -88,7 +88,7 @@ class McpActor(
   }
 
   def handleMcpGetRequest(
-    turnstileMcpServer: TurnstileMcpServer
+    turnstileMcpServer: TurnstileStreamingHttpMcpServer
   ): PartialFunction[Message, Behavior[Message]] = {
     case McpGetRequest(request, replyTo) =>
       context.log.info(s"MCP Actor $mcpActorId handling GET request")
@@ -100,7 +100,7 @@ class McpActor(
   }
 
   def handleMcpPostRequest(
-    turnstileMcpServer: TurnstileMcpServer
+    turnstileMcpServer: TurnstileStreamingHttpMcpServer
   ): PartialFunction[Message, Behavior[Message]] = {
     case McpPostRequest(request, replyTo) =>
       context.log.info(s"Handling MCP POST request for user $userId, actor $mcpActorId")
@@ -112,7 +112,7 @@ class McpActor(
   }
 
   def handleMcpDeleteRequest(
-    turnstileMcpServer: TurnstileMcpServer
+    turnstileMcpServer: TurnstileStreamingHttpMcpServer
   ): PartialFunction[Message, Behavior[Message]] = {
     case McpDeleteRequest(request, replyTo) =>
       context.log.info(s"Handling MCP DELETE request: ${request.uri}")
@@ -136,7 +136,7 @@ class McpActor(
   
   private def handlePekkoRequest(
     request: HttpRequest,
-    turnstileMcpServer: TurnstileMcpServer
+    turnstileMcpServer: TurnstileStreamingHttpMcpServer
   ): Future[HttpResponse] = {
     val springRequest = PekkoToSpringRequestAdapter(request)
     val springResponse = SpringToPekkoResponseAdapter()

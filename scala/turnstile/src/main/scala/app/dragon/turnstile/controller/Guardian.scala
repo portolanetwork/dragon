@@ -1,10 +1,10 @@
 package app.dragon.turnstile.controller
 
-import app.dragon.turnstile.actor.McpActor
+import app.dragon.turnstile.actor.McpServerActor
 import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.db.DatabaseMigration
 import app.dragon.turnstile.gateway.TurnstileMcpGateway
-import app.dragon.turnstile.server.{TurnstileGrpcServer, TurnstileStdioMcpServer}
+import app.dragon.turnstile.server.{TurnstileGrpcServer}
 import app.dragon.turnstile.service.ToolsService
 import com.typesafe.config.Config
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
@@ -15,9 +15,8 @@ object Guardian {
   val logger: Logger = LoggerFactory.getLogger(this.getClass.getSimpleName)
 
   val grpcConfig: Config = ApplicationConfig.grpcConfig
-  val mcpStdioConfig: Config = ApplicationConfig.rootConfig.getConfig("turnstile.mcp-stdio")
-  val mcpStreamingConfig: Config = ApplicationConfig.rootConfig.getConfig("turnstile.mcp-streaming")
-  val databaseConfig: Config = ApplicationConfig.rootConfig.getConfig("turnstile.database.db")
+  val mcpStreamingConfig: Config = ApplicationConfig.mcpStreaming
+  val databaseConfig: Config = ApplicationConfig.dbConfig
 
   def apply(): Behavior[Nothing] =
     Behaviors.setup[Nothing] { context =>
@@ -27,7 +26,7 @@ object Guardian {
 
       // Run database migrations first
       context.log.info("Running database migrations...")
-      DatabaseMigration.migrate(ApplicationConfig.rootConfig) match {
+      DatabaseMigration.migrate(ApplicationConfig.dbConfig) match {
         case scala.util.Success(result) =>
           context.log.info(s"Database migrations completed: ${result.migrationsExecuted} migrations executed")
           if (result.targetSchemaVersion != null) {
@@ -44,29 +43,11 @@ object Guardian {
       val grpcPort = grpcConfig.getInt("port")
 
       // Initialize sharding and actors here
-      // Example:
-      // MyActor.initSharding(context.system)
-
+      McpServerActor.initSharding(context.system)
+      
       // Start GRPC server (hosting both GreeterService and TurnstileService)
       TurnstileGrpcServer.start(grpcHost, grpcPort, context.system)
       
-      McpActor.initSharding(context.system)
-      
-      
-      // Start MCP Stdio server if enabled
-      if (mcpStdioConfig.getBoolean("enabled")) {
-        try {
-          val mcpStdioServer = TurnstileStdioMcpServer(mcpStdioConfig)
-          mcpStdioServer.start()
-          context.log.info("MCP Stdio Server started successfully")
-        } catch {
-          case e: Exception =>
-            context.log.error("Failed to start MCP Stdio Server", e)
-        }
-      } else {
-        context.log.info("MCP Stdio Server is disabled")
-      }
-
       // Start MCP Streaming HTTP server if enabled
       if (mcpStreamingConfig.getBoolean("enabled")) {
         try {

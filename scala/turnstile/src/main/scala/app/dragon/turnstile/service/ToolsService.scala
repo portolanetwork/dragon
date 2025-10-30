@@ -58,13 +58,12 @@ object ToolsService {
    */
   lazy val instance: ToolsService = {
     implicit val ec: ExecutionContext = ExecutionContext.global
-    val config = ApplicationConfig.rootConfig
-    new ToolsService(config)
+    new ToolsService()
   }
 }
 
 
-class ToolsService(config: Config)(implicit ec: ExecutionContext) {
+class ToolsService()(implicit ec: ExecutionContext) {
   private val logger: Logger = LoggerFactory.getLogger(classOf[ToolsService])
 
   // Default tools (built-in)
@@ -89,33 +88,6 @@ class ToolsService(config: Config)(implicit ec: ExecutionContext) {
     logger.debug(s"Getting tools for user $userId")
     defaultTools
   }
-
-
-  /**
-   * Get all tools with their handlers as Java BiFunction for SDK compatibility.
-   * This method converts the Scala handlers to Java BiFunction format required by the MCP SDK.
-   *
-   * @param userId The user identifier
-   * @return List of tuples containing tool schema and Java BiFunction handler
-   */
-  /*
-  def getToolsWithHandlers(
-    userId: String
-  ): List[(McpSchema.Tool, java.util.function.BiFunction[McpTransportContext, McpSchema.CallToolRequest, McpSchema.CallToolResult])] = {
-    require(userId.nonEmpty, "userId cannot be empty")
-
-    val userTools = getTools(userId)
-
-    userTools.map { tool =>
-      val javaHandler = new java.util.function.BiFunction[McpTransportContext, McpSchema.CallToolRequest, McpSchema.CallToolResult] {
-        override def apply(ctx: McpTransportContext, req: McpSchema.CallToolRequest): McpSchema.CallToolResult =
-          tool.syncHandler(ctx, req)
-      }
-      (tool.schema, javaHandler)
-    }
-  }
-  */
-
 
   def getAsyncToolsSpec(
     userId: String

@@ -36,7 +36,7 @@ object TurnstileMain extends App {
 """.stripMargin)
 
     logger.info("Starting Dragon Turnstile application...")
-    
+
     val system: ActorSystem[Nothing] = ActorSystem[Nothing](Guardian(), "turnstile", ApplicationConfig.rootConfig)
 
     PekkoManagement(system).start()

@@ -22,22 +22,22 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.jdk.CollectionConverters.*
 
-object TurnstileMcpServer {
-  val logger = LoggerFactory.getLogger(classOf[TurnstileMcpServer])
+object TurnstileStreamingHttpMcpServer {
+  val logger = LoggerFactory.getLogger(classOf[TurnstileStreamingHttpMcpServer])
   
   val serverName = ApplicationConfig.mcpStreaming.getString("server-name")
   val serverVersion = ApplicationConfig.mcpStreaming.getString("server-version")
   
-  def apply(): TurnstileMcpServer =
-    new TurnstileMcpServer(serverName, serverVersion, "default").start()
+  def apply(): TurnstileStreamingHttpMcpServer =
+    new TurnstileStreamingHttpMcpServer(serverName, serverVersion, "default").start()
 }
 
-class TurnstileMcpServer(
+class TurnstileStreamingHttpMcpServer(
   val serverName: String,
   val serverVersion: String,
   val toolNamespace: String
 ) {
-  private val logger = LoggerFactory.getLogger(classOf[TurnstileMcpServer])
+  private val logger = LoggerFactory.getLogger(classOf[TurnstileStreamingHttpMcpServer])
   
   // These are set in start()
   private var mcpAsyncServer: McpAsyncServer = null
@@ -48,7 +48,7 @@ class TurnstileMcpServer(
    *
    * @return (McpAsyncServer, HttpHandler) tuple
    */
-  private def start(): TurnstileMcpServer = {
+  private def start(): TurnstileStreamingHttpMcpServer = {
     logger.info(s"Creating MCP server: $serverName v$serverVersion")
 
     val jsonMapper = McpJsonMapper.getDefault

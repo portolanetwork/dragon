@@ -26,14 +26,13 @@ object DatabaseMigration {
   /**
    * Run database migrations
    *
-   * @param config Application configuration containing database settings
+   * @param dbConfig Application configuration containing database settings
    * @return Success with migration result, or Failure with exception
    */
-  def migrate(config: Config): Try[MigrateResult] = {
+  def migrate(dbConfig: Config): Try[MigrateResult] = {
     logger.info("Starting database migrations...")
 
     Try {
-      val dbConfig = config.getConfig("turnstile.database.db")
       val url = dbConfig.getString("url")
       val user = dbConfig.getString("user")
       val password = dbConfig.getString("password")

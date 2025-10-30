@@ -26,6 +26,7 @@ object ApplicationConfig {
   val rootConfig: Config = ConfigFactory.load(configFile)
   val grpcConfig: Config = rootConfig.getConfig("turnstile.grpc")
   val mcpStreaming: Config = rootConfig.getConfig("turnstile.mcp-streaming")
+  val dbConfig: Config = rootConfig.getConfig("turnstile.database.db")
 
   logger.info(s"Configuration loaded from: $configFile")
 }

@@ -1,6 +1,6 @@
 package app.dragon.turnstile.gateway
 
-import app.dragon.turnstile.actor.{ActorLookup, McpActor}
+import app.dragon.turnstile.actor.{ActorLookup, McpServerActor}
 import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.server.{PekkoToSpringRequestAdapter, SpringToPekkoResponseAdapter}
 import app.dragon.turnstile.service.ToolsService
@@ -79,15 +79,6 @@ import scala.util.{Failure, Success}
  * }}}
  */
 
-/*
-case class EmbeddedMcpServerConfig(
-  host: String = "0.0.0.0",
-  port: Int = 8082,
-  mcpEndpoint: String = "/mcp",
-  serverVersion: String = "1.0.0",
-  toolNamespace: String = "default"
-)
-*/
 
 class TurnstileMcpGateway(config: Config)(implicit system: ActorSystem[?]) {
   implicit val timeout: Timeout = Timeout(10.seconds)
@@ -115,8 +106,6 @@ class TurnstileMcpGateway(config: Config)(implicit system: ActorSystem[?]) {
 
   def start(): Unit = {
     // Create actor system for Pekko HTTP
-    logger.info("Starting Decoupled Embedded MCP Server with Header-Based Routing")
-
     try {
       logger.info(s"✓ Configured header-based router (dynamic handler creation)")
       logger.info(s"  Routing header: mcp-session-id")
@@ -174,25 +163,25 @@ class TurnstileMcpGateway(config: Config)(implicit system: ActorSystem[?]) {
           val entityRef = ActorLookup.getMcpActor(mcpActorId)
           val askFuture = pekkoRequest.method.value match {
             case "GET" =>
-              entityRef.ask[Either[McpActor.McpActorError, HttpResponse]](replyTo => {
+              entityRef.ask[Either[McpServerActor.McpActorError, HttpResponse]](replyTo => {
                 logger.debug(s"Routing GET request to MCP actor: $mcpActorId")
-                McpActor.McpGetRequest(pekkoRequest, replyTo)
+                McpServerActor.McpGetRequest(pekkoRequest, replyTo)
               })
             case "POST" =>
-              entityRef.ask[Either[McpActor.McpActorError, HttpResponse]](replyTo => {
+              entityRef.ask[Either[McpServerActor.McpActorError, HttpResponse]](replyTo => {
                 logger.debug(s"Routing POST request to MCP actor: $mcpActorId")
-                McpActor.McpPostRequest(pekkoRequest, replyTo)
+                McpServerActor.McpPostRequest(pekkoRequest, replyTo)
               })
             case "DELETE" =>
-              entityRef.ask[Either[McpActor.McpActorError, HttpResponse]](replyTo => {
+              entityRef.ask[Either[McpServerActor.McpActorError, HttpResponse]](replyTo => {
                 logger.debug(s"Routing DELETE request to MCP actor: $mcpActorId")
-                McpActor.McpDeleteRequest(pekkoRequest, replyTo)
+                McpServerActor.McpDeleteRequest(pekkoRequest, replyTo)
               })
             case other =>
               // Return 405 Method Not Allowed for unsupported methods
               logger.warn(s"Method $other not supported by MCP gateway")
 
-              scala.concurrent.Future.successful(Left(McpActor.ProcessingError(s"Method $other not supported")))
+              scala.concurrent.Future.successful(Left(McpServerActor.ProcessingError(s"Method $other not supported")))
           }
           onSuccess(askFuture) {
             case Right(httpResponse) => {
@@ -203,7 +192,7 @@ class TurnstileMcpGateway(config: Config)(implicit system: ActorSystem[?]) {
               sessionMap.updateSessionMapping(sessionIdOpt.orNull, mcpActorId)
               complete(httpResponse)
             }
-            case Left(McpActor.ProcessingError(msg)) => {
+            case Left(McpServerActor.ProcessingError(msg)) => {
               logger.error(s"Error processing request in MCP actor $mcpActorId: $msg")
               complete(HttpResponse(500, entity = msg))
             }
