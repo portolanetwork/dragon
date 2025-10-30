@@ -9,7 +9,7 @@ import org.slf4j.LoggerFactory
 import scala.concurrent.Await
 import scala.concurrent.duration.*
 
-object Turnstile extends App {
+object TurnstileMain extends App {
   private val logger = LoggerFactory.getLogger(getClass)
   init()
 

@@ -4,7 +4,7 @@ import app.dragon.turnstile.actor.McpActor
 import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.db.DatabaseMigration
 import app.dragon.turnstile.gateway.TurnstileMcpGateway
-import app.dragon.turnstile.server.TurnstileStdioMcpServer
+import app.dragon.turnstile.server.{TurnstileGrpcServer, TurnstileStdioMcpServer}
 import app.dragon.turnstile.service.ToolsService
 import com.typesafe.config.Config
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
@@ -48,7 +48,7 @@ object Guardian {
       // MyActor.initSharding(context.system)
 
       // Start GRPC server (hosting both GreeterService and TurnstileService)
-      TurnstileServer.start(grpcHost, grpcPort, context.system)
+      TurnstileGrpcServer.start(grpcHost, grpcPort, context.system)
       
       McpActor.initSharding(context.system)
       

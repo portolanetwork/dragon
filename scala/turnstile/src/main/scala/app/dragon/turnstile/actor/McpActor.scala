@@ -1,6 +1,5 @@
 package app.dragon.turnstile.actor
 
-import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.server.{PekkoToSpringRequestAdapter, SpringToPekkoResponseAdapter, TurnstileMcpServer}
 import com.google.rpc.context.AttributeContext.Response
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
@@ -57,7 +56,7 @@ object McpActor {
       Behaviors.setup { context =>
         implicit val system: ActorSystem[Nothing] = context.system
         // Fix: instantiate the class with 'new' instead of as a function
-        val turnstileMcpServer = TurnstileMcpServer(ApplicationConfig., "1.0.0", "default")
+        val turnstileMcpServer = TurnstileMcpServer()
 
         new McpActor(context, buffer, userId, mcpActorId).activeState(turnstileMcpServer)
       }

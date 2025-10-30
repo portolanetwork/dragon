@@ -1,5 +1,6 @@
 package app.dragon.turnstile.server
 
+import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.gateway.TurnstileMcpGateway.logger
 import app.dragon.turnstile.service.ToolsService
 import io.modelcontextprotocol.json.McpJsonMapper
@@ -22,15 +23,13 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.jdk.CollectionConverters.*
 
 object TurnstileMcpServer {
-  def apply(serverName: String, serverVersion: String, toolNamespace: String): TurnstileMcpServer =
-    new TurnstileMcpServer(serverName, serverVersion, toolNamespace).start()
-
-  // Optionally, add a main method for demonstration
-  def main(args: Array[String]): Unit = {
-    val server = TurnstileMcpServer("exampleServer", "1.0.0", "default")
-    //server.start()
-    println("TurnstileMcpServer started (demo main method)")
-  }
+  val logger = LoggerFactory.getLogger(classOf[TurnstileMcpServer])
+  
+  val serverName = ApplicationConfig.mcpStreaming.getString("server-name")
+  val serverVersion = ApplicationConfig.mcpStreaming.getString("server-version")
+  
+  def apply(): TurnstileMcpServer =
+    new TurnstileMcpServer(serverName, serverVersion, "default").start()
 }
 
 class TurnstileMcpServer(
@@ -49,7 +48,7 @@ class TurnstileMcpServer(
    *
    * @return (McpAsyncServer, HttpHandler) tuple
    */
-  def start(): TurnstileMcpServer = {
+  private def start(): TurnstileMcpServer = {
     logger.info(s"Creating MCP server: $serverName v$serverVersion")
 
     val jsonMapper = McpJsonMapper.getDefault
