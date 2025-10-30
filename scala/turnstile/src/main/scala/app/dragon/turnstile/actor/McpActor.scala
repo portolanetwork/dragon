@@ -6,6 +6,7 @@ import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityTypeKey}
 import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse}
+import reactor.core.scheduler.Schedulers
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
@@ -125,15 +126,54 @@ class McpActor(
       activeState(turnstileMcpServer)
   }
 
+  /*
+  *     path(mcpEndpoint.stripPrefix("/")) {
+      extractRequest { pekkoRequest =>
+        complete {
+          // Use router to select the appropriate handler
+          router.route(pekkoRequest).flatMap {
+            case Right(httpHandler) =>
+              // Handler found - convert and execute
+              val springRequest = new PekkoToSpringRequestAdapter(pekkoRequest)
+              val springResponse = new SpringToPekkoResponseAdapter()
+
+              val handlerMono = httpHandler.handle(springRequest, springResponse)
+
+              // Convert Java CompletableFuture to Scala Future
+              import scala.jdk.FutureConverters.*
+
+              val javaFuture = handlerMono
+                .subscribeOn(Schedulers.boundedElastic())
+                .toFuture
+
+              javaFuture.asScala.flatMap { _ =>
+                springResponse.getPekkoResponse()
+              }
+
+            case Left(errorResponse) =>
+              // Router returned an error (no handler found)
+              Future.successful(errorResponse)
+          }
+        }
+      }
+    }
+  }
+  * */
+
   private def handlePekkoRequest(
     request: HttpRequest,
     turnstileMcpServer: TurnstileMcpServer
   ): Future[HttpResponse] = {
-    val webFluxRequest = PekkoToSpringRequestAdapter(request)
-    val webFluxResponse = SpringToPekkoResponseAdapter()
+    val springRequest = PekkoToSpringRequestAdapter(request)
+    val springResponse = SpringToPekkoResponseAdapter()
     // Call the WebFlux handler (returns a Mono[Void])
-    val handlerMono = turnstileMcpServer.getHttpHandler.handle(webFluxRequest, webFluxResponse)
+    val handlerMono = turnstileMcpServer.getHttpHandler.handle(springRequest, springResponse)
     // Convert Mono[Void] to Scala Future[HttpResponse]
-    handlerMono.toFuture.asScala.flatMap(_ => webFluxResponse.getPekkoResponse())
+    //handlerMono.toFuture.asScala.flatMap(_ => springResponse.getPekkoResponse())
+    handlerMono
+      .subscribeOn(Schedulers.boundedElastic())
+      .toFuture.asScala.flatMap { _ =>
+      springResponse.getPekkoResponse()
+    }
   }
 }
