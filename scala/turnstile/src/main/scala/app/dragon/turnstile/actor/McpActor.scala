@@ -1,5 +1,6 @@
 package app.dragon.turnstile.actor
 
+import app.dragon.turnstile.examples.{PekkoToSpringRequestAdapter, SpringToPekkoResponseAdapter, TurnstileMcpServer}
 import com.google.rpc.context.AttributeContext.Response
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
@@ -7,6 +8,8 @@ import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity
 import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.Future
+import scala.jdk.FutureConverters.*
 
 case class McpActorId(userId: String, mcpActorId: String) {
   override def toString: String = s"$userId-$mcpActorId"
@@ -21,7 +24,7 @@ object McpActorId {
 
 object McpActor {
   val TypeKey: EntityTypeKey[McpActor.Message] =
-    EntityTypeKey[McpActor.Message]("ChatActor")
+    EntityTypeKey[McpActor.Message]("McpActor")
 
   def initSharding(system: ActorSystem[_]): Unit =
     ClusterSharding(system).init(Entity(TypeKey) { entityContext =>
@@ -32,7 +35,7 @@ object McpActor {
 
   def getEntityId(userId: String, chatId: String): String =
     s"$userId-$chatId"
-  
+
   sealed trait Message extends TurnstileSerializable
   final case class McpGetRequest(request: HttpRequest, replyTo: ActorRef[Either[McpActorError, HttpResponse]]) extends Message
   final case class McpPostRequest(request: HttpRequest, replyTo: ActorRef[Either[McpActorError, HttpResponse]]) extends Message
@@ -41,12 +44,12 @@ object McpActor {
   sealed trait McpActorError extends TurnstileSerializable
   final case class ProcessingError(message: String) extends McpActorError
 
-  
+
   def apply(userId: String, mcpActorId: String): Behavior[Message] = {
     Behaviors.withStash(100) { buffer =>
       Behaviors.setup { context =>
         implicit val system: ActorSystem[Nothing] = context.system
-        new McpActor(context, buffer, userId, mcpActorId).activeState()
+        new McpActor(context, buffer, userId, mcpActorId).activeState(TurnstileMcpServer("exampleServer", "1.0.0", "default").start())
       }
     }
   }
@@ -60,28 +63,77 @@ class McpActor(
 ) {
   import McpActor._
 
-  implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
+  // Provide required implicits for adapters
+  implicit val system: ActorSystem[?] = context.system
+  implicit val ec: scala.concurrent.ExecutionContext = context.executionContext
 
-  def activeState(): Behavior[Message] = {
+  def activeState(
+    turnstileMcpServer: TurnstileMcpServer
+  ): Behavior[Message] = {
     Behaviors.receiveMessagePartial {
-      handleMcpGetRequest()
-        .orElse(handleMcpPostRequest())
-        .orElse(handleMcpDeleteRequest())
+      handleMcpGetRequest(turnstileMcpServer)
+        .orElse(handleMcpPostRequest(turnstileMcpServer))
+        .orElse(handleMcpDeleteRequest(turnstileMcpServer))
     }
   }
-  
-  def handleMcpGetRequest(): PartialFunction[Message, Behavior[Message]] = {
+
+  def handleMcpGetRequest(
+    turnstileMcpServer: TurnstileMcpServer
+  ): PartialFunction[Message, Behavior[Message]] = {
     case McpGetRequest(request, replyTo) =>
-      Behaviors.same
+      context.log.info(s"MCP Actor $mcpActorId handling GET request")
+      
+      handlePekkoRequest(request, turnstileMcpServer).onComplete {
+        case scala.util.Success(response) =>
+          replyTo ! Right(response)
+        case scala.util.Failure(exception) =>
+          replyTo ! Left(ProcessingError(exception.getMessage))
+      }
+
+      activeState(turnstileMcpServer)
   }
-  
-  def handleMcpPostRequest(): PartialFunction[Message, Behavior[Message]] = {
+
+  def handleMcpPostRequest(
+    turnstileMcpServer: TurnstileMcpServer
+  ): PartialFunction[Message, Behavior[Message]] = {
     case McpPostRequest(request, replyTo) =>
-      Behaviors.same
+      context.log.info(s"Handling MCP POST request for user $userId, actor $mcpActorId")
+
+      handlePekkoRequest(request, turnstileMcpServer).onComplete {
+        case scala.util.Success(response) =>
+          replyTo ! Right(response)
+        case scala.util.Failure(exception) =>
+          replyTo ! Left(ProcessingError(exception.getMessage))
+      }
+
+      activeState(turnstileMcpServer)
   }
-  
-  def handleMcpDeleteRequest(): PartialFunction[Message, Behavior[Message]] = {
+
+  def handleMcpDeleteRequest(
+    turnstileMcpServer: TurnstileMcpServer
+  ): PartialFunction[Message, Behavior[Message]] = {
     case McpDeleteRequest(request, replyTo) =>
-      Behaviors.same
+      context.log.info(s"Handling MCP DELETE request: ${request.uri}")
+
+      handlePekkoRequest(request, turnstileMcpServer).onComplete {
+        case scala.util.Success(response) =>
+          replyTo ! Right(response)
+        case scala.util.Failure(exception) =>
+          replyTo ! Left(ProcessingError(exception.getMessage))
+      }
+
+      activeState(turnstileMcpServer)
+  }
+
+  private def handlePekkoRequest(
+    request: HttpRequest,
+    turnstileMcpServer: TurnstileMcpServer
+  ): Future[HttpResponse] = {
+    val webFluxRequest = PekkoToSpringRequestAdapter(request)
+    val webFluxResponse = SpringToPekkoResponseAdapter()
+    // Call the WebFlux handler (returns a Mono[Void])
+    val handlerMono = turnstileMcpServer.getHttpHandler.handle(webFluxRequest, webFluxResponse)
+    // Convert Mono[Void] to Scala Future[HttpResponse]
+    handlerMono.toFuture.asScala.flatMap(_ => webFluxResponse.getPekkoResponse())
   }
 }

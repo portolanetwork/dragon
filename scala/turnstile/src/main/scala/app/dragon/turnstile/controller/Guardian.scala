@@ -1,7 +1,9 @@
 package app.dragon.turnstile.controller
 
+import app.dragon.turnstile.actor.McpActor
 import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.db.DatabaseMigration
+import app.dragon.turnstile.examples.TurnstilMcpGateway
 import app.dragon.turnstile.mcp.{StdioMcpServer, StreamingHttpMcpServer}
 import app.dragon.turnstile.service.ToolsService
 import com.typesafe.config.Config
@@ -48,6 +50,9 @@ object Guardian {
       // Start GRPC server (hosting both GreeterService and TurnstileService)
       TurnstileServer.start(grpcHost, grpcPort, context.system)
       
+      McpActor.initSharding(context.system)
+      
+      
       // Start MCP Stdio server if enabled
       if (mcpStdioConfig.getBoolean("enabled")) {
         try {
@@ -65,7 +70,9 @@ object Guardian {
       // Start MCP Streaming HTTP server if enabled
       if (mcpStreamingConfig.getBoolean("enabled")) {
         try {
-          val mcpStreamingServer = StreamingHttpMcpServer(mcpStreamingConfig)
+          //val mcpStreamingServer = StreamingHttpMcpServer(mcpStreamingConfig)
+          val mcpStreamingServer = TurnstilMcpGateway(mcpStreamingConfig)
+
           mcpStreamingServer.start()
           context.log.info("MCP Streaming HTTP Server started successfully")
         } catch {

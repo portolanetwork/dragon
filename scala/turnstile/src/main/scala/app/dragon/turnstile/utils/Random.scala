@@ -1,7 +1,7 @@
 package app.dragon.turnstile.utils
 
 import java.security.{MessageDigest, SecureRandom}
-import java.util.Base64
+import java.util.{Base64, UUID}
 import java.util.concurrent.CompletableFuture
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -22,6 +22,10 @@ object Random {
   def urlSafeHash(str: String): String = {
     val digest = MessageDigest.getInstance("SHA-256").digest(str.getBytes("UTF-8"))
     Base64.getUrlEncoder.withoutPadding().encodeToString(digest)
+  }
+  
+  def generateUuid(): String = {
+    UUID.randomUUID().toString
   }
 }
 

@@ -19,7 +19,7 @@ import scala.concurrent.{ExecutionContext, Future}
  * If not found, optionally falls back to the default handler.
  */
 class HeaderBasedRouter(
-  handlerFactory: String => HttpHandler, // New: factory to create handler by actor-id
+  //handlerFactory: String => HttpHandler, // New: factory to create handler by actor-id
   serverVersion: String = "1.0", // Optional: can be parameterized
   toolNamespace: String = "default" // Optional: can be parameterized
 ) {
@@ -27,7 +27,7 @@ class HeaderBasedRouter(
 
   // Thread-safe map for mcp-session-id -> actor-id
   private val sessionToActor = new ConcurrentHashMap[String, String]()
-  
+
   case class RouteLookupResult(
     mcpActorId: String,
     sessionIdOpt: Option[String]
@@ -47,20 +47,26 @@ class HeaderBasedRouter(
         .find(_.lowercaseName() == sessionHeader)
         .map(_.value())
 
-      // if sessionId is present, look up actorId from mapping otherwise generate a fresh one 
+      // if sessionId is present, look up actorId from mapping otherwise generate a fresh one
       //  and create a mapping
       sessionIdOpt match {
-        case Some(sid) if sessionToActor.containsKey(sid) => 
+        case Some(sid) if sessionToActor.containsKey(sid) =>
           logger.debug(s"Received request with $sessionHeader: $sid")
           RouteLookupResult(
             mcpActorId = sessionToActor.get(sid),
             sessionIdOpt = Some(sid)
           )
-        case None => 
+        case Some(sid) =>
+          logger.debug(s"No existing actor mapping for $sessionHeader: $sid, generating new actor ID")
+          RouteLookupResult(
+            mcpActorId = "changeThisToUserId-"+Random.generateUuid(),
+            sessionIdOpt = Some(sid)
+          )
+        case None =>
           logger.debug(s"No $sessionHeader header found in request")
           //Random.generateRandBase64String(10)
           RouteLookupResult(
-            mcpActorId = UUID.randomUUID().toString,
+            mcpActorId = "changeThisToUserId-"+Random.generateUuid(),
             sessionIdOpt = None
           )
       }
@@ -96,7 +102,6 @@ object HeaderBasedRouter {
    * @param handlerFactory Function to create a handler given an actor-id
    */
   def apply(
-    handlerFactory: String => HttpHandler
   ): HeaderBasedRouter =
-    new HeaderBasedRouter(handlerFactory)
+    new HeaderBasedRouter()
 }
