@@ -42,6 +42,12 @@ object McpActor {
   final case class McpPostRequest(request: HttpRequest, replyTo: ActorRef[Either[McpActorError, HttpResponse]]) extends Message
   final case class McpDeleteRequest(request: HttpRequest, replyTo: ActorRef[Either[McpActorError, HttpResponse]]) extends Message
 
+  // Remove WrappedGetResponse, use only WrappedHttpResponse for all handlers
+  private final case class WrappedHttpResponse(
+    result: scala.util.Try[HttpResponse],
+    replyTo: ActorRef[Either[McpActorError, HttpResponse]]
+  ) extends Message
+
   sealed trait McpActorError extends TurnstileSerializable
   final case class ProcessingError(message: String) extends McpActorError
 
@@ -75,6 +81,7 @@ class McpActor(
       handleMcpGetRequest(turnstileMcpServer)
         .orElse(handleMcpPostRequest(turnstileMcpServer))
         .orElse(handleMcpDeleteRequest(turnstileMcpServer))
+        .orElse(handleWrappedHttpResponse())
     }
   }
 
@@ -83,15 +90,11 @@ class McpActor(
   ): PartialFunction[Message, Behavior[Message]] = {
     case McpGetRequest(request, replyTo) =>
       context.log.info(s"MCP Actor $mcpActorId handling GET request")
-      
-      handlePekkoRequest(request, turnstileMcpServer).onComplete {
-        case scala.util.Success(response) =>
-          replyTo ! Right(response)
-        case scala.util.Failure(exception) =>
-          replyTo ! Left(ProcessingError(exception.getMessage))
+      context.pipeToSelf(handlePekkoRequest(request, turnstileMcpServer)) {
+        case scala.util.Success(response) => WrappedHttpResponse(scala.util.Success(response), replyTo)
+        case scala.util.Failure(exception) => WrappedHttpResponse(scala.util.Failure(exception), replyTo)
       }
-
-      activeState(turnstileMcpServer)
+      Behaviors.same
   }
 
   def handleMcpPostRequest(
@@ -99,15 +102,11 @@ class McpActor(
   ): PartialFunction[Message, Behavior[Message]] = {
     case McpPostRequest(request, replyTo) =>
       context.log.info(s"Handling MCP POST request for user $userId, actor $mcpActorId")
-
-      handlePekkoRequest(request, turnstileMcpServer).onComplete {
-        case scala.util.Success(response) =>
-          replyTo ! Right(response)
-        case scala.util.Failure(exception) =>
-          replyTo ! Left(ProcessingError(exception.getMessage))
+      context.pipeToSelf(handlePekkoRequest(request, turnstileMcpServer)) {
+        case scala.util.Success(response) => WrappedHttpResponse(scala.util.Success(response), replyTo)
+        case scala.util.Failure(exception) => WrappedHttpResponse(scala.util.Failure(exception), replyTo)
       }
-
-      activeState(turnstileMcpServer)
+      Behaviors.same
   }
 
   def handleMcpDeleteRequest(
@@ -115,15 +114,22 @@ class McpActor(
   ): PartialFunction[Message, Behavior[Message]] = {
     case McpDeleteRequest(request, replyTo) =>
       context.log.info(s"Handling MCP DELETE request: ${request.uri}")
+      context.pipeToSelf(handlePekkoRequest(request, turnstileMcpServer)) {
+        case scala.util.Success(response) => WrappedHttpResponse(scala.util.Success(response), replyTo)
+        case scala.util.Failure(exception) => WrappedHttpResponse(scala.util.Failure(exception), replyTo)
+      }
+      Behaviors.same
+  }
 
-      handlePekkoRequest(request, turnstileMcpServer).onComplete {
+  def handleWrappedHttpResponse(): PartialFunction[Message, Behavior[Message]] = {
+    case WrappedHttpResponse(result, replyTo) =>
+      result match {
         case scala.util.Success(response) =>
           replyTo ! Right(response)
         case scala.util.Failure(exception) =>
           replyTo ! Left(ProcessingError(exception.getMessage))
       }
-
-      activeState(turnstileMcpServer)
+      Behaviors.same
   }
 
   /*

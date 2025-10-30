@@ -322,8 +322,20 @@ object TurnstilMcpGateway {
                 scala.concurrent.Future.successful(Left(McpActor.ProcessingError(s"Method $other not supported")))
             }
             onSuccess(askFuture) {
-              case Right(httpResponse) => complete(httpResponse)
-              case Left(McpActor.ProcessingError(msg)) => complete(HttpResponse(500, entity = msg))
+              case Right(httpResponse) =>
+                {
+                  logger.debug(s"---- Received response from MCP actor: $mcpActorId")
+                  val sessionIdOpt = httpResponse.headers.find(_.name.toLowerCase == "mcp-session-id").map(_.value)
+                  
+                  logger.debug(s"---- Updating session mapping: ${sessionIdOpt.orNull} -> $mcpActorId")
+                  router.updateSessionMapping(sessionIdOpt.orNull, mcpActorId)
+                  complete(httpResponse)
+                }
+              case Left(McpActor.ProcessingError(msg)) =>
+              {
+                logger.error(s"Error processing request in MCP actor $mcpActorId: $msg")
+                complete(HttpResponse(500, entity = msg))
+              }
             }
           case _ => complete(HttpResponse(404, entity = "Route not found"))
         }
