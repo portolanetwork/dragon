@@ -3,8 +3,8 @@ package app.dragon.turnstile.controller
 import app.dragon.turnstile.actor.McpActor
 import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.db.DatabaseMigration
-import app.dragon.turnstile.examples.TurnstilMcpGateway
-import app.dragon.turnstile.mcp.{StdioMcpServer, StreamingHttpMcpServer}
+import app.dragon.turnstile.gateway.TurnstileMcpGateway
+import app.dragon.turnstile.server.TurnstileStdioMcpServer
 import app.dragon.turnstile.service.ToolsService
 import com.typesafe.config.Config
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
@@ -56,7 +56,7 @@ object Guardian {
       // Start MCP Stdio server if enabled
       if (mcpStdioConfig.getBoolean("enabled")) {
         try {
-          val mcpStdioServer = StdioMcpServer(mcpStdioConfig)
+          val mcpStdioServer = TurnstileStdioMcpServer(mcpStdioConfig)
           mcpStdioServer.start()
           context.log.info("MCP Stdio Server started successfully")
         } catch {
@@ -71,7 +71,7 @@ object Guardian {
       if (mcpStreamingConfig.getBoolean("enabled")) {
         try {
           //val mcpStreamingServer = StreamingHttpMcpServer(mcpStreamingConfig)
-          val mcpStreamingServer = TurnstilMcpGateway(mcpStreamingConfig)
+          val mcpStreamingServer = TurnstileMcpGateway(mcpStreamingConfig)
 
           mcpStreamingServer.start()
           context.log.info("MCP Streaming HTTP Server started successfully")

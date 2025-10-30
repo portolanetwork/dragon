@@ -1,4 +1,4 @@
-package app.dragon.turnstile.mcp
+package app.dragon.turnstile.server
 
 import app.dragon.turnstile.service.ToolsService
 import com.typesafe.config.Config
@@ -7,6 +7,7 @@ import io.modelcontextprotocol.server.McpServer
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider
 import org.apache.pekko.actor.typed.ActorSystem
 import org.slf4j.{Logger, LoggerFactory}
+
 import scala.jdk.CollectionConverters.*
 
 /**
@@ -41,8 +42,8 @@ import scala.jdk.CollectionConverters.*
  * - McpService: Business logic for tool definitions and handlers
  * - StdioServerTransportProvider: Official SDK stdio transport (streaming)
  */
-class StdioMcpServer(config: Config)(implicit system: ActorSystem[?]) {
-  private val logger: Logger = LoggerFactory.getLogger(classOf[StdioMcpServer])
+class TurnstileStdioMcpServer(config: Config)(implicit system: ActorSystem[?]) {
+  private val logger: Logger = LoggerFactory.getLogger(classOf[TurnstileStdioMcpServer])
 
   // Execution context for async operations
   private implicit val ec: scala.concurrent.ExecutionContext = system.executionContext
@@ -64,7 +65,8 @@ class StdioMcpServer(config: Config)(implicit system: ActorSystem[?]) {
   private val mcpServer = {
     var builder = McpServer.sync(transportProvider)
       .serverInfo(serverName, serverVersion)
-
+  
+    /*
     // Register all tools from the service
     // Convert stateless handlers to session-based handlers
     toolsService.getToolsWithHandlers("default").foreach { case (tool, statelessHandler) =>
@@ -82,9 +84,11 @@ class StdioMcpServer(config: Config)(implicit system: ActorSystem[?]) {
           statelessHandler.apply(exchange.transportContext(), req)
         }
       }
-
+      
       builder = builder.toolCall(tool, sessionHandler)
     }
+    
+     */
 
     builder.build()
   }
@@ -123,8 +127,8 @@ class StdioMcpServer(config: Config)(implicit system: ActorSystem[?]) {
   }
 }
 
-object StdioMcpServer {
-  def apply(config: Config)(implicit system: ActorSystem[?]): StdioMcpServer = {
-    new StdioMcpServer(config)
+object TurnstileStdioMcpServer {
+  def apply(config: Config)(implicit system: ActorSystem[?]): TurnstileStdioMcpServer = {
+    new TurnstileStdioMcpServer(config)
   }
 }

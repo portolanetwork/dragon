@@ -1,6 +1,6 @@
 package app.dragon.turnstile.service.tools
 
-import app.dragon.turnstile.service.{McpTool, SyncToolHandler}
+import app.dragon.turnstile.service.{AsyncToolHandler, McpTool, McpUtils, SyncToolHandler}
 import io.modelcontextprotocol.server.McpAsyncServerExchange
 import io.modelcontextprotocol.spec.McpSchema
 import reactor.core.publisher.Mono
@@ -34,61 +34,44 @@ import reactor.core.publisher.Mono
  * @param serverName The name of the server (from config)
  * @param serverVersion The version of the server (from config)
  */
-class SystemInfoTool() extends McpToolProvider {
-
-  override def tool: McpTool = {
-    val schema = createToolSchemaBuilder(
+object SystemInfoTool extends McpTool {
+  override def getSchema(): McpSchema.Tool = {
+    McpUtils.createToolSchemaBuilder(
       name = "system_info",
       description = "Returns system information about the Turnstile server"
     )
-      .inputSchema(createObjectSchema()) // No arguments required
+      .inputSchema(McpUtils.createObjectSchema()) // No arguments required
       .build()
-
-    val handler: SyncToolHandler = (_, _) => {
-      val runtime = Runtime.getRuntime
-      val totalMemory = runtime.totalMemory()
-      val freeMemory = runtime.freeMemory()
-      val usedMemory = totalMemory - freeMemory
-      val maxMemory = runtime.maxMemory()
-
-      val info =
-        s"""System Information:
-           |Java Version: ${System.getProperty("java.version")}
-           |Java Vendor: ${System.getProperty("java.vendor")}
-           |OS Name: ${System.getProperty("os.name")}
-           |OS Architecture: ${System.getProperty("os.arch")}
-           |OS Version: ${System.getProperty("os.version")}
-           |Available Processors: ${runtime.availableProcessors()}
-           |Total Memory: ${totalMemory / 1024 / 1024} MB
-           |Used Memory: ${usedMemory / 1024 / 1024} MB
-           |Free Memory: ${freeMemory / 1024 / 1024} MB
-           |Max Memory: ${maxMemory / 1024 / 1024} MB
-           |""".stripMargin
-
-      logger.debug("System info tool called")
-
-      createTextResult(info)
-    }
-
-    // Async handler wraps the sync handler for compatibility
-    val asyncHandler: (McpAsyncServerExchange, McpSchema.CallToolRequest) => Mono[McpSchema.CallToolResult] =
-      (exchange, request) => Mono.fromSupplier(() => handler(exchange.transportContext(), request))
-
-    McpTool(
-      name = "system_info",
-      description = "Returns system information",
-      schema = schema,
-      syncHandler = handler,
-      asyncHandler = asyncHandler
-    )
   }
-}
 
-object SystemInfoTool {
-  /**
-   * Create a new SystemInfoTool instance
-   *
-   */
-  def apply(): SystemInfoTool =
-    new SystemInfoTool()
+  override def getAsyncHandler(): AsyncToolHandler = {
+    (exchange, request) => {
+      Mono.fromSupplier(() => {
+        val runtime = Runtime.getRuntime
+        val totalMemory = runtime.totalMemory()
+        val freeMemory = runtime.freeMemory()
+        val usedMemory = totalMemory - freeMemory
+        val maxMemory = runtime.maxMemory()
+
+        val info =
+          s"""System Information:
+             |Java Version: ${System.getProperty("java.version")}
+             |Java Vendor: ${System.getProperty("java.vendor")}
+             |OS Name: ${System.getProperty("os.name")}
+             |OS Architecture: ${System.getProperty("os.arch")}
+             |OS Version: ${System.getProperty("os.version")}
+             |Available Processors: ${runtime.availableProcessors()}
+             |Total Memory: ${totalMemory / 1024 / 1024} MB
+             |Used Memory: ${usedMemory / 1024 / 1024} MB
+             |Free Memory: ${freeMemory / 1024 / 1024} MB
+             |Max Memory: ${maxMemory / 1024 / 1024} MB
+             |""".stripMargin
+
+        logger.debug("System info tool called")
+
+        McpUtils.createTextResult(info)
+      })
+    }
+  }
+
 }

@@ -1,6 +1,7 @@
 package app.dragon.turnstile.actor
 
-import app.dragon.turnstile.examples.{PekkoToSpringRequestAdapter, SpringToPekkoResponseAdapter, TurnstileMcpServer}
+import app.dragon.turnstile.config.ApplicationConfig
+import app.dragon.turnstile.server.{PekkoToSpringRequestAdapter, SpringToPekkoResponseAdapter, TurnstileMcpServer}
 import com.google.rpc.context.AttributeContext.Response
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
@@ -51,12 +52,14 @@ object McpActor {
   sealed trait McpActorError extends TurnstileSerializable
   final case class ProcessingError(message: String) extends McpActorError
 
-
   def apply(userId: String, mcpActorId: String): Behavior[Message] = {
     Behaviors.withStash(100) { buffer =>
       Behaviors.setup { context =>
         implicit val system: ActorSystem[Nothing] = context.system
-        new McpActor(context, buffer, userId, mcpActorId).activeState(TurnstileMcpServer("exampleServer", "1.0.0", "default").start())
+        // Fix: instantiate the class with 'new' instead of as a function
+        val turnstileMcpServer = TurnstileMcpServer(ApplicationConfig., "1.0.0", "default")
+
+        new McpActor(context, buffer, userId, mcpActorId).activeState(turnstileMcpServer)
       }
     }
   }
@@ -131,41 +134,7 @@ class McpActor(
       }
       Behaviors.same
   }
-
-  /*
-  *     path(mcpEndpoint.stripPrefix("/")) {
-      extractRequest { pekkoRequest =>
-        complete {
-          // Use router to select the appropriate handler
-          router.route(pekkoRequest).flatMap {
-            case Right(httpHandler) =>
-              // Handler found - convert and execute
-              val springRequest = new PekkoToSpringRequestAdapter(pekkoRequest)
-              val springResponse = new SpringToPekkoResponseAdapter()
-
-              val handlerMono = httpHandler.handle(springRequest, springResponse)
-
-              // Convert Java CompletableFuture to Scala Future
-              import scala.jdk.FutureConverters.*
-
-              val javaFuture = handlerMono
-                .subscribeOn(Schedulers.boundedElastic())
-                .toFuture
-
-              javaFuture.asScala.flatMap { _ =>
-                springResponse.getPekkoResponse()
-              }
-
-            case Left(errorResponse) =>
-              // Router returned an error (no handler found)
-              Future.successful(errorResponse)
-          }
-        }
-      }
-    }
-  }
-  * */
-
+  
   private def handlePekkoRequest(
     request: HttpRequest,
     turnstileMcpServer: TurnstileMcpServer

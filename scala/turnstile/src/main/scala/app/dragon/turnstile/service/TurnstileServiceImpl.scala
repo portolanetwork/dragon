@@ -47,12 +47,14 @@ class TurnstileServiceImpl(system: ActorSystem[_])(implicit db: Database) extend
       _ <- validateNotEmpty(request.url, "url")
       insertedRow <- TableInserter.insertMcpServer(McpServerRow(
           id = 0L,
-          userId = "default", // TODO: Replace with actual user id if available
           uuid = UUID.nameUUIDFromBytes(s"${request.name}:${request.url}".getBytes("UTF-8")).toString,
+          tenant = "default", // TODO: Replace with actual tenant id from auth context
+          userId = "default", // TODO: Replace with actual user id from auth context
           name = request.name,
           url = request.url,
           clientId = None,
           clientSecret = None,
+          refreshToken = None,
           createdAt = now,
           updatedAt = now
         ))
@@ -78,7 +80,8 @@ class TurnstileServiceImpl(system: ActorSystem[_])(implicit db: Database) extend
     // Validate request and list servers
     for {
       _ <- validateNotEmpty(request.userId, "userId")
-      rows <- TableInserter.listMcpServers(request.userId)
+      // TODO: Replace "default" with actual tenant from auth context
+      rows <- TableInserter.listMcpServers(tenant = "default", userId = request.userId)
     } yield {
       val servers = rows.map(row => McpServer(
         uuid = row.uuid,

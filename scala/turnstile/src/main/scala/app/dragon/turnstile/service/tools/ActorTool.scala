@@ -1,9 +1,10 @@
 package app.dragon.turnstile.service.tools
 
-import app.dragon.turnstile.service.{McpTool, SyncToolHandler}
+import app.dragon.turnstile.service.{AsyncToolHandler, McpTool, McpUtils, SyncToolHandler}
 import io.modelcontextprotocol.server.McpAsyncServerExchange
 import io.modelcontextprotocol.spec.McpSchema
 import reactor.core.publisher.{Flux, Mono}
+
 import java.time.Duration
 
 /**
@@ -44,14 +45,14 @@ import java.time.Duration
  *       composition with delays/timeouts, and backpressure handling.
  *       For true multi-message streaming, use Server-Sent Events (SSE) via the streamable transport.
  */
-class ActorTool extends McpToolProvider {
+object ActorTool extends McpTool {
 
-  override def tool: McpTool = {
-    val schema = createToolSchemaBuilder(
+  override def getSchema(): McpSchema.Tool = {
+    McpUtils.createToolSchemaBuilder(
       name = "actor_tool",
       description = "Demonstrates streaming/async capabilities with actor-style messaging"
     )
-      .inputSchema(createObjectSchema(
+      .inputSchema(McpUtils.createObjectSchema(
         properties = Map(
           "message" -> Map(
             "type" -> "string",
@@ -65,184 +66,120 @@ class ActorTool extends McpToolProvider {
         required = Seq() // All parameters are optional
       ))
       .build()
+  }
 
-    val handler: SyncToolHandler = (_, request) => {
-      val message = getStringArg(request, "message", "ping")
-      val count = Math.min(Math.max(getIntArg(request, "count", 1), 1), 10) // Clamp to 1-10
-
-      logger.debug(s"Actor tool called with message: '$message', count: $count")
-
-      // Simulate actor-style processing
+  override def getAsyncHandler(): AsyncToolHandler = {
+    (exchange, request) => {
+      val message = McpUtils.getStringArg(request, "message", "ping")
+      val count = Math.min(Math.max(McpUtils.getIntArg(request, "count", 1), 1), 10)
       val actorName = "TurnstileActor"
-      val timestamp = System.currentTimeMillis()
+      val startTime = System.currentTimeMillis()
 
-      // Build a multi-part response that demonstrates streaming-style data composition
-      val headerParts = Seq(
-        s"🎭 Actor System Response (Streaming Demo)",
-        s"Actor: $actorName",
-        s"Timestamp: $timestamp",
-        s"Message Count: $count",
-        s"",
-        s"📨 Received Message: \"$message\"",
-        s""
-      ) 
+      // Create a unique progress token that includes tool name and timestamp for correlation
+      val progressToken = s"actor-tool-${request.name()}-$startTime"
 
-      // Simulate stream of message processing
-      val streamParts = (1 to count).flatMap { i =>
-        Seq(
-          s"[Stream $i/$count] Processing...",
-          s"  ├─ Message validated",
-          s"  ├─ Actor state updated",
-          s"  └─ Response: \"$actorName processed '$message' (iteration $i)\"",
-          if (i < count) "" else s""
-        )
-      }
+      logger.info(s"[ActorTool] Starting streaming processing: message='$message', count=$count, token=$progressToken")
 
-      val footerParts = Seq(
-        s"✅ Processing Complete",
-        s"   Total messages processed: $count",
-        s"   Status: SUCCESS",
-        s"",
-        s"ℹ️  Streaming Note:",
-        s"   This tool demonstrates async/reactive patterns. The handler is wrapped in a Mono",
-        s"   by the MCP async server, enabling non-blocking execution, reactive composition,",
-        s"   and backpressure handling. For true multi-message streaming over time,",
-        s"   use Server-Sent Events (SSE) via the streamable HTTP transport."
+      // Create metadata for correlation with tool call
+      val correlationMeta = java.util.Map.of[String, Object](
+        "toolName", request.name(),
+        "startTime", Long.box(startTime),
+        "message", message,
+        "totalCount", Integer.valueOf(count)
       )
 
-      val response = (headerParts ++ streamParts ++ footerParts).mkString("\n")
+      // Send initial progress notification
+      val initialNotification = new McpSchema.ProgressNotification(
+        progressToken,
+        Double.box(0.0),
+        Double.box(count.toDouble),
+        s"[$actorName] Starting processing: '$message' (0/$count)",
+        correlationMeta
+      )
 
-      createTextResult(response)
+      // Emit a progress notification for each step, with 2 second delays
+      val notificationFlux = Mono.fromRunnable(() =>
+        exchange.progressNotification(initialNotification).subscribe()
+      ).thenMany(
+        Flux.range(1, count)
+          .delayElements(Duration.ofSeconds(2))
+          .doOnNext(i => logger.info(s"[ActorTool] Processing iteration $i/$count (after 2s delay)"))
+          .flatMap { i =>
+            val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
+            val iterationMeta = java.util.Map.of[String, Object](
+              "toolName", request.name(),
+              "startTime", Long.box(startTime),
+              "iteration", Integer.valueOf(i),
+              "elapsedSeconds", Double.box(elapsed)
+            )
+
+            val notification = new McpSchema.ProgressNotification(
+              progressToken,
+              Double.box(i.toDouble),
+              Double.box(count.toDouble),
+              s"[$actorName] Processed '$message' ($i/$count) - ${elapsed}s elapsed",
+              iterationMeta
+            )
+
+            exchange.progressNotification(notification)
+              .doOnSuccess(_ => logger.info(s"[ActorTool] Sent progress notification: $i/$count"))
+          }
+      )
+
+      // After all notifications, return the final result
+      notificationFlux.`then`(
+        Mono.fromSupplier(() => {
+          val endTime = System.currentTimeMillis()
+          val totalElapsed = (endTime - startTime) / 1000.0
+
+          logger.info(s"[ActorTool] Streaming complete: $count iterations in ${totalElapsed}s")
+
+          val headerParts = Seq(
+            s"🎭 Actor System Response (TRUE STREAMING with 2s delays)",
+            s"Actor: $actorName",
+            s"Start Time: $startTime",
+            s"End Time: $endTime",
+            s"Total Duration: ${totalElapsed}s",
+            s"Message Count: $count",
+            s"Progress Token: $progressToken",
+            s"",
+            s"📨 Received Message: \"$message\"",
+            s""
+          )
+          val streamParts = (1 to count).flatMap { i =>
+            Seq(
+              s"[Stream $i/$count] Processing...",
+              s"  ├─ Message validated",
+              s"  ├─ Actor state updated",
+              s"  └─ Response: \"$actorName processed '$message' (iteration $i)\"",
+              if (i < count) "" else s""
+            )
+          }
+          val footerParts = Seq(
+            s"✅ Processing Complete",
+            s"   Total messages processed: $count",
+            s"   Total duration: ${totalElapsed}s (expected: ~${count * 2}s)",
+            s"   Status: SUCCESS",
+            s"",
+            s"📊 Progress Notifications:",
+            s"   - Progress Token: $progressToken",
+            s"   - Notifications sent: ${count + 1} (initial + $count iterations)",
+            s"   - Each notification includes correlation metadata:",
+            s"     • toolName: ${request.name()}",
+            s"     • startTime: $startTime",
+            s"     • iteration: (current iteration number)",
+            s"     • elapsedSeconds: (time elapsed for that iteration)",
+            s"",
+            s"ℹ️  TRUE Streaming Demo:",
+            s"   - Real 2-second delays using Flux.delayElements(Duration.ofSeconds(2))",
+            s"   - Progress notifications sent via SSE with correlation metadata",
+            s"   - Non-blocking execution on Reactor scheduler",
+            s"   - Clients can correlate notifications using progressToken + metadata"
+          )
+          val response = (headerParts ++ streamParts ++ footerParts).mkString("\n")
+          McpUtils.createTextResult(response)
+        })
+      )
     }
-
-    // Async handler sends notifications for each step
-    val asyncHandler: (McpAsyncServerExchange, McpSchema.CallToolRequest) => Mono[McpSchema.CallToolResult] =
-      (exchange, request) => {
-        val message = getStringArg(request, "message", "ping")
-        val count = Math.min(Math.max(getIntArg(request, "count", 1), 1), 10)
-        val actorName = "TurnstileActor"
-        val startTime = System.currentTimeMillis()
-
-        // Create a unique progress token that includes tool name and timestamp for correlation
-        val progressToken = s"actor-tool-${request.name()}-$startTime"
-
-        logger.info(s"[ActorTool] Starting streaming processing: message='$message', count=$count, token=$progressToken")
-
-        // Create metadata for correlation with tool call
-        val correlationMeta = java.util.Map.of[String, Object](
-          "toolName", request.name(),
-          "startTime", Long.box(startTime),
-          "message", message,
-          "totalCount", Integer.valueOf(count)
-        )
-
-        // Send initial progress notification
-        val initialNotification = new McpSchema.ProgressNotification(
-          progressToken,
-          Double.box(0.0),
-          Double.box(count.toDouble),
-          s"[$actorName] Starting processing: '$message' (0/$count)",
-          correlationMeta
-        )
-
-        // Emit a progress notification for each step, with 2 second delays
-        val notificationFlux = Mono.fromRunnable(() =>
-          exchange.progressNotification(initialNotification).subscribe()
-        ).thenMany(
-          Flux.range(1, count)
-            .delayElements(Duration.ofSeconds(2))
-            .doOnNext(i => logger.info(s"[ActorTool] Processing iteration $i/$count (after 2s delay)"))
-            .flatMap { i =>
-              val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
-              val iterationMeta = java.util.Map.of[String, Object](
-                "toolName", request.name(),
-                "startTime", Long.box(startTime),
-                "iteration", Integer.valueOf(i),
-                "elapsedSeconds", Double.box(elapsed)
-              )
-
-              val notification = new McpSchema.ProgressNotification(
-                progressToken,
-                Double.box(i.toDouble),
-                Double.box(count.toDouble),
-                s"[$actorName] Processed '$message' ($i/$count) - ${elapsed}s elapsed",
-                iterationMeta
-              )
-
-              exchange.progressNotification(notification)
-                .doOnSuccess(_ => logger.info(s"[ActorTool] Sent progress notification: $i/$count"))
-            }
-        )
-
-        // After all notifications, return the final result
-        notificationFlux.`then`(
-          Mono.fromSupplier(() => {
-            val endTime = System.currentTimeMillis()
-            val totalElapsed = (endTime - startTime) / 1000.0
-
-            logger.info(s"[ActorTool] Streaming complete: $count iterations in ${totalElapsed}s")
-
-            val headerParts = Seq(
-              s"🎭 Actor System Response (TRUE STREAMING with 2s delays)",
-              s"Actor: $actorName",
-              s"Start Time: $startTime",
-              s"End Time: $endTime",
-              s"Total Duration: ${totalElapsed}s",
-              s"Message Count: $count",
-              s"Progress Token: $progressToken",
-              s"",
-              s"📨 Received Message: \"$message\"",
-              s""
-            )
-            val streamParts = (1 to count).flatMap { i =>
-              Seq(
-                s"[Stream $i/$count] Processing...",
-                s"  ├─ Message validated",
-                s"  ├─ Actor state updated",
-                s"  └─ Response: \"$actorName processed '$message' (iteration $i)\"",
-                if (i < count) "" else s""
-              )
-            }
-            val footerParts = Seq(
-              s"✅ Processing Complete",
-              s"   Total messages processed: $count",
-              s"   Total duration: ${totalElapsed}s (expected: ~${count * 2}s)",
-              s"   Status: SUCCESS",
-              s"",
-              s"📊 Progress Notifications:",
-              s"   - Progress Token: $progressToken",
-              s"   - Notifications sent: ${count + 1} (initial + $count iterations)",
-              s"   - Each notification includes correlation metadata:",
-              s"     • toolName: ${request.name()}",
-              s"     • startTime: $startTime",
-              s"     • iteration: (current iteration number)",
-              s"     • elapsedSeconds: (time elapsed for that iteration)",
-              s"",
-              s"ℹ️  TRUE Streaming Demo:",
-              s"   - Real 2-second delays using Flux.delayElements(Duration.ofSeconds(2))",
-              s"   - Progress notifications sent via SSE with correlation metadata",
-              s"   - Non-blocking execution on Reactor scheduler",
-              s"   - Clients can correlate notifications using progressToken + metadata"
-            )
-            val response = (headerParts ++ streamParts ++ footerParts).mkString("\n")
-            createTextResult(response)
-          })
-        )
-      }
-
-    McpTool(
-      name = "actor_tool",
-      description = "Demonstrates streaming/async capabilities with actor-style messaging",
-      schema = schema,
-      syncHandler = handler,
-      asyncHandler = asyncHandler
-    )
   }
-}
-
-object ActorTool {
-  /**
-   * Create a new ActorTool instance
-   */
-  def apply(): ActorTool = new ActorTool()
 }

@@ -9,12 +9,11 @@ import org.slf4j.LoggerFactory
 import scala.concurrent.Await
 import scala.concurrent.duration.*
 
-object PekkoTurnstile extends App {
+object Turnstile extends App {
   private val logger = LoggerFactory.getLogger(getClass)
   init()
 
   private def init(): Unit = {
-    logger.info("Starting PekkoTurnstile application...")
     logger.info("""
                 ⠀⠀⠀⠀⢀⣀⣀⣀⣀⣀⣠⣼⠂⠀⠀⠀⠀⠙⣦⢀⠀⠀⠀⠀⠀⢶⣤⣀⣀⣀⣀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣠⣴⣶⣿⣿⣿⣿⣿⣿⣿⣿⠷⢦⠀⣹⣶⣿⣦⣿⡘⣇⠀⠀⠀⢰⠾⣿⣿⣿⣟⣻⣿⣿⣿⣷⣦⣄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
@@ -36,12 +35,12 @@ object PekkoTurnstile extends App {
 ⠈⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣰⡿⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠃
 """.stripMargin)
 
+    logger.info("Starting Dragon Turnstile application...")
+    
     val system: ActorSystem[Nothing] = ActorSystem[Nothing](Guardian(), "turnstile", ApplicationConfig.rootConfig)
 
     PekkoManagement(system).start()
     ClusterBootstrap(system).start()
-
-    logger.info(">>> Application running. Terminate with Ctrl+C (SIGINT) <<<")
 
     sys.addShutdownHook {
       logger.info("Terminating PekkoTurnstile application...")

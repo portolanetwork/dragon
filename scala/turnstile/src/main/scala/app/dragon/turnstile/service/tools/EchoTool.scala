@@ -1,6 +1,7 @@
 package app.dragon.turnstile.service.tools
 
-import app.dragon.turnstile.service.{McpTool, SyncToolHandler}
+import app.dragon.turnstile.service.{AsyncToolHandler, McpTool, SyncToolHandler}
+import app.dragon.turnstile.service.McpUtils
 import io.modelcontextprotocol.server.McpAsyncServerExchange
 import io.modelcontextprotocol.spec.McpSchema
 import reactor.core.publisher.Mono
@@ -25,49 +26,35 @@ import reactor.core.publisher.Mono
  *
  * Returns: "Echo: Hello, World!"
  */
-class EchoTool extends McpToolProvider {
-
-  override def tool: McpTool = {
-    val schema = createToolSchemaBuilder(
-      name = "echo",
-      description = "Echoes back the provided message"
-    )
-      .inputSchema(createObjectSchema(
-        properties = Map(
-          "message" -> Map(
-            "type" -> "string",
-            "description" -> "The message to echo back"
-          )
-        ),
-        required = Seq("message")
-      ))
-      .build()
-
-    val handler: SyncToolHandler = (_, request) => {
-      val message = getStringArg(request, "message")
-
-      logger.debug(s"Echo tool called with message: $message")
-
-      createTextResult(s"Echo: $message")
-    }
-
-    // Async handler wraps the sync handler for compatibility
-    val asyncHandler: (McpAsyncServerExchange, McpSchema.CallToolRequest) => Mono[McpSchema.CallToolResult] =
-      (exchange, request) => Mono.fromSupplier(() => handler(exchange.transportContext(), request))
-
-    McpTool(
-      name = "echo",
-      description = "Echoes back messages",
-      schema = schema,
-      syncHandler = handler,
-      asyncHandler = asyncHandler
-    )
-  }
-}
 
 object EchoTool {
-  /**
-   * Create a new EchoTool instance
-   */
-  def apply(): EchoTool = new EchoTool()
+  def apply(name: String): EchoTool = new EchoTool(name)
+}
+
+class EchoTool(name: String) extends McpTool {
+  override def getSchema(): McpSchema.Tool = {
+    McpUtils.createToolSchemaBuilder(
+      name = name,
+      description = "Echoes back the provided message"
+    )
+      .inputSchema(
+        McpUtils.createObjectSchema(
+          properties = Map(
+            "message" -> Map(
+              "type" -> "string",
+              "description" -> "The message to echo back"
+            )
+          ),
+          required = Seq("message")
+        ))
+      .build()
+  }
+
+  override def getAsyncHandler(): AsyncToolHandler = {
+    (exchange, request) => {
+      val message = McpUtils.getStringArg(request, "message")
+      logger.debug(s"Echo tool called with message: $message")
+      Mono.just(McpUtils.createTextResult(s"Echo: $message"))
+    }
+  }
 }

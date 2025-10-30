@@ -4,6 +4,7 @@ import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.service.tools.{ActorTool, EchoTool, SystemInfoTool}
 import com.typesafe.config.Config
 import io.modelcontextprotocol.common.McpTransportContext
+import io.modelcontextprotocol.server.{McpAsyncServerExchange, McpServerFeatures}
 import io.modelcontextprotocol.spec.McpSchema
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -11,24 +12,14 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
+import scala.jdk.FunctionConverters.enrichAsJavaBiFunction
 import scala.util.{Failure, Success, Try}
 
 /**
  * Type alias for MCP tool handler functions
  */
 type SyncToolHandler = (McpTransportContext, McpSchema.CallToolRequest) => McpSchema.CallToolResult
-type AsyncToolHandler = (io.modelcontextprotocol.server.McpAsyncServerExchange, McpSchema.CallToolRequest) => reactor.core.publisher.Mono[McpSchema.CallToolResult]
-
-/**
- * Represents an MCP tool with its definition and handler
- */
-case class McpTool(
-  name: String,
-  description: String,
-  schema: McpSchema.Tool,
-  syncHandler: SyncToolHandler,
-  asyncHandler: AsyncToolHandler,
-)
+type AsyncToolHandler = (McpAsyncServerExchange, McpSchema.CallToolRequest) => reactor.core.publisher.Mono[McpSchema.CallToolResult]
 
 /**
  * Service for managing MCP tools.
@@ -78,12 +69,13 @@ class ToolsService(config: Config)(implicit ec: ExecutionContext) {
 
   // Default tools (built-in)
   private val defaultTools: List[McpTool] = List(
-    EchoTool().tool,
-    SystemInfoTool().tool,
-    ActorTool().tool
+    EchoTool("echo1"),
+    EchoTool("echo2"),
+    SystemInfoTool,
+    ActorTool
   )
 
-  logger.info(s"ToolsService initialized with ${defaultTools.size} default tools: ${defaultTools.map(_.name).mkString(", ")}")
+  logger.info(s"ToolsService initialized with ${defaultTools.size} default tools: ${defaultTools.map(_.getName()).mkString(", ")}")
 
   /**
    * Get all tools for a user.
@@ -98,12 +90,6 @@ class ToolsService(config: Config)(implicit ec: ExecutionContext) {
     defaultTools
   }
 
-  /**
-   * Get default tools available to all users.
-   *
-   * @return List of default tools
-   */
-  def getDefaultTools: List[McpTool] = defaultTools
 
   /**
    * Get all tools with their handlers as Java BiFunction for SDK compatibility.
@@ -112,8 +98,10 @@ class ToolsService(config: Config)(implicit ec: ExecutionContext) {
    * @param userId The user identifier
    * @return List of tuples containing tool schema and Java BiFunction handler
    */
-  def getToolsWithHandlers(userId: String):
-    List[(McpSchema.Tool, java.util.function.BiFunction[McpTransportContext, McpSchema.CallToolRequest, McpSchema.CallToolResult])] = {
+  /*
+  def getToolsWithHandlers(
+    userId: String
+  ): List[(McpSchema.Tool, java.util.function.BiFunction[McpTransportContext, McpSchema.CallToolRequest, McpSchema.CallToolResult])] = {
     require(userId.nonEmpty, "userId cannot be empty")
 
     val userTools = getTools(userId)
@@ -126,26 +114,18 @@ class ToolsService(config: Config)(implicit ec: ExecutionContext) {
       (tool.schema, javaHandler)
     }
   }
+  */
 
-  def getAsyncToolsSpec(userId: String):
-  List[io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification] = {
+
+  def getAsyncToolsSpec(
+    userId: String
+  ): List[McpServerFeatures.AsyncToolSpecification] = {
     require(userId.nonEmpty, "userId cannot be empty")
     val userTools = getTools(userId)
     userTools.map { tool =>
-      io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification.builder()
-        .tool(tool.schema)
-        .callHandler(new java.util.function.BiFunction[
-          io.modelcontextprotocol.server.McpAsyncServerExchange,
-          io.modelcontextprotocol.spec.McpSchema.CallToolRequest,
-          reactor.core.publisher.Mono[io.modelcontextprotocol.spec.McpSchema.CallToolResult]
-        ] {
-          override def apply(
-            exchange: io.modelcontextprotocol.server.McpAsyncServerExchange,
-            req: io.modelcontextprotocol.spec.McpSchema.CallToolRequest
-          ): reactor.core.publisher.Mono[io.modelcontextprotocol.spec.McpSchema.CallToolResult] = {
-            tool.asyncHandler(exchange, req)
-          }
-        })
+      McpServerFeatures.AsyncToolSpecification.builder()
+        .tool(tool.getSchema())
+        .callHandler(tool.getAsyncHandler().asJava)
         .build()
     }
   }

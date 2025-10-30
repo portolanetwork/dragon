@@ -1,7 +1,7 @@
-package app.dragon.turnstile.examples
+package app.dragon.turnstile.server
 
 import org.apache.pekko.actor.typed.ActorSystem
-import org.apache.pekko.http.scaladsl.model.{ContentType, ContentTypes, HttpEntity, HttpResponse, StatusCode, headers}
+import org.apache.pekko.http.scaladsl.model.*
 import org.apache.pekko.stream.scaladsl.Source
 import org.apache.pekko.util.ByteString
 import org.slf4j.LoggerFactory
@@ -13,7 +13,7 @@ import reactor.core.publisher.Flux
 
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.{ExecutionContext, Future, Promise}
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 /**
  * Adapter that converts a Spring WebFlux ServerHttpResponse to a Pekko HttpResponse.

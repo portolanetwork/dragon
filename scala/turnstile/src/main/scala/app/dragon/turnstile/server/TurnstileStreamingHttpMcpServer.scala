@@ -1,26 +1,25 @@
-package app.dragon.turnstile.examples
+package app.dragon.turnstile.server
 
-import app.dragon.turnstile.examples.TurnstilMcpGateway.logger
+import app.dragon.turnstile.gateway.TurnstileMcpGateway.logger
 import app.dragon.turnstile.service.ToolsService
 import io.modelcontextprotocol.json.McpJsonMapper
-import io.modelcontextprotocol.server.{McpAsyncServer, McpServer}
 import io.modelcontextprotocol.server.transport.WebFluxStreamableServerTransportProvider
+import io.modelcontextprotocol.server.{McpAsyncServer, McpServer}
 import io.modelcontextprotocol.spec.McpSchema
 import org.apache.pekko.actor.typed.ActorSystem
-import org.apache.pekko.http.scaladsl.model.{ContentType, ContentTypes, HttpEntity, HttpRequest, HttpResponse, StatusCode, headers}
+import org.apache.pekko.http.scaladsl.model.*
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.apache.pekko.util.ByteString
 import org.slf4j.LoggerFactory
-import org.springframework.http.{HttpMethod, HttpHeaders as SpringHeaders}
 import org.springframework.http.server.reactive.{HttpHandler, ServerHttpRequest, ServerHttpResponse}
+import org.springframework.http.{HttpMethod, HttpHeaders as SpringHeaders}
 import org.springframework.web.reactive.function.server.RouterFunctions
 import reactor.core.publisher.Flux
-import scala.jdk.CollectionConverters._
-
 
 import java.net.{InetSocketAddress, URI}
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.jdk.CollectionConverters.*
 
 object TurnstileMcpServer {
   def apply(serverName: String, serverVersion: String, toolNamespace: String): TurnstileMcpServer =
@@ -51,6 +50,8 @@ class TurnstileMcpServer(
    * @return (McpAsyncServer, HttpHandler) tuple
    */
   def start(): TurnstileMcpServer = {
+    logger.info(s"Creating MCP server: $serverName v$serverVersion")
+
     val jsonMapper = McpJsonMapper.getDefault
 
     // Create WebFlux transport provider

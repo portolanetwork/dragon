@@ -20,14 +20,15 @@ object TableInserter {
   }
 
   /**
-   * Lists all MCP servers for a given user.
+   * Lists all MCP servers for a given tenant and user.
+   * @param tenant The tenant identifier
    * @param userId The user identifier
    * @param db The database instance
    * @param ec ExecutionContext
-   * @return Future[Seq[McpServerRow]] with all servers for the user
+   * @return Future[Seq[McpServerRow]] with all servers for the tenant and user
    */
-  def listMcpServers(userId: String)(implicit db: Database, ec: ExecutionContext): Future[Seq[McpServerRow]] = {
-    val query = Tables.mcpServers.filter(_.userId === userId).result
+  def listMcpServers(tenant: String, userId: String)(implicit db: Database, ec: ExecutionContext): Future[Seq[McpServerRow]] = {
+    val query = Tables.mcpServers.filter(s => s.tenant === tenant && s.userId === userId).result
     db.run(query)
   }
 }

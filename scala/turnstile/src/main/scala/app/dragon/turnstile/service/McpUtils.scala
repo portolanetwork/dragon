@@ -1,43 +1,16 @@
-package app.dragon.turnstile.service.tools
+package app.dragon.turnstile.service
 
-import app.dragon.turnstile.service.{McpTool, SyncToolHandler}
 import io.modelcontextprotocol.spec.McpSchema
-import org.slf4j.{Logger, LoggerFactory}
 
 import scala.jdk.CollectionConverters.*
 
 /**
- * Base trait for MCP tool providers.
+ * Utility methods for MCP tool implementations.
  *
- * Tool providers encapsulate the definition and implementation of individual MCP tools,
- * promoting separation of concerns and making tools independently testable and composable.
- *
- * Each tool provider should:
- * 1. Define the tool schema (name, description, input schema)
- * 2. Implement the handler logic
- * 3. Return an McpTool instance via the `tool` method
- *
- * Example:
- * {{{
- * class MyCustomTool extends McpToolProvider {
- *   override def tool: McpTool = {
- *     val schema = createToolSchema("my_tool", "Description")
- *     val handler: ToolHandler = (ctx, req) => createTextResult("Result")
- *     McpTool("my_tool", "Description", schema, handler)
- *   }
- * }
- * }}}
+ * This object provides common helper methods for creating schemas, results,
+ * and extracting arguments from MCP tool requests.
  */
-trait McpToolProvider {
-  /**
-   * Logger instance for the tool provider
-   */
-  protected val logger: Logger = LoggerFactory.getLogger(this.getClass)
-
-  /**
-   * Returns the MCP tool definition and handler
-   */
-  def tool: McpTool
+object McpUtils {
 
   /**
    * Helper to create JSON schema for object types
@@ -46,7 +19,7 @@ trait McpToolProvider {
    * @param required Sequence of required property names
    * @return JsonSchema instance
    */
-  protected def createObjectSchema(
+  def createObjectSchema(
     properties: Map[String, Map[String, String]] = Map.empty,
     required: Seq[String] = Seq.empty
   ): McpSchema.JsonSchema = {
@@ -71,7 +44,7 @@ trait McpToolProvider {
    * @param isError Whether this is an error result
    * @return CallToolResult instance
    */
-  protected def createTextResult(text: String, isError: Boolean = false): McpSchema.CallToolResult = {
+  def createTextResult(text: String, isError: Boolean = false): McpSchema.CallToolResult = {
     val content: java.util.List[McpSchema.Content] = List(
       new McpSchema.TextContent(text)
     ).asJava.asInstanceOf[java.util.List[McpSchema.Content]]
@@ -89,7 +62,7 @@ trait McpToolProvider {
    * @param description Tool description
    * @return Tool.Builder instance ready to have inputSchema set and build() called
    */
-  protected def createToolSchemaBuilder(name: String, description: String): McpSchema.Tool.Builder = {
+  def createToolSchemaBuilder(name: String, description: String): McpSchema.Tool.Builder = {
     McpSchema.Tool.builder()
       .name(name)
       .description(description)
@@ -103,7 +76,7 @@ trait McpToolProvider {
    * @param default Default value if argument is missing
    * @return The argument value or default
    */
-  protected def getStringArg(
+  def getStringArg(
     request: McpSchema.CallToolRequest,
     argName: String,
     default: String = ""
@@ -122,7 +95,7 @@ trait McpToolProvider {
    * @param default Default value if argument is missing or invalid
    * @return The argument value or default
    */
-  protected def getIntArg(
+  def getIntArg(
     request: McpSchema.CallToolRequest,
     argName: String,
     default: Int = 0
@@ -141,7 +114,7 @@ trait McpToolProvider {
    * @param default Default value if argument is missing or invalid
    * @return The argument value or default
    */
-  protected def getBooleanArg(
+  def getBooleanArg(
     request: McpSchema.CallToolRequest,
     argName: String,
     default: Boolean = false

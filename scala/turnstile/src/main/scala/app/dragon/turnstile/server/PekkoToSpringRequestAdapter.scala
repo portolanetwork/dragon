@@ -1,12 +1,12 @@
-package app.dragon.turnstile.examples
+package app.dragon.turnstile.server
 
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.http.scaladsl.model.{ContentTypes, HttpEntity, HttpRequest}
 import org.apache.pekko.stream.scaladsl.Sink
 import org.slf4j.LoggerFactory
+import org.springframework.http.server.reactive.ServerHttpRequest
 import org.springframework.http.HttpHeaders as SpringHeaders
 import org.springframework.http.{HttpMethod, HttpHeaders as SpringHeaders}
-import org.springframework.http.server.reactive.ServerHttpRequest
 import reactor.core.publisher.Flux
 
 import java.net.{InetSocketAddress, URI}
