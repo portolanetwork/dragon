@@ -1,5 +1,6 @@
 package app.dragon.turnstile.actor
 
+import app.dragon.turnstile.actor.McpClientActor.McpListTools
 import app.dragon.turnstile.server.{PekkoToSpringRequestAdapter, SpringToPekkoResponseAdapter, TurnstileStreamingHttpMcpServer}
 import com.google.rpc.context.AttributeContext.Response
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
@@ -38,9 +39,20 @@ object McpServerActor {
     s"$userId-$chatId"
 
   sealed trait Message extends TurnstileSerializable
-  final case class McpGetRequest(request: HttpRequest, replyTo: ActorRef[Either[McpActorError, HttpResponse]]) extends Message
-  final case class McpPostRequest(request: HttpRequest, replyTo: ActorRef[Either[McpActorError, HttpResponse]]) extends Message
-  final case class McpDeleteRequest(request: HttpRequest, replyTo: ActorRef[Either[McpActorError, HttpResponse]]) extends Message
+  final case class McpGetRequest(
+    request: HttpRequest, 
+    replyTo: ActorRef[Either[McpActorError, HttpResponse]]) 
+    extends Message
+  
+  final case class McpPostRequest(
+    request: HttpRequest, 
+    replyTo: ActorRef[Either[McpActorError, HttpResponse]]) 
+    extends Message
+  
+  final case class McpDeleteRequest(
+    request: HttpRequest, 
+    replyTo: ActorRef[Either[McpActorError, HttpResponse]]) 
+    extends Message
 
   // Remove WrappedGetResponse, use only WrappedHttpResponse for all handlers
   private final case class WrappedHttpResponse(
@@ -56,7 +68,7 @@ object McpServerActor {
       Behaviors.setup { context =>
         implicit val system: ActorSystem[Nothing] = context.system
         // Fix: instantiate the class with 'new' instead of as a function
-        val turnstileMcpServer = TurnstileStreamingHttpMcpServer()
+        val turnstileMcpServer = TurnstileStreamingHttpMcpServer().start()
 
         new McpServerActor(context, buffer, userId, mcpActorId).activeState(turnstileMcpServer)
       }
@@ -84,6 +96,11 @@ class McpServerActor(
         .orElse(handleMcpPostRequest(turnstileMcpServer))
         .orElse(handleMcpDeleteRequest(turnstileMcpServer))
         .orElse(handleWrappedHttpResponse())
+    }.receiveSignal {
+      case (_, org.apache.pekko.actor.typed.PostStop) =>
+        context.log.info(s"Stopping MCP server for actor $mcpActorId on PostStop")
+        turnstileMcpServer.stop()
+        Behaviors.same
     }
   }
 
@@ -104,6 +121,10 @@ class McpServerActor(
   ): PartialFunction[Message, Behavior[Message]] = {
     case McpPostRequest(request, replyTo) =>
       context.log.info(s"Handling MCP POST request for user $userId, actor $mcpActorId")
+
+      // Provide the ClusterSharding instance explicitly to satisfy the implicit parameter
+      ActorLookup.getMcpClientActor("client-actor")(ClusterSharding(context.system)) ! McpListTools(context.system.ignoreRef)
+
       context.pipeToSelf(handlePekkoRequest(request, turnstileMcpServer)) {
         case scala.util.Success(response) => WrappedHttpResponse(scala.util.Success(response), replyTo)
         case scala.util.Failure(exception) => WrappedHttpResponse(scala.util.Failure(exception), replyTo)
@@ -140,14 +161,16 @@ class McpServerActor(
   ): Future[HttpResponse] = {
     val springRequest = PekkoToSpringRequestAdapter(request)
     val springResponse = SpringToPekkoResponseAdapter()
-    // Call the WebFlux handler (returns a Mono[Void])
-    val handlerMono = turnstileMcpServer.getHttpHandler.handle(springRequest, springResponse)
-    // Convert Mono[Void] to Scala Future[HttpResponse]
-    //handlerMono.toFuture.asScala.flatMap(_ => springResponse.getPekkoResponse())
-    handlerMono
-      .subscribeOn(Schedulers.boundedElastic())
-      .toFuture.asScala.flatMap { _ =>
-      springResponse.getPekkoResponse()
+    turnstileMcpServer.getHttpHandler match {
+      case Some(handler) =>
+        val handlerMono = handler.handle(springRequest, springResponse)
+        handlerMono
+          .subscribeOn(Schedulers.boundedElastic())
+          .toFuture.asScala.flatMap { _ =>
+            springResponse.getPekkoResponse()
+          }
+      case None =>
+        Future.failed(new IllegalStateException("HttpHandler is not initialized in TurnstileStreamingHttpMcpServer"))
     }
   }
 }

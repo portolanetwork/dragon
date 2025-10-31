@@ -160,7 +160,7 @@ class TurnstileMcpGateway(config: Config)(implicit system: ActorSystem[?]) {
       extractRequest { pekkoRequest =>
         onSuccess(sessionMap.lookup(pekkoRequest)) { routeResult =>
           val mcpActorId = routeResult.mcpActorId
-          val entityRef = ActorLookup.getMcpActor(mcpActorId)
+          val entityRef = ActorLookup.getMcpServerActor(mcpActorId)
           val askFuture = pekkoRequest.method.value match {
             case "GET" =>
               entityRef.ask[Either[McpServerActor.McpActorError, HttpResponse]](replyTo => {

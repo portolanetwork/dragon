@@ -23,13 +23,13 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.jdk.CollectionConverters.*
 
 object TurnstileStreamingHttpMcpServer {
-  val logger = LoggerFactory.getLogger(classOf[TurnstileStreamingHttpMcpServer])
+  val logger: org.slf4j.Logger = LoggerFactory.getLogger(classOf[TurnstileStreamingHttpMcpServer])
   
-  val serverName = ApplicationConfig.mcpStreaming.getString("server-name")
-  val serverVersion = ApplicationConfig.mcpStreaming.getString("server-version")
+  val serverName: String = ApplicationConfig.mcpStreaming.getString("server-name")
+  val serverVersion: String = ApplicationConfig.mcpStreaming.getString("server-version")
   
   def apply(): TurnstileStreamingHttpMcpServer =
-    new TurnstileStreamingHttpMcpServer(serverName, serverVersion, "default").start()
+    new TurnstileStreamingHttpMcpServer(serverName, serverVersion, "default")
 }
 
 class TurnstileStreamingHttpMcpServer(
@@ -37,18 +37,24 @@ class TurnstileStreamingHttpMcpServer(
   val serverVersion: String,
   val toolNamespace: String
 ) {
-  private val logger = LoggerFactory.getLogger(classOf[TurnstileStreamingHttpMcpServer])
+  private val logger: org.slf4j.Logger = LoggerFactory.getLogger(classOf[TurnstileStreamingHttpMcpServer])
   
   // These are set in start()
-  private var mcpAsyncServer: McpAsyncServer = null
-  private var httpHandler: HttpHandler = null
+  private var mcpAsyncServer: Option[McpAsyncServer] = None
+  private var httpHandler: Option[HttpHandler] = None
+  private var started: Boolean = false // Track if the server has been started
 
   /**
    * Create an MCP server instance with its HttpHandler.
    *
    * @return (McpAsyncServer, HttpHandler) tuple
    */
-  private def start(): TurnstileStreamingHttpMcpServer = {
+  def start(): TurnstileStreamingHttpMcpServer = {
+    if (started) {
+      logger.warn(s"MCP server: $serverName v$serverVersion already started; ignoring duplicate start.")
+      return this
+    }
+    started = true
     logger.info(s"Creating MCP server: $serverName v$serverVersion")
 
     val jsonMapper = McpJsonMapper.getDefault
@@ -82,18 +88,26 @@ class TurnstileStreamingHttpMcpServer(
     }
 
     // Get HttpHandler from transport provider
-    val routerFunction = transportProvider.getRouterFunction()
+    val routerFunction = transportProvider.getRouterFunction
     val httpHandler = RouterFunctions.toHttpHandler(routerFunction)
 
     logger.info(s"✓ Created MCP server: $serverName v$serverVersion")
     
-    this.mcpAsyncServer = mcpServer
-    this.httpHandler = httpHandler
+    this.mcpAsyncServer = Some(mcpServer)
+    this.httpHandler = Some(httpHandler)
     //(mcpServer, httpHandler)
     
     this
   }
   
-  def getMcpAsyncServer: McpAsyncServer = mcpAsyncServer
-  def getHttpHandler: HttpHandler = httpHandler
+  def stop(): Unit = {
+    mcpAsyncServer.foreach { server =>
+      logger.info(s"Stopping MCP server: $serverName v$serverVersion")
+      server.close()
+      logger.info(s"✓ Stopped MCP server: $serverName v$serverVersion")
+    }
+  }
+  
+  def getMcpAsyncServer: Option[McpAsyncServer] = mcpAsyncServer
+  def getHttpHandler: Option[HttpHandler] = httpHandler
 }

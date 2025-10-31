@@ -1,5 +1,7 @@
 package app.dragon.turnstile.service.tools
 
+import app.dragon.turnstile.actor.ActorLookup
+import app.dragon.turnstile.actor.McpClientActor.McpListTools
 import app.dragon.turnstile.service.{AsyncToolHandler, McpTool, SyncToolHandler}
 import app.dragon.turnstile.service.McpUtils
 import io.modelcontextprotocol.server.McpAsyncServerExchange
@@ -54,6 +56,7 @@ class EchoTool(name: String) extends McpTool {
     (exchange, request) => {
       val message = McpUtils.getStringArg(request, "message")
       logger.debug(s"Echo tool called with message: $message")
+      
       Mono.just(McpUtils.createTextResult(s"Echo: $message"))
     }
   }

@@ -1,28 +1,22 @@
 package app.dragon.turnstile.example
 
-import io.modelcontextprotocol.client.{McpAsyncClient, McpClient}
-import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport
+import app.dragon.turnstile.client.TurnstileStreamingHttpAsyncMcpClient
 import io.modelcontextprotocol.spec.McpSchema
 import org.slf4j.{Logger, LoggerFactory}
-import reactor.core.publisher.Mono
 
-import java.net.http.HttpRequest
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 import scala.util.{Failure, Success}
 
 /**
- * Comprehensive example demonstrating the official MCP Java SDK's McpAsyncClient with HTTP streaming transport.
+ * Example demonstrating the TurnstileStreamingHttpAsyncMcpClient wrapper for testing streaming server.
  *
  * This example shows:
- * - Creating a client with the official HttpClientStreamableHttpTransport
- * - Using McpClient.async() factory method for client creation
- * - Custom request headers via HttpRequest.Builder
- * - Reactive change handlers for tools, resources, and prompts using Function<T, Mono<Void>>
- * - Logging and progress notification handlers
+ * - Using TurnstileStreamingHttpAsyncMcpClient wrapper (instead of directly creating McpAsyncClient)
+ * - Simplified client creation using the Turnstile wrapper API
+ * - All progress notifications, logging, and change handlers configured automatically
  * - TRUE STREAMING: Testing actor_tool with real 2-second delays and progress notifications
  * - Proper lifecycle management with graceful shutdown
- * - Converting Reactor Mono results to Scala Futures
  *
  * When actor_tool is available, this example demonstrates:
  * - Progress notifications arriving in real-time via progressConsumer
@@ -34,10 +28,10 @@ import scala.util.{Failure, Success}
  * Usage:
  * {{{
  * # Test against local server (includes actor_tool for streaming demo)
- * sbt "runMain app.dragon.turnstile.example.StreamableHttpAsyncClientExample http://localhost:8082"
+ * sbt "runMain app.dragon.turnstile.example.TurnstileClientExample http://localhost:8082"
  *
  * # With custom endpoint
- * sbt "runMain app.dragon.turnstile.example.StreamableHttpAsyncClientExample http://localhost:8082 /mcp"
+ * sbt "runMain app.dragon.turnstile.example.TurnstileClientExample http://localhost:8082 /mcp"
  * }}}
  *
  * Expected Output (with actor_tool):
@@ -50,48 +44,32 @@ import scala.util.{Failure, Success}
  * TOOL CALL COMPLETED (took 6.0s, expected ~6 seconds)
  * }}}
  */
-object StreamableHttpAsyncClientExample {
+object TurnstileClientExample {
 
   private val logger: Logger = LoggerFactory.getLogger(getClass)
 
   implicit val ec: ExecutionContext = ExecutionContext.global
 
-  /**
-   * Convert Reactor Mono to Scala Future.
-   * This bridges the gap between the reactive Java API and Scala's Future-based API.
-   */
-  private def monoToFuture[T](mono: Mono[T]): Future[T] = {
-    val promise = Promise[T]()
-    mono.subscribe(
-      value => promise.success(value),
-      error => promise.failure(error)
-    )
-    promise.future
-  }
-
   def main(args: Array[String]): Unit = {
     // Parse arguments
-    //val serverUrl = args.headOption.getOrElse("https://demo-day.mcp.cloudflare.com/") // SSE only
-    //val serverUrl = args.headOption.getOrElse("https://localhost:8083/")
+    //val serverUrl = args.headOption.getOrElse("http://localhost:8082")
     val serverUrl = args.headOption.getOrElse("https://mcp.deepwiki.com/mcp")
-    //val serverUrl = args.headOption.getOrElse("http://localhost:8082/mcp")
     val endpoint = args.lift(1).getOrElse("/mcp")
-    //val endpoint = args.lift(1).getOrElse("/sse") // des not support sse transport
 
     logger.info("=" * 80)
-    logger.info("Official MCP Java SDK - McpAsyncClient with HTTP Streaming")
+    logger.info("TurnstileStreamingHttpAsyncMcpClient - Streaming Server Test")
     logger.info("=" * 80)
     logger.info(s"Server URL: $serverUrl")
     logger.info(s"Endpoint: $endpoint")
     logger.info("")
 
-    // Create the client
-    val client = createClient(serverUrl, endpoint)
+    // Create the client using TurnstileStreamingHttpAsyncMcpClient
+    val client = TurnstileStreamingHttpAsyncMcpClient(serverUrl, endpoint)
 
-    // Execute the workflow - convert Reactor Mono to Scala Future
+    // Execute the workflow
     val workflow: Future[Unit] = for {
       // 1. Initialize the connection
-      initResult <- monoToFuture(client.initialize()).recoverWith {
+      initResult <- client.initialize().recoverWith {
         case e: Exception =>
           logger.error("Failed to initialize client:", e)
           logger.error(s"Server URL: $serverUrl, Endpoint: $endpoint")
@@ -99,16 +77,15 @@ object StreamableHttpAsyncClientExample {
       }
       _ = logInitialization(initResult)
 
-
       // 2. List and display tools
-      toolsResult <- monoToFuture(client.listTools())
+      toolsResult <- client.listTools()
       _ = logTools(toolsResult.tools().asScala.toList)
 
       // 3. Call a tool if available
       _ <- callToolIfAvailable(client, toolsResult.tools().asScala.toList)
 
       // 4. List and display resources
-      resources <- monoToFuture(client.listResources())
+      resources <- client.listResources()
         .map(_.resources().asScala.toList)
         .recover {
           case e: Exception =>
@@ -118,7 +95,7 @@ object StreamableHttpAsyncClientExample {
       _ = logResources(resources)
 
       // 5. List and display prompts
-      prompts <- monoToFuture(client.listPrompts())
+      prompts <- client.listPrompts()
         .map(_.prompts().asScala.toList)
         .recover {
           case e: Exception =>
@@ -128,7 +105,7 @@ object StreamableHttpAsyncClientExample {
       _ = logPrompts(prompts)
 
       // 6. Demonstrate ping
-      _ <- monoToFuture(client.ping())
+      _ <- client.ping()
       _ = logger.info("✓ Ping successful")
 
     } yield ()
@@ -140,7 +117,7 @@ object StreamableHttpAsyncClientExample {
         logger.info("=" * 80)
         logger.info("✓ Workflow completed successfully")
         logger.info("=" * 80)
-        monoToFuture(client.closeGracefully()).onComplete { _ =>
+        client.closeGracefully().onComplete { _ =>
           logger.info("✓ Client closed gracefully")
           System.exit(0)
         }
@@ -156,96 +133,6 @@ object StreamableHttpAsyncClientExample {
 
     // Keep the application running
     Thread.sleep(60000) // Wait up to 60 seconds for async operations
-  }
-
-  /**
-   * Create a client using the official MCP Java SDK with HttpClientStreamableHttpTransport.
-   *
-   * This demonstrates:
-   * - Building HttpClientStreamableHttpTransport with custom configuration
-   * - Using McpClient.async() factory method
-   * - Adding reactive change handlers using Function<T, Mono<Void>>
-   * - Custom HTTP headers via HttpRequest.Builder
-   * - Logging and progress handlers
-   */
-  private def createClient(serverUrl: String, endpoint: String): McpAsyncClient = {
-    logger.info("Creating McpAsyncClient with HttpClientStreamableHttpTransport...")
-
-    // Custom request builder with static headers
-    val requestBuilder = HttpRequest.newBuilder()
-      .header("X-Client-Type", "scala-example")
-      .header("X-Client-Feature", "official-mcp-sdk")
-      .header("Content-Type", "application/json")
-      .header("Accept", "application/json,text/event-stream")
-      .header("User-Agent", "Turnstile-MCP-Client/1.0.0")
-
-    // Build the HTTP streaming transport
-    val transport = HttpClientStreamableHttpTransport.builder(serverUrl)
-      .endpoint(endpoint)
-      //.requestBuilder(requestBuilder)
-      .connectTimeout(java.time.Duration.ofSeconds(10))
-      .resumableStreams(true)
-      .build()
-
-    // Build the async client using the official McpClient factory
-    McpClient.async(transport)
-      .requestTimeout(java.time.Duration.ofSeconds(30))
-      .initializationTimeout(java.time.Duration.ofSeconds(15))
-      .clientInfo(new McpSchema.Implementation("turnstile-scala-example", "1.0.0"))
-      .toolsChangeConsumer(tools =>
-        Mono.fromRunnable(() =>
-          logger.info(s"[NOTIFICATION] Tools changed: ${tools.asScala.map(_.name()).mkString(", ")}")
-        )
-      )
-      .resourcesChangeConsumer(resources =>
-        Mono.fromRunnable(() =>
-          logger.info(s"[NOTIFICATION] Resources changed: ${resources.asScala.map(_.uri()).mkString(", ")}")
-        )
-      )
-      .promptsChangeConsumer(prompts =>
-        Mono.fromRunnable(() =>
-          logger.info(s"[NOTIFICATION] Prompts changed: ${prompts.asScala.map(_.name()).mkString(", ")}")
-        )
-      )
-      .loggingConsumer(notification =>
-        Mono.fromRunnable(() => {
-          val level = notification.level()
-          val data = notification.data()
-          logger.info(s"[SERVER LOG - $level] $data")
-        })
-      )
-      .progressConsumer(notification =>
-        Mono.fromRunnable(() => {
-          val timestamp = formatTimestamp(System.currentTimeMillis())
-          val progress = notification.progress()
-          val total = notification.total()
-          val progressStr = if (total != null) s"$progress / $total" else s"$progress"
-          val percentage = if (total != null && total.doubleValue() > 0) {
-            f"${(progress.doubleValue() / total.doubleValue()) * 100}%.0f%%"
-          } else {
-            ""
-          }
-          val message = if (notification.message() != null) s" - ${notification.message()}" else ""
-
-          // Extract correlation metadata if present
-          val meta = notification.meta()
-          val correlationInfo = if (meta != null && !meta.isEmpty) {
-            val parts = List(
-              Option(meta.get("toolName")).map(v => s"tool=$v"),
-              Option(meta.get("iteration")).map(v => s"iter=$v"),
-              Option(meta.get("elapsedSeconds"))
-                .map(_.asInstanceOf[Double])
-                .map(v => f"elapsed=$v%.1fs")
-            ).flatten
-            if (parts.nonEmpty) s" [${parts.mkString(", ")}]" else ""
-          } else {
-            ""
-          }
-
-          logger.info(s"[$timestamp] [PROGRESS] ${notification.progressToken()}: $progressStr $percentage$message$correlationInfo")
-        })
-      )
-      .build()
   }
 
   /**
@@ -359,7 +246,7 @@ object StreamableHttpAsyncClientExample {
    * Demonstrates streaming with actor_tool which sends progress notifications.
    */
   private def callToolIfAvailable(
-      client: McpAsyncClient,
+      client: TurnstileStreamingHttpAsyncMcpClient,
       tools: List[McpSchema.Tool]
   ): Future[Unit] = {
     if (tools.isEmpty) {
@@ -386,24 +273,24 @@ object StreamableHttpAsyncClientExample {
         logger.info("Watch for [PROGRESS] messages below!")
         logger.info("")
         (java.util.Map.of(
-          "message", "Testing streaming from client",
+          "message", "Testing streaming from TurnstileClient",
           "count", Integer.valueOf(3)
         ), "~6 seconds")
 
       case "echo" =>
-        (java.util.Map.of("message", "Hello from Official MCP Java SDK!"), "instant")
+        (java.util.Map.of("message", "Hello from TurnstileStreamingHttpAsyncMcpClient!"), "instant")
 
       case _ =>
         (java.util.Collections.emptyMap[String, Object](), "unknown")
     }
-  
+
     val callToolRequest = new McpSchema.CallToolRequest(toolToCall.name(), arguments)
 
     val startTime = System.currentTimeMillis()
     logger.info(s"[${formatTimestamp(startTime)}] Starting tool call...")
     logger.info("")
 
-    monoToFuture(client.callTool(callToolRequest)).map { result =>
+    client.callTool(callToolRequest).map { result =>
       val endTime = System.currentTimeMillis()
       val elapsed = (endTime - startTime) / 1000.0
 
