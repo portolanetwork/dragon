@@ -11,6 +11,7 @@ import org.apache.pekko.util.Timeout
 import org.slf4j.LoggerFactory
 import org.springframework.http.server.reactive.HttpHandler
 import org.springframework.web.reactive.function.server.RouterFunctions
+import slick.jdbc.JdbcBackend.Database
 
 import scala.concurrent.duration.*
 import scala.concurrent.{ExecutionContext, Future}
@@ -34,6 +35,9 @@ class TurnstileStreamingHttpMcpServer(
   // Execution context derived from the provided actor system
   private implicit val ec: ExecutionContext = system.executionContext
   private implicit val timeout: Timeout = 30.seconds
+
+  // Provide an implicit Database for DbInterface calls
+  private implicit val db: Database = Database.forConfig("", ApplicationConfig.dbConfig)
 
   // These are set in start()
   private var mcpAsyncServer: Option[McpAsyncServer] = None
@@ -95,7 +99,8 @@ class TurnstileStreamingHttpMcpServer(
 
   def refreshDownstreamTools(): Future[Unit] = {
     ToolsService.getInstance(userId)
-      .getDownstreamToolsSpec("downstream-server").map {
+      .getAllDownstreamToolsSpec()
+      .map {
         case Right(toolSpecs) =>
           logger.info(s"[$serverName] Refreshing ${toolSpecs.size} namespaced tools")
           toolSpecs.foreach { toolSpec =>

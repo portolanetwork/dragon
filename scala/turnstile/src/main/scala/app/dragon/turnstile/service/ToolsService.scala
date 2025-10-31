@@ -1,6 +1,7 @@
 package app.dragon.turnstile.service
 
 import app.dragon.turnstile.actor.{ActorLookup, McpClientActor}
+import app.dragon.turnstile.db.DbInterface
 import app.dragon.turnstile.service.tools.{EchoTool, NamespacedTool, StreamingDemoTool, SystemInfoTool}
 import io.modelcontextprotocol.common.McpTransportContext
 import io.modelcontextprotocol.server.{McpAsyncServerExchange, McpServerFeatures}
@@ -9,6 +10,7 @@ import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
 import org.apache.pekko.util.Timeout
 import org.slf4j.{Logger, LoggerFactory}
+import slick.jdbc.JdbcBackend.Database
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.concurrent.duration.*
@@ -19,8 +21,8 @@ import scala.jdk.FunctionConverters.enrichAsJavaBiFunction
 /**
  * Type alias for MCP tool handler functions
  */
-type SyncToolHandler = (McpTransportContext, McpSchema.CallToolRequest) => McpSchema.CallToolResult
-type AsyncToolHandler = (McpAsyncServerExchange, McpSchema.CallToolRequest) => reactor.core.publisher.Mono[McpSchema.CallToolResult]
+ type SyncToolHandler = (McpTransportContext, McpSchema.CallToolRequest) => McpSchema.CallToolResult
+ type AsyncToolHandler = (McpAsyncServerExchange, McpSchema.CallToolRequest) => reactor.core.publisher.Mono[McpSchema.CallToolResult]
 
 /**
  * Service for managing MCP tools.
@@ -88,6 +90,41 @@ class ToolsService(
     defaultTools
   }
 
+  def getDefaultToolsSpec: List[McpServerFeatures.AsyncToolSpecification] = {
+    val defaultTools = getDefaultTools
+    convertToAsyncToolSpec(defaultTools)
+  }
+
+  def getAllDownstreamToolsSpec(
+    tenant: String = "default"
+  )(implicit
+    system: ActorSystem[?],
+    timeout: Timeout = 30.seconds,
+    db: Database
+  ): Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]] = {
+
+    logger.info(s"Fetching all downstream tools for user=$userId, tenant=$tenant")
+
+    // Fetch all MCP servers for this user from the database and fetch tools for each
+    DbInterface.listMcpServers(tenant, userId).flatMap { servers =>
+      logger.info(s"Found ${servers.size} MCP servers for user=$userId, fetching tools from each")
+
+      // Sequence per-server futures and collect successful tool specs
+      val toolsFutures: Seq[Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]]] =
+        servers.map(server => getDownstreamToolsSpec(server.uuid, server.name))
+
+      Future.sequence(toolsFutures).map { results =>
+        val allTools = results.collect { case Right(tools) => tools }.flatten.toList
+        logger.info(s"Successfully fetched ${allTools.size} total tools from ${servers.size} MCP servers for user=$userId")
+        Right(allTools)
+      }
+    }.recover {
+      case ex: Exception =>
+        logger.error(s"Failed to fetch MCP servers from database for user=$userId, tenant=$tenant", ex)
+        Left(McpClientActor.ProcessingError(s"Database error: ${ex.getMessage}"))
+    }
+  }
+
   /**
    * Get namespaced tools from an MCP client actor.
    *
@@ -100,7 +137,8 @@ class ToolsService(
    * @return A Future containing either an error or a list of namespaced tools
    */
   private[service] def getDownstreamTools(
-    mcpServerUuid: String
+    mcpServerUuid: String,
+    mcpServerName: String,
   )(implicit
     system: ActorSystem[?],
     timeout: Timeout = 30.seconds
@@ -111,20 +149,27 @@ class ToolsService(
     
     logger.info(s"Fetching namespaced tools from MCP client actor: $mcpServerUuid for user=$userId")
 
-    // Get the MCP client actor reference
-    val clientActor = ActorLookup.getMcpClientActor(userId, mcpServerUuid)
-
     // Query the actor for its tools
-    clientActor.ask[Either[McpClientActor.McpClientError, McpSchema.ListToolsResult]](
+    ActorLookup.getMcpClientActor(userId, mcpServerUuid).ask[Either[McpClientActor.McpClientError, McpSchema.ListToolsResult]](
       replyTo => McpClientActor.McpListTools(replyTo)
     ).map {
       case Right(listResult) =>
         val tools = listResult.tools().asScala.toList
+
         logger.info(s"Received ${tools.size} tools from MCP client actor $mcpServerUuid for user=$userId")
 
         // Convert each tool schema to a NamespacedTool
-        val downstreamTools = tools.map { toolSchema =>
-          NamespacedTool(toolSchema, mcpServerUuid)
+        val downstreamTools = tools.map { downstreamToolSchema =>
+          val turnstileToolSchema = McpSchema.Tool.builder()
+            .name(s"${mcpServerName}.${downstreamToolSchema.name()}")
+            //.name(toolSchema.name())
+            .description(downstreamToolSchema.description())
+            .inputSchema(downstreamToolSchema.inputSchema())
+            .outputSchema(downstreamToolSchema.outputSchema())
+            .annotations(downstreamToolSchema.annotations())
+            .build()
+
+          NamespacedTool(turnstileToolSchema, downstreamToolSchema, userId, mcpServerUuid)
         }
 
         Right(downstreamTools)
@@ -135,65 +180,16 @@ class ToolsService(
     }
   }
 
-  def getDefaultToolsSpec: List[McpServerFeatures.AsyncToolSpecification] = {
-    val defaultTools = getDefaultTools
-    convertToAsyncToolSpec(defaultTools)
-  }
-
-  def getAllDownstreamToolsSpec(
-    tenant: String = "default"
-  )(implicit
-    system: ActorSystem[?],
-    timeout: Timeout = 30.seconds,
-    db: slick.jdbc.JdbcBackend.Database
-  ): Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]] = {
-    import app.dragon.turnstile.db.TableInserter
-
-    logger.info(s"Fetching all downstream tools for user=$userId, tenant=$tenant")
-
-    // Fetch all MCP servers for this user from the database
-    val serversFuture = TableInserter.listMcpServers(tenant, userId)
-
-    serversFuture.flatMap { servers =>
-      if (servers.isEmpty) {
-        logger.info(s"No MCP servers found for user=$userId, tenant=$tenant")
-        Future.successful(Right(List.empty))
-      } else {
-        logger.info(s"Found ${servers.size} MCP servers for user=$userId, fetching tools from each")
-
-        // For each server, fetch its tools
-        val toolsFutures: Seq[Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]]] =
-          servers.map { server =>
-            getDownstreamToolsSpec(server.uuid)
-          }
-
-        // Wait for all futures to complete
-        Future.sequence(toolsFutures).map { results =>
-          // Collect all successful tool specs
-          val allTools = results.collect {
-            case Right(tools) => tools
-          }.flatten.toList
-
-          logger.info(s"Successfully fetched ${allTools.size} total tools from ${servers.size} MCP servers for user=$userId")
-          Right(allTools)
-        }
-      }
-    }.recover {
-      case ex: Exception =>
-        logger.error(s"Failed to fetch MCP servers from database for user=$userId, tenant=$tenant", ex)
-        Left(McpClientActor.ProcessingError(s"Database error: ${ex.getMessage}"))
-    }
-  }
-
-  def getDownstreamToolsSpec(
-    mcpServerUuid: String
+  private def getDownstreamToolsSpec(
+    mcpServerUuid: String,
+    mcpServerName: String
   )(implicit
     system: ActorSystem[?],
     timeout: Timeout = 30.seconds
   ): Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]] = {
     require(mcpServerUuid.nonEmpty, "mcpClientActorId cannot be empty")
 
-    getDownstreamTools(mcpServerUuid).map {
+    getDownstreamTools(mcpServerUuid, mcpServerName).map {
       case Right(tools) =>
         val toolSpecs = convertToAsyncToolSpec(tools)
         Right(toolSpecs)
@@ -212,6 +208,9 @@ class ToolsService(
     tools: List[McpTool]
   ): List[McpServerFeatures.AsyncToolSpecification] = {
     tools.map { tool =>
+      // Log schema
+      logger.debug(s"---------------------- Converting tool to AsyncToolSpecification: ${tool.getName()} with schema: ${tool.getSchema()}")
+
       McpServerFeatures.AsyncToolSpecification.builder()
         .tool(tool.getSchema())
         .callHandler(tool.getAsyncHandler().asJava)

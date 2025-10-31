@@ -6,7 +6,10 @@ import app.dragon.turnstile.db.TurnstilePostgresProfile.api._
 import app.dragon.turnstile.db.Tables
 import app.dragon.turnstile.db.McpServerRow
 
-object TableInserter {
+import com.typesafe.config.Config
+import java.util.concurrent.ConcurrentHashMap
+
+object DbInterface {
   /**
    * Inserts a McpServerRow and returns the inserted row with the generated ID.
    * @param row The McpServerRow to insert
@@ -32,4 +35,3 @@ object TableInserter {
     db.run(query)
   }
 }
-

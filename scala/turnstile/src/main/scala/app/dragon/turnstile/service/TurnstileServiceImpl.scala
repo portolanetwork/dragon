@@ -1,15 +1,15 @@
 package app.dragon.turnstile.service
 
-import dragon.turnstile.api.v1.{CreateMcpServerRequest, ListMcpServersRequest, McpServer, McpServerList, TurnstileService}
+import app.dragon.turnstile.db.{DbInterface, McpServerRow}
+import app.dragon.turnstile.utils.ServiceValidationUtil.*
+import dragon.turnstile.api.v1.*
 import org.apache.pekko.actor.typed.ActorSystem
 import org.slf4j.{Logger, LoggerFactory}
-import app.dragon.turnstile.db.{McpServerRow, TableInserter}
 import slick.jdbc.JdbcBackend.Database
-import java.sql.Timestamp
 
+import java.sql.Timestamp
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
-import app.dragon.turnstile.utils.ServiceValidationUtil._
 
 /**
  * Companion object for TurnstileServiceImpl.
@@ -45,11 +45,11 @@ class TurnstileServiceImpl(system: ActorSystem[_])(implicit db: Database) extend
     for {
       _ <- validateNotEmpty(request.name, "name")
       _ <- validateNotEmpty(request.url, "url")
-      insertedRow <- TableInserter.insertMcpServer(McpServerRow(
+      insertedRow <- DbInterface.insertMcpServer(McpServerRow(
           id = 0L,
           uuid = UUID.nameUUIDFromBytes(s"${request.name}:${request.url}".getBytes("UTF-8")).toString,
           tenant = "default", // TODO: Replace with actual tenant id from auth context
-          userId = "default", // TODO: Replace with actual user id from auth context
+          userId = "changeThisToUserId", // TODO: Replace with actual user id from auth context
           name = request.name,
           url = request.url,
           clientId = None,
@@ -81,7 +81,7 @@ class TurnstileServiceImpl(system: ActorSystem[_])(implicit db: Database) extend
     for {
       _ <- validateNotEmpty(request.userId, "userId")
       // TODO: Replace "default" with actual tenant from auth context
-      rows <- TableInserter.listMcpServers(tenant = "default", userId = request.userId)
+      rows <- DbInterface.listMcpServers(tenant = "default", userId = request.userId)
     } yield {
       val servers = rows.map(row => McpServer(
         uuid = row.uuid,

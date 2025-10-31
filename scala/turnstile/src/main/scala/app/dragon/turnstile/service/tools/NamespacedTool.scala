@@ -1,8 +1,7 @@
 package app.dragon.turnstile.service.tools
 
 import app.dragon.turnstile.actor.{ActorLookup, McpClientActor}
-import app.dragon.turnstile.service.{AsyncToolHandler, McpTool}
-import io.modelcontextprotocol.server.McpAsyncServerExchange
+import app.dragon.turnstile.service.{AsyncToolHandler, McpTool, McpUtils}
 import io.modelcontextprotocol.spec.McpSchema
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
@@ -10,7 +9,6 @@ import org.apache.pekko.util.Timeout
 import reactor.core.publisher.Mono
 
 import scala.concurrent.duration.*
-import scala.jdk.CollectionConverters.*
 import scala.jdk.FutureConverters.*
 
 /**
@@ -19,32 +17,40 @@ import scala.jdk.FutureConverters.*
  * This tool forwards calls to a specific MCP client actor, allowing
  * the Turnstile server to proxy tools from remote MCP servers.
  *
- * @param toolSchema The tool schema from the remote MCP server
- * @param mcpClientActorId The ID of the MCP client actor to forward calls to
+ * @param fromSchema The tool schema from the remote MCP server
+ * @param mcpServerUuid The ID of the MCP client actor to forward calls to
  * @param system The actor system (implicit)
  */
 class NamespacedTool(
-  toolSchema: McpSchema.Tool,
-  mcpClientActorId: String
+  fromSchema: McpSchema.Tool,
+  toSchema: McpSchema.Tool,
+  userId: String,
+  mcpServerUuid: String
 )(implicit system: ActorSystem[?]) extends McpTool {
 
   implicit val timeout: Timeout = 30.seconds
   implicit val sharding: ClusterSharding = ClusterSharding(system)
   implicit val ec: scala.concurrent.ExecutionContext = system.executionContext
 
-  override def getSchema(): McpSchema.Tool = toolSchema
-
+  override def getSchema(): McpSchema.Tool = fromSchema
+  
   override def getAsyncHandler(): AsyncToolHandler = {
-    (exchange, request) => {
-      logger.debug(s"Forwarding tool call for ${request.name()} to MCP client actor $mcpClientActorId")
+    (exchange, request: McpSchema.CallToolRequest) => {
+      logger.debug(s"Forwarding tool call for ${request.name()} to MCP client actor $mcpServerUuid")
 
-      // Get the MCP client actor reference
-      val clientActor = ActorLookup.getMcpClientActor(mcpClientActorId)
-
+      val requestWithNamespace = McpSchema.CallToolRequest.builder()
+        .name(toSchema.name()) 
+        .arguments(request.arguments())
+        .meta(request.meta())
+        .progressToken(request.progressToken())
+        .build()
+      
       // Forward the tool call request to the MCP client actor and convert Future to Mono
-      val futureResult = clientActor.ask[Either[McpClientActor.McpClientError, McpSchema.CallToolResult]](
-        replyTo => McpClientActor.McpToolCallRequest(request, replyTo)
-      )
+      val futureResult = 
+        ActorLookup.getMcpClientActor(userId, mcpServerUuid)
+          .ask[Either[McpClientActor.McpClientError, McpSchema.CallToolResult]](
+            replyTo => McpClientActor.McpToolCallRequest(requestWithNamespace, replyTo)
+          )
 
       // Convert Scala Future to CompletableFuture, then to Mono
       Mono.fromCompletionStage(futureResult.asJava.toCompletableFuture)
@@ -64,15 +70,17 @@ object NamespacedTool {
   /**
    * Create a namespaced tool from a remote tool schema.
    *
-   * @param toolSchema The tool schema from the remote MCP server
-   * @param mcpClientActorId The ID of the MCP client actor to forward calls to
+   * @param fromSchema The tool schema from the remote MCP server
+   * @param mcpServerUuid The ID of the MCP client actor to forward calls to
    * @param system The actor system
    * @return A new NamespacedTool instance
    */
   def apply(
-    toolSchema: McpSchema.Tool,
-    mcpClientActorId: String
+    fromSchema: McpSchema.Tool,
+    toSchema: McpSchema.Tool,
+    userId: String,
+    mcpServerUuid: String
   )(implicit system: ActorSystem[?]): NamespacedTool = {
-    new NamespacedTool(toolSchema, mcpClientActorId)
+    new NamespacedTool(fromSchema, toSchema,  userId, mcpServerUuid)
   }
 }
