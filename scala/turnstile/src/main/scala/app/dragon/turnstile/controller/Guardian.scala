@@ -5,7 +5,6 @@ import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.db.DatabaseMigration
 import app.dragon.turnstile.gateway.TurnstileMcpGateway
 import app.dragon.turnstile.server.TurnstileGrpcServer
-import app.dragon.turnstile.service.ToolsService
 import com.typesafe.config.Config
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorSystem, Behavior}

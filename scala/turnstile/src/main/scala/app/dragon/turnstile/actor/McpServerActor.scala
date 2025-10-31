@@ -28,7 +28,7 @@ object McpServerActor {
   val TypeKey: EntityTypeKey[McpServerActor.Message] =
     EntityTypeKey[McpServerActor.Message]("McpActor")
 
-  def initSharding(system: ActorSystem[_]): Unit =
+  def initSharding(system: ActorSystem[?]): Unit =
     ClusterSharding(system).init(Entity(TypeKey) { entityContext =>
       val id = McpServerActorId.fromString(entityContext.entityId)
 
@@ -39,19 +39,20 @@ object McpServerActor {
     s"$userId-$chatId"
 
   sealed trait Message extends TurnstileSerializable
+
   final case class McpGetRequest(
-    request: HttpRequest, 
-    replyTo: ActorRef[Either[McpActorError, HttpResponse]]) 
+    request: HttpRequest,
+    replyTo: ActorRef[Either[McpActorError, HttpResponse]])
     extends Message
-  
+
   final case class McpPostRequest(
-    request: HttpRequest, 
-    replyTo: ActorRef[Either[McpActorError, HttpResponse]]) 
+    request: HttpRequest,
+    replyTo: ActorRef[Either[McpActorError, HttpResponse]])
     extends Message
-  
+
   final case class McpDeleteRequest(
-    request: HttpRequest, 
-    replyTo: ActorRef[Either[McpActorError, HttpResponse]]) 
+    request: HttpRequest,
+    replyTo: ActorRef[Either[McpActorError, HttpResponse]])
     extends Message
 
   // Remove WrappedGetResponse, use only WrappedHttpResponse for all handlers
@@ -63,14 +64,30 @@ object McpServerActor {
   sealed trait McpActorError extends TurnstileSerializable
   final case class ProcessingError(message: String) extends McpActorError
 
+
+  // Internal message for server initialization
+  //private final case class ServerStarted(server: TurnstileStreamingHttpMcpServer) extends Message
+  //private final case class ServerStartFailed(error: Throwable) extends Message
+  private final case class DownstreamRefreshStatus(status: Either[McpActorError, Unit]) extends Message
+
   def apply(userId: String, mcpActorId: String): Behavior[Message] = {
     Behaviors.withStash(100) { buffer =>
       Behaviors.setup { context =>
         implicit val system: ActorSystem[Nothing] = context.system
-        // Fix: instantiate the class with 'new' instead of as a function
-        val turnstileMcpServer = TurnstileStreamingHttpMcpServer().start()
+        implicit val ec: scala.concurrent.ExecutionContext = context.executionContext
 
-        new McpServerActor(context, buffer, userId, mcpActorId).activeState(turnstileMcpServer)
+        context.log.info(s"Starting MCP server for user $userId, actor $mcpActorId")
+
+        // Start the MCP server asynchronously
+        val mcpSserver = TurnstileStreamingHttpMcpServer().start()
+
+        // Pipe the result to self
+        //context.pipeToSelf(mcpSserver.refreshTools()) {
+        //  case scala.util.Success(server) => ServerStarted(server)
+        //  case scala.util.Failure(error) => ServerStartFailed(error)
+        //}
+
+        new McpServerActor(context, buffer, userId, mcpActorId).initState(mcpSserver)
       }
     }
   }
@@ -82,11 +99,28 @@ class McpServerActor(
   userId: String,
   mcpActorId: String,
 ) {
+
   import McpServerActor._
 
   // Provide required implicits for adapters
-  implicit val system: ActorSystem[?] = context.system
+  implicit val system: ActorSystem[Nothing] = context.system
   implicit val ec: scala.concurrent.ExecutionContext = context.executionContext
+
+  /**
+   * State while waiting for the MCP server to start.
+   * Stashes incoming requests until the server is ready.
+   */
+  def initState(
+    turnstileMcpServer: TurnstileStreamingHttpMcpServer
+  ): Behavior[Message] = {
+    // Pipe the result to self
+    context.pipeToSelf(turnstileMcpServer.refreshDownstreamTools()) {
+      case scala.util.Success(_) => DownstreamRefreshStatus(Right(()))
+      case scala.util.Failure(error) => DownstreamRefreshStatus(Left(ProcessingError(error.getMessage)))
+    }
+
+    Behaviors.receiveMessagePartial(handleDownstreamRefresh(turnstileMcpServer))
+  }
 
   def activeState(
     turnstileMcpServer: TurnstileStreamingHttpMcpServer
@@ -102,6 +136,23 @@ class McpServerActor(
         turnstileMcpServer.stop()
         Behaviors.same
     }
+  }
+
+  def handleDownstreamRefresh(
+    turnstileMcpServer: TurnstileStreamingHttpMcpServer
+  ): PartialFunction[Message, Behavior[Message]] = {
+    case DownstreamRefreshStatus(Right(_)) =>
+      context.log.info(s"MCP server for actor $mcpActorId downstream refresh succeeded, transitioning to active state")
+      // Unstash all buffered messages and transition to active state
+      buffer.unstashAll(activeState(turnstileMcpServer))
+    case DownstreamRefreshStatus(Left(_)) =>
+      context.log.error(s"MCP server for actor $mcpActorId downstream refresh failed, but continuing to active state")
+      // Unstash all buffered messages and transition to active state anyway
+      buffer.unstashAll(activeState(turnstileMcpServer))
+    case other =>
+      context.log.debug(s"Stashing message while MCP server is initializing: ${other.getClass.getSimpleName}")
+      buffer.stash(other)
+      Behaviors.same
   }
 
   def handleMcpGetRequest(
@@ -121,7 +172,7 @@ class McpServerActor(
   ): PartialFunction[Message, Behavior[Message]] = {
     case McpPostRequest(request, replyTo) =>
       context.log.info(s"Handling MCP POST request for user $userId, actor $mcpActorId")
-      
+
       context.pipeToSelf(handlePekkoRequest(request, turnstileMcpServer)) {
         case scala.util.Success(response) => WrappedHttpResponse(scala.util.Success(response), replyTo)
         case scala.util.Failure(exception) => WrappedHttpResponse(scala.util.Failure(exception), replyTo)
@@ -151,7 +202,7 @@ class McpServerActor(
       }
       Behaviors.same
   }
-  
+
   private def handlePekkoRequest(
     request: HttpRequest,
     turnstileMcpServer: TurnstileStreamingHttpMcpServer

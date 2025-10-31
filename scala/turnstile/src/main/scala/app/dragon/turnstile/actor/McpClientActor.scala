@@ -275,11 +275,11 @@ class McpClientActor(
       result match {
         case Success(listResult) =>
           context.log.info(s"List tools succeeded: ${listResult.tools().size()} tools")
-          //replyTo ! Right(listResult)
+          replyTo ! Right(listResult)
 
         case Failure(exception) =>
           context.log.error(s"List tools failed: ${exception.getMessage}")
-          //replyTo ! Left(ProcessingError(exception.getMessage))
+          replyTo ! Left(ProcessingError(exception.getMessage))
       }
 
       activeState(mcpClient)
