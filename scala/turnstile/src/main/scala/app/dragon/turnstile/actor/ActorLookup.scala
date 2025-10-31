@@ -16,5 +16,11 @@ object ActorLookup {
   )(implicit sharding: ClusterSharding): EntityRef[McpClientActor.Message] =
     sharding.entityRefFor(McpClientActor.TypeKey, mcpClientActorId)
 
-
+  def getMcpClientActor(
+    userId: String,
+    mcpServerUuid: String
+  )(implicit sharding: ClusterSharding): EntityRef[McpClientActor.Message] =
+    getMcpClientActor(McpClientActorId.getEntityId(userId, mcpServerUuid))
+  
+  
 }

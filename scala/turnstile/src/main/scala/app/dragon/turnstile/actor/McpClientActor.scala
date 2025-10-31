@@ -17,6 +17,9 @@ object McpClientActorId {
     val Array(userId, mcpClientActorId) = entityId.split("-", 2)
     McpClientActorId(userId, mcpClientActorId)
   }
+  
+  def getEntityId(userId: String, clientId: String): String =
+    s"$userId-$clientId"
 }
 
 object McpClientActor {
@@ -30,8 +33,8 @@ object McpClientActor {
       McpClientActor(id.userId, id.mcpClientActorId)
     })
 
-  def getEntityId(userId: String, clientId: String): String =
-    s"$userId-$clientId"
+  //def getEntityId(userId: String, clientId: String): String =
+  //  s"$userId-$clientId"
 
   sealed trait Message extends TurnstileSerializable
   final case class McpToolCallRequest(request: McpSchema.CallToolRequest, replyTo: ActorRef[Either[McpClientError, McpSchema.CallToolResult]]) extends Message

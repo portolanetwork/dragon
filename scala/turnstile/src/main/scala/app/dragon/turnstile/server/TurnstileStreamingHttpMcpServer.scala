@@ -21,20 +21,20 @@ object TurnstileStreamingHttpMcpServer {
   val serverName: String = ApplicationConfig.mcpStreaming.getString("server-name")
   val serverVersion: String = ApplicationConfig.mcpStreaming.getString("server-version")
 
-  def apply()(implicit system: ActorSystem[?]): TurnstileStreamingHttpMcpServer =
-    new TurnstileStreamingHttpMcpServer(serverName, serverVersion, "default")
+  def apply(userId: String)(implicit system: ActorSystem[?]): TurnstileStreamingHttpMcpServer =
+    new TurnstileStreamingHttpMcpServer(serverName, serverVersion, userId)
 }
 
 class TurnstileStreamingHttpMcpServer(
   val serverName: String,
   val serverVersion: String,
-  val toolNamespace: String,
+  val userId: String,
 )(implicit val system: ActorSystem[?]) {
   private val logger: org.slf4j.Logger = LoggerFactory.getLogger(classOf[TurnstileStreamingHttpMcpServer])
   // Execution context derived from the provided actor system
   private implicit val ec: ExecutionContext = system.executionContext
   private implicit val timeout: Timeout = 30.seconds
-  
+
   // These are set in start()
   private var mcpAsyncServer: Option[McpAsyncServer] = None
   private var httpHandler: Option[HttpHandler] = None
@@ -76,7 +76,7 @@ class TurnstileStreamingHttpMcpServer(
         .build())
       .build()
 
-    ToolsService.getInstance("userId").getDefaultToolsSpec.foreach { toolSpec =>
+    ToolsService.getInstance(userId).getDefaultToolsSpec.foreach { toolSpec =>
       mcpServer
         .addTool(toolSpec)
         .doOnSuccess(_ => logger.debug(s"[$serverName] Tool registered: ${toolSpec.tool().name()}"))
@@ -94,29 +94,27 @@ class TurnstileStreamingHttpMcpServer(
   }
 
   def refreshDownstreamTools(): Future[Unit] = {
-    ToolsService.getInstance("userId").getDownstreamToolsSpec("downstream-server").map {
-      case Right(toolSpecs) =>
-        logger.info(s"[$serverName] Refreshing ${toolSpecs.size} namespaced tools")
-        toolSpecs.foreach { toolSpec =>
-          mcpAsyncServer.foreach { server =>
-            server
-              .addTool(toolSpec)
-              .doOnSuccess(_ => logger.debug(s"[$serverName] Namespaced tool registered: ${toolSpec.tool().name()}"))
-              .doOnError(ex => logger.error(s"[$serverName] Failed to register namespaced tool: ${toolSpec.tool().name()}", ex))
-              .subscribe()
+    ToolsService.getInstance(userId)
+      .getDownstreamToolsSpec("downstream-server").map {
+        case Right(toolSpecs) =>
+          logger.info(s"[$serverName] Refreshing ${toolSpecs.size} namespaced tools")
+          toolSpecs.foreach { toolSpec =>
+            mcpAsyncServer.foreach { server =>
+              server
+                .addTool(toolSpec)
+                .doOnSuccess(_ => logger.debug(s"[$serverName] Namespaced tool registered: ${toolSpec.tool().name()}"))
+                .doOnError(ex => logger.error(s"[$serverName] Failed to register namespaced tool: ${toolSpec.tool().name()}", ex))
+                .subscribe()
+            }
           }
-        }
-      case Left(error) =>
-        logger.error(s"[$serverName] Failed to fetch namespaced tools: $error")
+        case Left(error) =>
+          logger.error(s"[$serverName] Failed to fetch namespaced tools: $error")
 
-    }.recover { case ex =>
-      logger.error(s"Failed to refresh namespaced tools for MCP server: $serverName", ex)
-    }
-
-
-    //Future.successful(())
+      }.recover { case ex =>
+        logger.error(s"Failed to refresh namespaced tools for MCP server: $serverName", ex)
+      }
   }
-  
+
   def stop(): Unit = {
     mcpAsyncServer.foreach { server =>
       logger.info(s"Stopping MCP server: $serverName v$serverVersion")
@@ -124,7 +122,8 @@ class TurnstileStreamingHttpMcpServer(
       logger.info(s"✓ Stopped MCP server: $serverName v$serverVersion")
     }
   }
-  
+
   def getMcpAsyncServer: Option[McpAsyncServer] = mcpAsyncServer
+
   def getHttpHandler: Option[HttpHandler] = httpHandler
 }

@@ -11,8 +11,8 @@ import org.apache.pekko.util.Timeout
 import org.slf4j.{Logger, LoggerFactory}
 
 import java.util.concurrent.ConcurrentHashMap
-import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.*
+import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.FunctionConverters.enrichAsJavaBiFunction
 
@@ -64,7 +64,9 @@ object ToolsService {
 }
 
 
-class ToolsService(val userId: String)(implicit ec: ExecutionContext) {
+class ToolsService(
+  val userId: String
+)(implicit ec: ExecutionContext) {
   private val logger: Logger = LoggerFactory.getLogger(classOf[ToolsService])
   // Default tools (built-in)
   private val defaultTools: List[McpTool] = List(
@@ -92,25 +94,25 @@ class ToolsService(val userId: String)(implicit ec: ExecutionContext) {
    * This method queries a specific MCP client actor for its available tools
    * and returns them as NamespacedTool instances that proxy calls to the remote server.
    *
-   * @param mcpClientActorId The ID of the MCP client actor
+   * @param mcpServerUuid The ID of the MCP client actor
    * @param system The actor system (implicit)
    * @param timeout The timeout for the actor query (implicit, default 30 seconds)
    * @return A Future containing either an error or a list of namespaced tools
    */
   private[service] def getDownstreamTools(
-    mcpClientActorId: String
+    mcpServerUuid: String
   )(implicit
     system: ActorSystem[?],
     timeout: Timeout = 30.seconds
   ): Future[Either[McpClientActor.McpClientError, List[McpTool]]] = {
-    require(mcpClientActorId.nonEmpty, "mcpClientActorId cannot be empty")
+    require(mcpServerUuid.nonEmpty, "mcpServerUuid cannot be empty")
 
     implicit val sharding: ClusterSharding = ClusterSharding(system)
     
-    logger.info(s"Fetching namespaced tools from MCP client actor: $mcpClientActorId for user=$userId")
+    logger.info(s"Fetching namespaced tools from MCP client actor: $mcpServerUuid for user=$userId")
 
     // Get the MCP client actor reference
-    val clientActor = ActorLookup.getMcpClientActor(mcpClientActorId)
+    val clientActor = ActorLookup.getMcpClientActor(userId, mcpServerUuid)
 
     // Query the actor for its tools
     clientActor.ask[Either[McpClientActor.McpClientError, McpSchema.ListToolsResult]](
@@ -118,17 +120,17 @@ class ToolsService(val userId: String)(implicit ec: ExecutionContext) {
     ).map {
       case Right(listResult) =>
         val tools = listResult.tools().asScala.toList
-        logger.info(s"Received ${tools.size} tools from MCP client actor $mcpClientActorId for user=$userId")
+        logger.info(s"Received ${tools.size} tools from MCP client actor $mcpServerUuid for user=$userId")
 
         // Convert each tool schema to a NamespacedTool
         val downstreamTools = tools.map { toolSchema =>
-          NamespacedTool(toolSchema, mcpClientActorId)
+          NamespacedTool(toolSchema, mcpServerUuid)
         }
 
         Right(downstreamTools)
 
       case Left(error) =>
-        logger.error(s"Failed to fetch tools from MCP client actor $mcpClientActorId for user=$userId: $error")
+        logger.error(s"Failed to fetch tools from MCP client actor $mcpServerUuid for user=$userId: $error")
         Left(error)
     }
   }
@@ -137,16 +139,61 @@ class ToolsService(val userId: String)(implicit ec: ExecutionContext) {
     val defaultTools = getDefaultTools
     convertToAsyncToolSpec(defaultTools)
   }
-  
+
+  def getAllDownstreamToolsSpec(
+    tenant: String = "default"
+  )(implicit
+    system: ActorSystem[?],
+    timeout: Timeout = 30.seconds,
+    db: slick.jdbc.JdbcBackend.Database
+  ): Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]] = {
+    import app.dragon.turnstile.db.TableInserter
+
+    logger.info(s"Fetching all downstream tools for user=$userId, tenant=$tenant")
+
+    // Fetch all MCP servers for this user from the database
+    val serversFuture = TableInserter.listMcpServers(tenant, userId)
+
+    serversFuture.flatMap { servers =>
+      if (servers.isEmpty) {
+        logger.info(s"No MCP servers found for user=$userId, tenant=$tenant")
+        Future.successful(Right(List.empty))
+      } else {
+        logger.info(s"Found ${servers.size} MCP servers for user=$userId, fetching tools from each")
+
+        // For each server, fetch its tools
+        val toolsFutures: Seq[Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]]] =
+          servers.map { server =>
+            getDownstreamToolsSpec(server.uuid)
+          }
+
+        // Wait for all futures to complete
+        Future.sequence(toolsFutures).map { results =>
+          // Collect all successful tool specs
+          val allTools = results.collect {
+            case Right(tools) => tools
+          }.flatten.toList
+
+          logger.info(s"Successfully fetched ${allTools.size} total tools from ${servers.size} MCP servers for user=$userId")
+          Right(allTools)
+        }
+      }
+    }.recover {
+      case ex: Exception =>
+        logger.error(s"Failed to fetch MCP servers from database for user=$userId, tenant=$tenant", ex)
+        Left(McpClientActor.ProcessingError(s"Database error: ${ex.getMessage}"))
+    }
+  }
+
   def getDownstreamToolsSpec(
-    mcpClientActorId: String
+    mcpServerUuid: String
   )(implicit
     system: ActorSystem[?],
     timeout: Timeout = 30.seconds
   ): Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]] = {
-    require(mcpClientActorId.nonEmpty, "mcpClientActorId cannot be empty")
+    require(mcpServerUuid.nonEmpty, "mcpClientActorId cannot be empty")
 
-    getDownstreamTools(mcpClientActorId).map {
+    getDownstreamTools(mcpServerUuid).map {
       case Right(tools) =>
         val toolSpecs = convertToAsyncToolSpec(tools)
         Right(toolSpecs)
