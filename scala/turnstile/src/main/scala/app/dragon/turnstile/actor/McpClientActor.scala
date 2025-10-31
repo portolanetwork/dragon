@@ -6,7 +6,7 @@ import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityTypeKey}
 
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 case class McpClientActorId(userId: String, mcpClientActorId: String) {
   override def toString: String = s"$userId-$mcpClientActorId"
@@ -34,20 +34,10 @@ object McpClientActor {
     s"$userId-$clientId"
 
   sealed trait Message extends TurnstileSerializable
-
-  final case class McpToolCallRequest(
-    request: McpSchema.CallToolRequest,
-    replyTo: ActorRef[Either[McpClientError, McpSchema.CallToolResult]]
-  ) extends Message
-
-  final case class McpListTools(
-    replyTo: ActorRef[Either[McpClientError, McpSchema.ListToolsResult]]
-  ) extends Message
-
-  final case class McpNotification(
-    notificationType: NotificationType,
-    payload: Any
-  ) extends Message
+  final case class McpToolCallRequest(request: McpSchema.CallToolRequest, replyTo: ActorRef[Either[McpClientError, McpSchema.CallToolResult]]) extends Message
+  final case class McpListTools(replyTo: ActorRef[Either[McpClientError, McpSchema.ListToolsResult]]) extends Message
+  final case class McpNotification(notificationType: NotificationType, payload: Any) extends Message
+  final case class McpPing(replyTo: ActorRef[Unit]) extends Message
 
   sealed trait NotificationType extends TurnstileSerializable
   case object ToolsChanged extends NotificationType
@@ -58,16 +48,9 @@ object McpClientActor {
 
   // Internal wrapper messages
   private final case class InitializeStatus(status: Either[McpClientError, McpSchema.InitializeResult]) extends Message
-
-  private final case class WrappedToolCallResponse(
-    result: scala.util.Try[McpSchema.CallToolResult],
-    replyTo: ActorRef[Either[McpClientError, McpSchema.CallToolResult]]
-  ) extends Message
-
-  private final case class WrappedListToolsResponse(
-    result: scala.util.Try[McpSchema.ListToolsResult],
-    replyTo: ActorRef[Either[McpClientError, McpSchema.ListToolsResult]]
-  ) extends Message
+  private final case class PingResponse(result: Try[Unit], replyTo: ActorRef[Unit]) extends Message
+  private final case class ToolCallResponse(result: Try[McpSchema.CallToolResult], replyTo: ActorRef[Either[McpClientError, McpSchema.CallToolResult]]) extends Message
+  private final case class ListToolsResponse(result: Try[McpSchema.ListToolsResult], replyTo: ActorRef[Either[McpClientError, McpSchema.ListToolsResult]]) extends Message
 
   sealed trait McpClientError extends TurnstileSerializable
   final case class ConnectionError(message: String) extends McpClientError
@@ -131,7 +114,6 @@ class McpClientActor(
     case InitializeStatus(status) =>
       context.log.info(s"MCP client actor $mcpClientActorId initialized successfully")
       buffer.unstashAll(activeState(mcpClient))
-
     case other =>
       context.log.debug(s"Stashing message while initializing: ${other.getClass.getSimpleName}")
       buffer.stash(other)
@@ -141,19 +123,64 @@ class McpClientActor(
   /**
    * Active state - handles all MCP client operations.
    */
-  def activeState(mcpClient: TurnstileStreamingHttpAsyncMcpClient): Behavior[Message] = {
+  def activeState(
+    mcpClient: TurnstileStreamingHttpAsyncMcpClient
+  ): Behavior[Message] = {
     Behaviors.receiveMessagePartial {
       handleToolCallRequest(mcpClient)
         .orElse(handleListTools(mcpClient))
-        .orElse(handleNotification())
-        .orElse(handleWrappedToolCallResponse())
-        .orElse(handleWrappedListToolsResponse())
+        .orElse(handleNotification(mcpClient))
+        .orElse(handlePing(mcpClient))
+        .orElse(handlePingResponse(mcpClient))
+        .orElse(handleToolCallResponse(mcpClient))
+        .orElse(handleListToolsResponse(mcpClient))
     }.receiveSignal {
       case (_, org.apache.pekko.actor.typed.PostStop) =>
         context.log.info(s"Stopping MCP client for actor $mcpClientActorId on PostStop")
         mcpClient.closeGracefully()
         Behaviors.same
     }
+  }
+
+  /**
+   * Handle ping messages - used as a liveness check.
+   */
+  def handlePing(
+    mcpClient: TurnstileStreamingHttpAsyncMcpClient
+  ): PartialFunction[Message, Behavior[Message]] = {
+    case McpPing(replyTo) =>
+      // reply with Unit to indicate liveness
+      context.pipeToSelf(mcpClient.ping()) {
+        case Success(_) =>
+          context.log.info(s"Ping succeeded")
+          // wrap a successful Unit result
+          PingResponse(Success(()), replyTo)
+        case Failure(exception) =>
+          context.log.error(s"Ping failed: ${exception.getMessage}")
+          PingResponse(Failure(exception), replyTo)
+      }
+
+      activeState(mcpClient)
+  }
+
+  /**
+   * Handle ping responses produced by the internal ping pipeToSelf.
+   */
+  def handlePingResponse(
+    mcpClient: TurnstileStreamingHttpAsyncMcpClient
+  ): PartialFunction[Message, Behavior[Message]] = {
+    case PingResponse(result, replyTo) =>
+      result match {
+        case Success(_) =>
+          // Notify caller that ping succeeded
+          replyTo ! ()
+        case Failure(exception) =>
+          // On failure, still reply Unit but log the error
+          context.log.error(s"Ping operation failed when responding: ${exception.getMessage}")
+          replyTo ! ()
+      }
+
+      activeState(mcpClient)
   }
 
   /**
@@ -166,11 +193,11 @@ class McpClientActor(
       context.log.info(s"MCP Client Actor $mcpClientActorId calling tool: ${request.name()}")
 
       context.pipeToSelf(mcpClient.callTool(request)) {
-        case Success(result) => WrappedToolCallResponse(Success(result), replyTo)
-        case Failure(exception) => WrappedToolCallResponse(Failure(exception), replyTo)
+        case Success(result) => ToolCallResponse(Success(result), replyTo)
+        case Failure(exception) => ToolCallResponse(Failure(exception), replyTo)
       }
 
-      Behaviors.same
+      activeState(mcpClient)
   }
 
   /**
@@ -183,18 +210,20 @@ class McpClientActor(
       context.log.info(s"MCP Client Actor $mcpClientActorId listing tools")
 
       context.pipeToSelf(mcpClient.listTools()) {
-        case Success(result) => WrappedListToolsResponse(Success(result), replyTo)
-        case Failure(exception) => WrappedListToolsResponse(Failure(exception), replyTo)
+        case Success(result) => ListToolsResponse(Success(result), replyTo)
+        case Failure(exception) => ListToolsResponse(Failure(exception), replyTo)
       }
 
-      Behaviors.same
+      activeState(mcpClient)
   }
 
   /**
    * Handle notifications from the MCP server.
    * These are received through the client's notification consumers.
    */
-  def handleNotification(): PartialFunction[Message, Behavior[Message]] = {
+  def handleNotification(
+    mcpClient: TurnstileStreamingHttpAsyncMcpClient
+  ): PartialFunction[Message, Behavior[Message]] = {
     case McpNotification(notificationType, payload) =>
       notificationType match {
         case ToolsChanged =>
@@ -213,14 +242,16 @@ class McpClientActor(
           context.log.debug(s"[PROGRESS] $payload")
       }
 
-      Behaviors.same
+      activeState(mcpClient)
   }
 
   /**
    * Handle wrapped tool call responses.
    */
-  def handleWrappedToolCallResponse(): PartialFunction[Message, Behavior[Message]] = {
-    case WrappedToolCallResponse(result, replyTo) =>
+  def handleToolCallResponse(
+    mcpClient: TurnstileStreamingHttpAsyncMcpClient
+  ): PartialFunction[Message, Behavior[Message]] = {
+    case ToolCallResponse(result, replyTo) =>
       result match {
         case Success(toolResult) =>
           context.log.info(s"Tool call succeeded")
@@ -231,24 +262,26 @@ class McpClientActor(
           replyTo ! Left(ProcessingError(exception.getMessage))
       }
 
-      Behaviors.same
+      activeState(mcpClient)
   }
 
   /**
    * Handle wrapped list tools responses.
    */
-  def handleWrappedListToolsResponse(): PartialFunction[Message, Behavior[Message]] = {
-    case WrappedListToolsResponse(result, replyTo) =>
+  def handleListToolsResponse(
+    mcpClient: TurnstileStreamingHttpAsyncMcpClient
+  ): PartialFunction[Message, Behavior[Message]] = {
+    case ListToolsResponse(result, replyTo) =>
       result match {
         case Success(listResult) =>
           context.log.info(s"List tools succeeded: ${listResult.tools().size()} tools")
-          replyTo ! Right(listResult)
+          //replyTo ! Right(listResult)
 
         case Failure(exception) =>
           context.log.error(s"List tools failed: ${exception.getMessage}")
-          replyTo ! Left(ProcessingError(exception.getMessage))
+          //replyTo ! Left(ProcessingError(exception.getMessage))
       }
 
-      Behaviors.same
+      activeState(mcpClient)
   }
 }

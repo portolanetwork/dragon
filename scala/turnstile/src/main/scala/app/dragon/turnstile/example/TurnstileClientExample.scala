@@ -81,6 +81,7 @@ object TurnstileClientExample {
       toolsResult <- client.listTools()
       _ = logTools(toolsResult.tools().asScala.toList)
 
+
       // 3. Call a tool if available
       _ <- callToolIfAvailable(client, toolsResult.tools().asScala.toList)
 

@@ -81,7 +81,8 @@ class TurnstileStreamingHttpMcpServer(
     // Register tools
     val toolsService = ToolsService.instance
     toolsService.getAsyncToolsSpec(toolNamespace).foreach { toolSpec =>
-      mcpServer.addTool(toolSpec)
+      mcpServer
+        .addTool(toolSpec)
         .doOnSuccess(_ => logger.debug(s"[$serverName] Tool registered: ${toolSpec.tool().name()}"))
         .doOnError(ex => logger.error(s"[$serverName] Failed to register tool: ${toolSpec.tool().name()}", ex))
         .subscribe()
@@ -95,7 +96,6 @@ class TurnstileStreamingHttpMcpServer(
     
     this.mcpAsyncServer = Some(mcpServer)
     this.httpHandler = Some(httpHandler)
-    //(mcpServer, httpHandler)
     
     this
   }

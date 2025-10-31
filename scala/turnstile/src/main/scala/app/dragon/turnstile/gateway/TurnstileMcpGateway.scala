@@ -1,6 +1,7 @@
 package app.dragon.turnstile.gateway
 
-import app.dragon.turnstile.actor.{ActorLookup, McpServerActor}
+import app.dragon.turnstile.actor.McpClientActor.McpListTools
+import app.dragon.turnstile.actor.{ActorLookup, McpClientActor, McpServerActor}
 import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.server.{PekkoToSpringRequestAdapter, SpringToPekkoResponseAdapter}
 import app.dragon.turnstile.service.ToolsService
@@ -27,6 +28,7 @@ import org.springframework.web.reactive.function.server.RouterFunctions
 import reactor.core.publisher.Flux
 import reactor.core.scheduler.Schedulers
 import org.apache.pekko.actor.typed.ActorSystem
+
 
 import java.net.{InetSocketAddress, URI}
 import java.util.concurrent.ConcurrentHashMap
@@ -137,6 +139,10 @@ class TurnstileMcpGateway(config: Config)(implicit system: ActorSystem[?]) {
           logger.info("  - Sessions can be dynamically routed to different handlers")
           logger.info("")
           logger.info("Press ENTER to stop the server...")
+
+          // Provide the ClusterSharding instance explicitly to satisfy the implicit parameter
+          //ActorLookup.getMcpClientActor("client-actor")(ClusterSharding(system)) ! McpListTools(system.ignoreRef)
+          //ActorLookup.getMcpClientActor("client-actor") ! McpClientActor.Ping(system.ignoreRef)
 
         case Failure(ex) =>
           logger.error(s"✗ Failed to start MCP server: ${ex.getMessage}", ex)

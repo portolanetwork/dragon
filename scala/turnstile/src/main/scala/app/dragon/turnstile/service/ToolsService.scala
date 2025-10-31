@@ -73,6 +73,10 @@ class ToolsService()(implicit ec: ExecutionContext) {
     SystemInfoTool,
     ActorTool
   )
+  
+  private val namespacesTool: List[McpTool] = List(
+    
+  )
 
   logger.info(s"ToolsService initialized with ${defaultTools.size} default tools: ${defaultTools.map(_.getName()).mkString(", ")}")
 

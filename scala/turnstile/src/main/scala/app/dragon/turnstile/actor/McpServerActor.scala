@@ -121,10 +121,7 @@ class McpServerActor(
   ): PartialFunction[Message, Behavior[Message]] = {
     case McpPostRequest(request, replyTo) =>
       context.log.info(s"Handling MCP POST request for user $userId, actor $mcpActorId")
-
-      // Provide the ClusterSharding instance explicitly to satisfy the implicit parameter
-      ActorLookup.getMcpClientActor("client-actor")(ClusterSharding(context.system)) ! McpListTools(context.system.ignoreRef)
-
+      
       context.pipeToSelf(handlePekkoRequest(request, turnstileMcpServer)) {
         case scala.util.Success(response) => WrappedHttpResponse(scala.util.Success(response), replyTo)
         case scala.util.Failure(exception) => WrappedHttpResponse(scala.util.Failure(exception), replyTo)
