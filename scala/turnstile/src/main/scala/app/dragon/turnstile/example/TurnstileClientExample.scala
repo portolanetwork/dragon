@@ -15,10 +15,10 @@ import scala.util.{Failure, Success}
  * - Using TurnstileStreamingHttpAsyncMcpClient wrapper (instead of directly creating McpAsyncClient)
  * - Simplified client creation using the Turnstile wrapper API
  * - All progress notifications, logging, and change handlers configured automatically
- * - TRUE STREAMING: Testing actor_tool with real 2-second delays and progress notifications
+ * - TRUE STREAMING: Testing streaming_demo_tool with real 2-second delays and progress notifications
  * - Proper lifecycle management with graceful shutdown
  *
- * When actor_tool is available, this example demonstrates:
+ * When streaming_demo_tool is available, this example demonstrates:
  * - Progress notifications arriving in real-time via progressConsumer
  * - Non-blocking execution with Flux.delayElements(Duration.ofSeconds(2))
  * - Each iteration sends a progress notification ~2 seconds apart
@@ -27,20 +27,20 @@ import scala.util.{Failure, Success}
  *
  * Usage:
  * {{{
- * # Test against local server (includes actor_tool for streaming demo)
+ * # Test against local server (includes streaming_demo_tool for streaming demo)
  * sbt "runMain app.dragon.turnstile.example.TurnstileClientExample http://localhost:8082"
  *
  * # With custom endpoint
  * sbt "runMain app.dragon.turnstile.example.TurnstileClientExample http://localhost:8082 /mcp"
  * }}}
  *
- * Expected Output (with actor_tool):
+ * Expected Output (with streaming_demo_tool):
  * {{{
  * [HH:MM:SS.000] Starting tool call...
- * [HH:MM:SS.000] [PROGRESS] actor-tool-123: 0.0 / 3.0 0% - Starting actor tool processing
- * [HH:MM:SS.002] [PROGRESS] actor-tool-123: 1.0 / 3.0 33% - Processing iteration 1/3
- * [HH:MM:SS.004] [PROGRESS] actor-tool-123: 2.0 / 3.0 66% - Processing iteration 2/3
- * [HH:MM:SS.006] [PROGRESS] actor-tool-123: 3.0 / 3.0 100% - Processing iteration 3/3
+ * [HH:MM:SS.000] [PROGRESS] streaming-demo-tool-123: 0.0 / 3.0 0% - Starting actor tool processing
+ * [HH:MM:SS.002] [PROGRESS] streaming-demo-tool-123: 1.0 / 3.0 33% - Processing iteration 1/3
+ * [HH:MM:SS.004] [PROGRESS] streaming-demo-tool-123: 2.0 / 3.0 66% - Processing iteration 2/3
+ * [HH:MM:SS.006] [PROGRESS] streaming-demo-tool-123: 3.0 / 3.0 100% - Processing iteration 3/3
  * TOOL CALL COMPLETED (took 6.0s, expected ~6 seconds)
  * }}}
  */
@@ -244,7 +244,7 @@ object TurnstileClientExample {
 
   /**
    * Call a tool if any are available.
-   * Demonstrates streaming with actor_tool which sends progress notifications.
+   * Demonstrates streaming with streaming_demo_tool which sends progress notifications.
    */
   private def callToolIfAvailable(
       client: TurnstileStreamingHttpAsyncMcpClient,
@@ -256,8 +256,8 @@ object TurnstileClientExample {
       return Future.successful(())
     }
 
-    // Prefer actor_tool to demonstrate streaming, then echo, then first available
-    val toolToCall = tools.find(_.name() == "actor_tool")
+    // Prefer streaming_demo_tool to demonstrate streaming, then echo, then first available
+    val toolToCall = tools.find(_.name() == "streaming_demo_tool")
       .orElse(tools.find(_.name() == "echo"))
       .getOrElse(tools.head)
 
@@ -268,8 +268,8 @@ object TurnstileClientExample {
 
     // Create the tool call request based on tool type
     val (arguments, expectedDuration) = toolToCall.name() match {
-      case "actor_tool" =>
-        logger.info("Testing STREAMING with actor_tool (count=3)")
+      case "streaming_demo_tool" =>
+        logger.info("Testing STREAMING with streaming_demo_tool (count=3)")
         logger.info("Expected: ~6 seconds with progress notifications every 2s")
         logger.info("Watch for [PROGRESS] messages below!")
         logger.info("")
@@ -331,7 +331,7 @@ object TurnstileClientExample {
       logger.info("=" * 80)
       logger.info("STREAMING OBSERVATIONS:")
       logger.info("=" * 80)
-      if (toolToCall.name() == "actor_tool") {
+      if (toolToCall.name() == "streaming_demo_tool") {
         logger.info("✓ Progress notifications arrived via progressConsumer (see [PROGRESS] logs above)")
         logger.info("✓ Each notification arrived ~2 seconds apart (non-blocking delays)")
         logger.info("✓ Final result arrived after all processing completed")

@@ -1,9 +1,7 @@
 package app.dragon.turnstile.service
 
 import app.dragon.turnstile.actor.{ActorLookup, McpClientActor}
-import app.dragon.turnstile.config.ApplicationConfig
-import app.dragon.turnstile.service.tools.{ActorTool, EchoTool, NamespacedTool, SystemInfoTool}
-import com.typesafe.config.Config
+import app.dragon.turnstile.service.tools.{EchoTool, NamespacedTool, StreamingDemoTool, SystemInfoTool}
 import io.modelcontextprotocol.common.McpTransportContext
 import io.modelcontextprotocol.server.{McpAsyncServerExchange, McpServerFeatures}
 import io.modelcontextprotocol.spec.McpSchema
@@ -13,11 +11,10 @@ import org.apache.pekko.util.Timeout
 import org.slf4j.{Logger, LoggerFactory}
 
 import java.util.concurrent.ConcurrentHashMap
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 import scala.jdk.FunctionConverters.enrichAsJavaBiFunction
-import scala.util.{Failure, Success, Try}
 
 /**
  * Type alias for MCP tool handler functions
@@ -59,28 +56,11 @@ object ToolsService {
    * Get or create a cached ToolsService for the given userId.
    * This is the recommended entry point for obtaining a user-scoped service.
    */
-  def getForUser(userId: String)(implicit ec: ExecutionContext): ToolsService = {
+  def getInstance(userId: String)(implicit ec: ExecutionContext): ToolsService = {
     require(userId != null && userId.nonEmpty, "userId cannot be empty")
-    instances.computeIfAbsent(userId, new java.util.function.Function[String, ToolsService] {
-      override def apply(id: String): ToolsService = new ToolsService(id)
-    })
+    // use SAM conversion for java.util.function.Function
+    instances.computeIfAbsent(userId, (id: String) => new ToolsService(id))
   }
-
-  /**
-   * Create a fresh ToolsService for the given userId (not cached).
-   * Use this when you explicitly want an independent instance.
-   */
-  def create(userId: String)(implicit ec: ExecutionContext): ToolsService = {
-    require(userId != null && userId.nonEmpty, "userId cannot be empty")
-    new ToolsService(userId)
-  }
-
-  /**
-   * Deprecated: tools service is user-scoped. Use `getForUser(userId)` instead.
-   */
-  @deprecated("Use getForUser(userId) or create(userId)", "2025-10-31")
-  def getInstance: ToolsService =
-    throw new UnsupportedOperationException("ToolsService is user-scoped; use ToolsService.getForUser(userId) instead")
 }
 
 
@@ -91,7 +71,7 @@ class ToolsService(val userId: String)(implicit ec: ExecutionContext) {
     EchoTool("echo1"),
     EchoTool("echo2"),
     SystemInfoTool,
-    ActorTool
+    StreamingDemoTool
   )
 
   logger.info(s"ToolsService initialized for user=$userId with ${defaultTools.size} default tools: ${defaultTools.map(_.getName()).mkString(", ")}")
@@ -102,7 +82,7 @@ class ToolsService(val userId: String)(implicit ec: ExecutionContext) {
    *
    * @return List of McpTool instances
    */
-  private def getDefaultTools(): List[McpTool] = {
+  private def getDefaultTools: List[McpTool] = {
     defaultTools
   }
 
@@ -117,7 +97,7 @@ class ToolsService(val userId: String)(implicit ec: ExecutionContext) {
    * @param timeout The timeout for the actor query (implicit, default 30 seconds)
    * @return A Future containing either an error or a list of namespaced tools
    */
-  def getDownstreamTools(
+  private[service] def getDownstreamTools(
     mcpClientActorId: String
   )(implicit
     system: ActorSystem[?],
@@ -153,10 +133,8 @@ class ToolsService(val userId: String)(implicit ec: ExecutionContext) {
     }
   }
 
-  def getDefaultToolsSpec(
-    //userId: String
-  ): List[McpServerFeatures.AsyncToolSpecification] = {
-    val defaultTools = getDefaultTools()
+  def getDefaultToolsSpec: List[McpServerFeatures.AsyncToolSpecification] = {
+    val defaultTools = getDefaultTools
     convertToAsyncToolSpec(defaultTools)
   }
   
@@ -183,7 +161,7 @@ class ToolsService(val userId: String)(implicit ec: ExecutionContext) {
    * @param tools The list of McpTool instances
    * @return List of AsyncToolSpecification instances
    */
-  def convertToAsyncToolSpec(
+  private def convertToAsyncToolSpec(
     tools: List[McpTool]
   ): List[McpServerFeatures.AsyncToolSpecification] = {
     tools.map { tool =>

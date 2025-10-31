@@ -8,20 +8,20 @@ import reactor.core.publisher.{Flux, Mono}
 import java.time.Duration
 
 /**
- * Actor tool - demonstrates streaming/async capabilities with a simple actor-style message response.
+ * Streaming Demo tool - demonstrates streaming/async capabilities with progress notifications.
  *
  * This tool provides a simple demonstration of reactive/streaming patterns in MCP:
  * - Accepts an optional message parameter and count for repetition
  * - Simulates async processing with reactive composition
- * - Returns a formatted response showing the actor system interaction
+ * - Returns a formatted response showing the streaming system interaction
  *
  * This demonstrates:
  * - Non-blocking async execution using Reactor Mono
  * - Reactive composition patterns (when used with getAsyncToolsSpec)
  * - How to build tools that can scale with backpressure
- * - Message processing simulation that could be replaced with real actor interactions
+ * - Message processing simulation with real-time progress notifications
  *
- * The tool simulates an actor sending messages and receiving responses,
+ * The tool simulates streaming message processing with real-time feedback,
  * demonstrating how the MCP async API allows for reactive, non-blocking tool execution.
  * When integrated with the async MCP server, this handler can be wrapped in a Mono
  * that uses delays, transformations, and other reactive operators.
@@ -29,7 +29,7 @@ import java.time.Duration
  * Example usage:
  * {{{
  * {
- *   "name": "actor_tool",
+ *   "name": "streaming_demo_tool",
  *   "arguments": {
  *     "message": "Hello from client",
  *     "count": 3
@@ -37,7 +37,7 @@ import java.time.Duration
  * }
  * }}}
  *
- * Returns: A formatted response showing the actor interaction
+ * Returns: A formatted response showing the streaming interaction
  *
  * @note This tool demonstrates the async/streaming nature through the MCP async API.
  *       The handler itself is synchronous, but when wrapped in a Mono by getAsyncToolsSpec(),
@@ -45,18 +45,18 @@ import java.time.Duration
  *       composition with delays/timeouts, and backpressure handling.
  *       For true multi-message streaming, use Server-Sent Events (SSE) via the streamable transport.
  */
-object ActorTool extends McpTool {
+object StreamingDemoTool extends McpTool {
 
   override def getSchema(): McpSchema.Tool = {
     McpUtils.createToolSchemaBuilder(
-      name = "actor_tool",
-      description = "Demonstrates streaming/async capabilities with actor-style messaging"
+      name = "streaming_demo_tool",
+      description = "Demonstrates streaming/async capabilities with progress notifications"
     )
       .inputSchema(McpUtils.createObjectSchema(
         properties = Map(
           "message" -> Map(
             "type" -> "string",
-            "description" -> "The message to send to the actor"
+            "description" -> "The message to process in the streaming demo"
           ),
           "count" -> Map(
             "type" -> "integer",
@@ -72,13 +72,13 @@ object ActorTool extends McpTool {
     (exchange, request) => {
       val message = McpUtils.getStringArg(request, "message", "ping")
       val count = Math.min(Math.max(McpUtils.getIntArg(request, "count", 1), 1), 10)
-      val actorName = "TurnstileActor"
+      val streamingDemoName = "TurnstileStreamingDemo"
       val startTime = System.currentTimeMillis()
 
       // Create a unique progress token that includes tool name and timestamp for correlation
-      val progressToken = s"actor-tool-${request.name()}-$startTime"
+      val progressToken = s"streaming-demo-tool-${request.name()}-$startTime"
 
-      logger.info(s"[ActorTool] Starting streaming processing: message='$message', count=$count, token=$progressToken")
+      logger.info(s"[StreamingDemoTool] Starting streaming processing: message='$message', count=$count, token=$progressToken")
 
       // Create metadata for correlation with tool call
       val correlationMeta = java.util.Map.of[String, Object](
@@ -93,7 +93,7 @@ object ActorTool extends McpTool {
         progressToken,
         Double.box(0.0),
         Double.box(count.toDouble),
-        s"[$actorName] Starting processing: '$message' (0/$count)",
+        s"[$streamingDemoName] Starting processing: '$message' (0/$count)",
         correlationMeta
       )
 
@@ -103,7 +103,7 @@ object ActorTool extends McpTool {
       ).thenMany(
         Flux.range(1, count)
           .delayElements(Duration.ofSeconds(2))
-          .doOnNext(i => logger.info(s"[ActorTool] Processing iteration $i/$count (after 2s delay)"))
+          .doOnNext(i => logger.info(s"[StreamingDemoTool] Processing iteration $i/$count (after 2s delay)"))
           .flatMap { i =>
             val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
             val iterationMeta = java.util.Map.of[String, Object](
@@ -117,12 +117,12 @@ object ActorTool extends McpTool {
               progressToken,
               Double.box(i.toDouble),
               Double.box(count.toDouble),
-              s"[$actorName] Processed '$message' ($i/$count) - ${elapsed}s elapsed",
+              s"[$streamingDemoName] Processed '$message' ($i/$count) - ${elapsed}s elapsed",
               iterationMeta
             )
 
             exchange.progressNotification(notification)
-              .doOnSuccess(_ => logger.info(s"[ActorTool] Sent progress notification: $i/$count"))
+              .doOnSuccess(_ => logger.info(s"[StreamingDemoTool] Sent progress notification: $i/$count"))
           }
       )
 
@@ -132,11 +132,11 @@ object ActorTool extends McpTool {
           val endTime = System.currentTimeMillis()
           val totalElapsed = (endTime - startTime) / 1000.0
 
-          logger.info(s"[ActorTool] Streaming complete: $count iterations in ${totalElapsed}s")
+          logger.info(s"[StreamingDemoTool] Streaming complete: $count iterations in ${totalElapsed}s")
 
           val headerParts = Seq(
-            s"🎭 Actor System Response (TRUE STREAMING with 2s delays)",
-            s"Actor: $actorName",
+            s"🎭 Streaming Demo Response (TRUE STREAMING with 2s delays)",
+            s"Streaming Demo: $streamingDemoName",
             s"Start Time: $startTime",
             s"End Time: $endTime",
             s"Total Duration: ${totalElapsed}s",
@@ -150,8 +150,8 @@ object ActorTool extends McpTool {
             Seq(
               s"[Stream $i/$count] Processing...",
               s"  ├─ Message validated",
-              s"  ├─ Actor state updated",
-              s"  └─ Response: \"$actorName processed '$message' (iteration $i)\"",
+              s"  ├─ Streaming Demo state updated",
+              s"  └─ Response: \"$streamingDemoName processed '$message' (iteration $i)\"",
               if (i < count) "" else s""
             )
           }

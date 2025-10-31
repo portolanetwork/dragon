@@ -1,15 +1,12 @@
 package app.dragon.turnstile.actor
 
-import app.dragon.turnstile.actor.McpClientActor.McpListTools
 import app.dragon.turnstile.server.{PekkoToSpringRequestAdapter, SpringToPekkoResponseAdapter, TurnstileStreamingHttpMcpServer}
-import com.google.rpc.context.AttributeContext.Response
-import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
+import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityTypeKey}
 import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse}
 import reactor.core.scheduler.Schedulers
 
-import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 import scala.jdk.FutureConverters.*
 
@@ -40,8 +37,7 @@ object McpServerActor {
 
   sealed trait Message extends TurnstileSerializable
 
-  final case class McpGetRequest(
-    request: HttpRequest,
+  final case class McpGetRequest(request: HttpRequest,
     replyTo: ActorRef[Either[McpActorError, HttpResponse]])
     extends Message
 
@@ -64,10 +60,7 @@ object McpServerActor {
   sealed trait McpActorError extends TurnstileSerializable
   final case class ProcessingError(message: String) extends McpActorError
 
-
   // Internal message for server initialization
-  //private final case class ServerStarted(server: TurnstileStreamingHttpMcpServer) extends Message
-  //private final case class ServerStartFailed(error: Throwable) extends Message
   private final case class DownstreamRefreshStatus(status: Either[McpActorError, Unit]) extends Message
 
   def apply(userId: String, mcpActorId: String): Behavior[Message] = {
@@ -80,12 +73,6 @@ object McpServerActor {
 
         // Start the MCP server asynchronously
         val mcpSserver = TurnstileStreamingHttpMcpServer().start()
-
-        // Pipe the result to self
-        //context.pipeToSelf(mcpSserver.refreshTools()) {
-        //  case scala.util.Success(server) => ServerStarted(server)
-        //  case scala.util.Failure(error) => ServerStartFailed(error)
-        //}
 
         new McpServerActor(context, buffer, userId, mcpActorId).initState(mcpSserver)
       }
@@ -100,7 +87,7 @@ class McpServerActor(
   mcpActorId: String,
 ) {
 
-  import McpServerActor._
+  import McpServerActor.*
 
   // Provide required implicits for adapters
   implicit val system: ActorSystem[Nothing] = context.system

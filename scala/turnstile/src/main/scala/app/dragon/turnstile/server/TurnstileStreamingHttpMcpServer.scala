@@ -4,7 +4,7 @@ import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.service.ToolsService
 import io.modelcontextprotocol.json.McpJsonMapper
 import io.modelcontextprotocol.server.transport.WebFluxStreamableServerTransportProvider
-import io.modelcontextprotocol.server.{McpAsyncServer, McpServer, McpServerFeatures}
+import io.modelcontextprotocol.server.{McpAsyncServer, McpServer}
 import io.modelcontextprotocol.spec.McpSchema
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.util.Timeout
@@ -76,7 +76,7 @@ class TurnstileStreamingHttpMcpServer(
         .build())
       .build()
 
-    ToolsService.getInstance.getDefaultToolsSpec().foreach { toolSpec =>
+    ToolsService.getInstance("userId").getDefaultToolsSpec.foreach { toolSpec =>
       mcpServer
         .addTool(toolSpec)
         .doOnSuccess(_ => logger.debug(s"[$serverName] Tool registered: ${toolSpec.tool().name()}"))
@@ -94,7 +94,7 @@ class TurnstileStreamingHttpMcpServer(
   }
 
   def refreshDownstreamTools(): Future[Unit] = {
-    ToolsService.getInstance.getDownstreamToolsSpec("downstream-server").map {
+    ToolsService.getInstance("userId").getDownstreamToolsSpec("downstream-server").map {
       case Right(toolSpecs) =>
         logger.info(s"[$serverName] Refreshing ${toolSpecs.size} namespaced tools")
         toolSpecs.foreach { toolSpec =>

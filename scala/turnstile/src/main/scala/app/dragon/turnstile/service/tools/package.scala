@@ -18,7 +18,7 @@ package app.dragon.turnstile.service
  *
  * - **EchoTool**: Echo messages back (useful for testing)
  * - **SystemInfoTool**: Return server and system information
- * - **ActorTool**: Demonstrates streaming/async capabilities with progress notifications
+ * - **StreamingDemoTool**: Demonstrates streaming/async capabilities with progress notifications
  *
  * ## Creating New Tools
  *
