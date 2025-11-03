@@ -113,7 +113,7 @@ class TurnstileMcpGateway(config: Config)(implicit system: ActorSystem[?]) {
       logger.info(s"  Fallback enabled: true")
 
       // 4. Create Pekko HTTP route with the router
-      val route = createRoutedPekkoHttpRoute(mcpEndpoint)
+      val route = createHttpRoute(mcpEndpoint)
 
       // 5. Start the Pekko HTTP server
       logger.info(s"Starting Pekko HTTP server on http://${host}:${port}${mcpEndpoint}")
@@ -158,7 +158,7 @@ class TurnstileMcpGateway(config: Config)(implicit system: ActorSystem[?]) {
   /**
    * Create a Pekko HTTP route that uses HeaderBasedRouter to route to different handlers.
    */
-  private def createRoutedPekkoHttpRoute(
+  private def createHttpRoute(
     mcpEndpoint: String
   ): Route = {
     path(mcpEndpoint.stripPrefix("/")) {
