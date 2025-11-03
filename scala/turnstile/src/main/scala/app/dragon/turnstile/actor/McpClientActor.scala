@@ -2,8 +2,8 @@ package app.dragon.turnstile.actor
 
 import app.dragon.turnstile.client.TurnstileStreamingHttpAsyncMcpClient
 import io.modelcontextprotocol.spec.McpSchema
-import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
+import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityTypeKey}
 
 import scala.util.{Failure, Success, Try}
@@ -17,7 +17,7 @@ object McpClientActorId {
     val Array(userId, mcpClientActorId) = entityId.split("-", 2)
     McpClientActorId(userId, mcpClientActorId)
   }
-  
+
   def getEntityId(userId: String, clientId: String): String =
     s"$userId-$clientId"
 }
@@ -33,14 +33,30 @@ object McpClientActor {
       McpClientActor(id.userId, id.mcpClientActorId)
     })
 
-  //def getEntityId(userId: String, clientId: String): String =
-  //  s"$userId-$clientId"
-
   sealed trait Message extends TurnstileSerializable
-  final case class McpToolCallRequest(request: McpSchema.CallToolRequest, replyTo: ActorRef[Either[McpClientError, McpSchema.CallToolResult]]) extends Message
-  final case class McpListTools(replyTo: ActorRef[Either[McpClientError, McpSchema.ListToolsResult]]) extends Message
-  final case class McpNotification(notificationType: NotificationType, payload: Any) extends Message
-  final case class McpPing(replyTo: ActorRef[Unit]) extends Message
+
+  final case class Initialize(
+    serverUrl: String,
+  ) extends Message
+
+  final case class McpToolCallRequest(
+    request: McpSchema.CallToolRequest,
+    replyTo: ActorRef[Either[McpClientError,
+      McpSchema.CallToolResult]]
+  ) extends Message
+
+  final case class McpListTools(
+    replyTo: ActorRef[Either[McpClientError, McpSchema.ListToolsResult]]
+  ) extends Message
+
+  final case class McpNotification(
+    notificationType: NotificationType,
+    payload: Any
+  ) extends Message
+
+  final case class McpPing(
+    replyTo: ActorRef[Unit]
+  ) extends Message
 
   sealed trait NotificationType extends TurnstileSerializable
   case object ToolsChanged extends NotificationType
@@ -50,17 +66,37 @@ object McpClientActor {
   case object ProgressUpdate extends NotificationType
 
   // Internal wrapper messages
-  private final case class InitializeStatus(status: Either[McpClientError, McpSchema.InitializeResult]) extends Message
-  private final case class PingResponse(result: Try[Unit], replyTo: ActorRef[Unit]) extends Message
-  private final case class ToolCallResponse(result: Try[McpSchema.CallToolResult], replyTo: ActorRef[Either[McpClientError, McpSchema.CallToolResult]]) extends Message
-  private final case class ListToolsResponse(result: Try[McpSchema.ListToolsResult], replyTo: ActorRef[Either[McpClientError, McpSchema.ListToolsResult]]) extends Message
+  private final case class InitializeStatus(
+    status: Either[McpClientError,
+      McpSchema.InitializeResult])
+    extends Message
+
+  private final case class PingResponse(
+    result: Try[Unit],
+    replyTo: ActorRef[Unit]
+  ) extends Message
+
+  private final case class ToolCallResponse(
+    result: Try[McpSchema.CallToolResult],
+    replyTo: ActorRef[Either[McpClientError,
+      McpSchema.CallToolResult]]
+  ) extends Message
+
+  private final case class ListToolsResponse(
+    result: Try[McpSchema.ListToolsResult],
+    replyTo: ActorRef[Either[McpClientError,
+      McpSchema.ListToolsResult]]
+  ) extends Message
 
   sealed trait McpClientError extends TurnstileSerializable
   final case class ConnectionError(message: String) extends McpClientError
   final case class ProcessingError(message: String) extends McpClientError
   final case class NotInitializedError(message: String) extends McpClientError
 
-  def apply(userId: String, mcpClientActorId: String, serverUrl: String): Behavior[Message] = {
+  def apply(
+    userId: String,
+    mcpClientActorId: String,
+  ): Behavior[Message] = {
     Behaviors.withStash(100) { buffer =>
       Behaviors.setup { context =>
         implicit val system: ActorSystem[Nothing] = context.system
@@ -69,16 +105,11 @@ object McpClientActor {
         context.log.info(s"Creating MCP client actor for user $userId, client $mcpClientActorId")
 
         // Create the client
-        val mcpClient = TurnstileStreamingHttpAsyncMcpClient("https://mcp.deepwiki.com/mcp")
+        //val mcpClient = TurnstileStreamingHttpAsyncMcpClient(serverUrl)
 
-        new McpClientActor(context, buffer, userId, mcpClientActorId).initState(mcpClient)
+        new McpClientActor(context, buffer, userId, mcpClientActorId).initWaitState()
       }
     }
-  }
-
-  // Convenience apply without serverUrl for default configuration
-  def apply(userId: String, mcpClientActorId: String): Behavior[Message] = {
-    apply(userId, mcpClientActorId, "http://localhost:8081")
   }
 }
 
@@ -89,7 +120,7 @@ class McpClientActor(
   mcpClientActorId: String,
 ) {
 
-  import McpClientActor._
+  import McpClientActor.*
 
   implicit val ec: scala.concurrent.ExecutionContext = context.executionContext
 
@@ -97,32 +128,20 @@ class McpClientActor(
    * State while waiting for client initialization.
    * Stashes incoming requests until the client is ready.
    */
-  def initState(mcpClient: TurnstileStreamingHttpAsyncMcpClient): Behavior[Message] = {
-    context.pipeToSelf(mcpClient.initialize()) {
-      case Success(initResult) =>
-        context.log.info(s"MCP client initialized: ${initResult.serverInfo().name()}")
-        InitializeStatus(Right(initResult))
-      case Failure(exception) =>
-        context.log.error(s"Failed to initialize MCP client: ${exception.getMessage}")
-        InitializeStatus(Left(ConnectionError(exception.getMessage)))
-    }
-
-    Behaviors.receiveMessagePartial(handleInitialize(mcpClient))
+  def initWaitState(
+  ): Behavior[Message] = {
+    Behaviors.receiveMessagePartial(
+      handleInitialize()
+    )
   }
 
-  /**
-   * Handles the initialization of the MCP client and pipes the result to self.
-   */
-  def handleInitialize(mcpClient: TurnstileStreamingHttpAsyncMcpClient): PartialFunction[Message, Behavior[Message]] = {
-    case InitializeStatus(status) =>
-      context.log.info(s"MCP client actor $mcpClientActorId initialized successfully")
-      buffer.unstashAll(activeState(mcpClient))
-    case other =>
-      context.log.debug(s"Stashing message while initializing: ${other.getClass.getSimpleName}")
-      buffer.stash(other)
-      Behaviors.same
+  def initializingState(
+    mcpClient: TurnstileStreamingHttpAsyncMcpClient
+  ): Behavior[Message] = {
+    Behaviors.receiveMessagePartial(
+      handleInitializeStatus(mcpClient)
+    )
   }
-
   /**
    * Active state - handles all MCP client operations.
    */
@@ -143,6 +162,40 @@ class McpClientActor(
         mcpClient.closeGracefully()
         Behaviors.same
     }
+  }
+
+  def handleInitialize(
+  ): PartialFunction[Message, Behavior[Message]] = {
+    case Initialize(serverUrl: String) =>
+      context.log.info(s"Initializing MCP client actor $mcpClientActorId with server URL $serverUrl")
+
+      val mcpClient = TurnstileStreamingHttpAsyncMcpClient(serverUrl)
+
+      context.pipeToSelf(mcpClient.initialize()) {
+        case Success(initResult) =>
+          context.log.info(s"MCP client initialized: ${initResult.serverInfo().name()}")
+          InitializeStatus(Right(initResult))
+        case Failure(exception) =>
+          context.log.error(s"Failed to initialize MCP client: ${exception.getMessage}")
+          InitializeStatus(Left(ConnectionError(exception.getMessage)))
+      }
+
+      initializingState(mcpClient)
+  }
+
+  /**
+   * Handles the initialization of the MCP client and pipes the result to self.
+   */
+  def handleInitializeStatus(
+    mcpClient: TurnstileStreamingHttpAsyncMcpClient
+  ): PartialFunction[Message, Behavior[Message]] = {
+    case InitializeStatus(status) =>
+      context.log.info(s"MCP client actor $mcpClientActorId initialized successfully")
+      buffer.unstashAll(activeState(mcpClient))
+    case other =>
+      context.log.debug(s"Stashing message while initializing: ${other.getClass.getSimpleName}")
+      buffer.stash(other)
+      Behaviors.same
   }
 
   /**

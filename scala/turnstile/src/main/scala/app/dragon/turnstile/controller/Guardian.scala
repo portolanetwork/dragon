@@ -1,6 +1,6 @@
 package app.dragon.turnstile.controller
 
-import app.dragon.turnstile.actor.{McpClientActor, McpServerActor}
+import app.dragon.turnstile.actor.{McpClientActor, McpServerActor, McpSessionMapActor}
 import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.db.DatabaseMigration
 import app.dragon.turnstile.gateway.TurnstileMcpGateway
@@ -44,6 +44,7 @@ object Guardian {
       // Initialize sharding and actors here
       McpServerActor.initSharding(context.system)
       McpClientActor.initSharding(context.system)
+      McpSessionMapActor.initSharding(context.system)
       
       // Start GRPC server (hosting both GreeterService and TurnstileService)
       TurnstileGrpcServer.start(grpcHost, grpcPort, context.system)

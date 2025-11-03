@@ -1,16 +1,20 @@
 package app.dragon.turnstile.gateway
 
+import app.dragon.turnstile.actor.McpSessionMapActor.SessionMapError
+import app.dragon.turnstile.actor.{ActorLookup, McpSessionMapActor}
 import app.dragon.turnstile.utils.Random
 
-import java.util.concurrent.ConcurrentHashMap
-import java.util.UUID
 import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse, StatusCodes}
 import org.apache.pekko.http.scaladsl.model.HttpEntity
 import org.apache.pekko.http.scaladsl.model.ContentTypes
 import org.slf4j.{Logger, LoggerFactory}
-import org.springframework.http.server.reactive.HttpHandler
 
 import scala.concurrent.{ExecutionContext, Future}
+
+// Added imports for ClusterSharding, ActorSystem and Timeout used by ask pattern
+import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
+import org.apache.pekko.actor.typed.ActorSystem
+import org.apache.pekko.util.Timeout
 
 /**
  * Simplified router: routes HTTP requests to WebFlux handlers based on a header value.
@@ -18,51 +22,66 @@ import scala.concurrent.{ExecutionContext, Future}
  * Looks up the handler ID directly from the specified header value.
  * If not found, optionally falls back to the default handler.
  */
-class SessionMap() {
+class SessionMap()(
+  implicit ec: ExecutionContext, 
+  system: ActorSystem[_], 
+  sharding: ClusterSharding, timeout: Timeout) {
   private val logger: Logger = LoggerFactory.getLogger(classOf[SessionMap])
-
-  // Thread-safe map for mcp-session-id -> actor-id
-  private val sessionIdToMcpActorMap = new ConcurrentHashMap[String, String]()
 
   case class ActiveSessionResult(mcpActorId: String, sessionIdOpt: Option[String])
 
+  final val mcpSessionHeader = "mcp-session-id"
+  final val authHeader = "authorization"
+  
   /**
    * Route a Pekko HTTP request to the appropriate WebFlux handler.
    *
    * @param pekkoRequest The incoming Pekko HTTP request
    * @return Future[Either[HttpResponse, (String, HttpHandler)]]
    */
-  def lookup(pekkoRequest: HttpRequest)(implicit ec: ExecutionContext): Future[ActiveSessionResult] = {
-    Future {
-      // Extract mcp-session-id header value
-      val sessionHeader = "mcp-session-id"
-      val sessionIdOpt = pekkoRequest.headers
-        .find(_.lowercaseName() == sessionHeader)
-        .map(_.value())
+  def lookup(
+    pekkoRequest: HttpRequest
+  ): Future[ActiveSessionResult] = {
+    // Extract mcp-session-id header value
+    
+    val sessionIdOpt = pekkoRequest.headers
+      .find(_.lowercaseName() == mcpSessionHeader)
+      .map(_.value())
 
-      // if sessionId is present, look up actorId from mapping otherwise generate a fresh one
-      //  and create a mapping
-      sessionIdOpt match {
-        case Some(sid) if sessionIdToMcpActorMap.containsKey(sid) =>
-          logger.debug(s"Received request with $sessionHeader: $sid")
+    // TODO: Introduce user identification from auth header or other means
+    
+    sessionIdOpt match {
+      case Some(mcpSessionId) =>
+        logger.debug(s"Received request with $mcpSessionHeader: $mcpSessionId")
+        // ask returns a Future; return that directly
+        ActorLookup.getMcpSessionMapActor("changeThisToUserId").ask[Either[SessionMapError, String]](
+          replyTo => McpSessionMapActor.SessionLookup(mcpSessionId, replyTo)
+        ).map {
+          case Right(actorId) =>
+            ActiveSessionResult(
+              mcpActorId = actorId,
+              sessionIdOpt = Some(mcpSessionId)
+            )
+          case Left(error) =>
+            logger.error(s"Session lookup error for $mcpSessionId: ${error}, generating new actor Id")
+            val actorId = generateActorId("changeThisToUserId")
+
+            ActiveSessionResult(
+              mcpActorId = actorId,
+              sessionIdOpt = Some(mcpSessionId)
+            )
+        }
+
+      case None =>
+        logger.debug(s"$mcpSessionHeader header NOT found in request. Generating new actor ID.")
+        val actorId = "changeThisToUserId-" + Random.generateUuid()
+
+        Future.successful(
           ActiveSessionResult(
-            mcpActorId = sessionIdToMcpActorMap.get(sid),
-            sessionIdOpt = Some(sid)
-          )
-        case Some(sid) =>
-          logger.debug(s"No existing actor mapping for $sessionHeader: $sid, generating new actor ID")
-          ActiveSessionResult(
-            mcpActorId = "changeThisToUserId-"+Random.generateUuid(),
-            sessionIdOpt = Some(sid)
-          )
-        case None =>
-          logger.debug(s"No $sessionHeader header found in request")
-          //Random.generateRandBase64String(10)
-          ActiveSessionResult(
-            mcpActorId = "changeThisToUserId-"+Random.generateUuid(),
+            mcpActorId = "changeThisToUserId-" + Random.generateUuid(),
             sessionIdOpt = None
           )
-      }
+        )
     }
   }
 
@@ -70,20 +89,16 @@ class SessionMap() {
    * Update the session-to-actor mapping if a new mcp-session-id is observed in a response.
    */
   def updateSessionMapping(sessionId: String, actorId: String): Unit = {
-    if (sessionId != null && actorId != null) {
-      sessionIdToMcpActorMap.put(sessionId, actorId)
+    if (!sessionId.isEmpty && !actorId.isEmpty) {
+      ActorLookup.getMcpSessionMapActor("changeThisToUserId") !
+        McpSessionMapActor.SessionCreate(sessionId, actorId)
+
       logger.debug(s"Updated session mapping: $sessionId -> $actorId")
     }
   }
 
-  private def createErrorResponse(status: StatusCodes.ClientError, message: String): HttpResponse = {
-    HttpResponse(
-      status = status,
-      entity = HttpEntity(
-        ContentTypes.`application/json`,
-        s"""{"error": "$message"}"""
-      )
-    )
+  private def generateActorId(userId: String): String = {
+    userId + "-" + Random.generateUuid()
   }
 }
 
@@ -94,5 +109,10 @@ object SessionMap {
    * @param registry Handler registry
    * @param handlerFactory Function to create a handler given an actor-id
    */
-  def apply(): SessionMap = new SessionMap()
+  def apply()
+    (implicit
+      ec: ExecutionContext,
+      system: ActorSystem[_],
+      sharding: ClusterSharding,
+      timeout: Timeout): SessionMap = new SessionMap()
 }

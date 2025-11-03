@@ -111,7 +111,7 @@ class ToolsService(
 
       // Sequence per-server futures and collect successful tool specs
       val toolsFutures: Seq[Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]]] =
-        servers.map(server => getDownstreamToolsSpec(server.uuid, server.name))
+        servers.map(server => getDownstreamToolsSpec(server.uuid, server.name, server.url))
 
       Future.sequence(toolsFutures).map { results =>
         val allTools = results.collect { case Right(tools) => tools }.flatten.toList
@@ -139,6 +139,7 @@ class ToolsService(
   private[service] def getDownstreamTools(
     mcpServerUuid: String,
     mcpServerName: String,
+    serverUrl: String,
   )(implicit
     system: ActorSystem[?],
     timeout: Timeout = 30.seconds
@@ -149,8 +150,11 @@ class ToolsService(
     
     logger.info(s"Fetching namespaced tools from MCP client actor: $mcpServerUuid for user=$userId")
 
+    ActorLookup.getMcpClientActor(userId, mcpServerUuid) ! McpClientActor.Initialize(serverUrl)
+    
     // Query the actor for its tools
-    ActorLookup.getMcpClientActor(userId, mcpServerUuid).ask[Either[McpClientActor.McpClientError, McpSchema.ListToolsResult]](
+    ActorLookup.getMcpClientActor(userId, mcpServerUuid)
+      .ask[Either[McpClientActor.McpClientError, McpSchema.ListToolsResult]](
       replyTo => McpClientActor.McpListTools(replyTo)
     ).map {
       case Right(listResult) =>
@@ -162,7 +166,6 @@ class ToolsService(
         val downstreamTools = tools.map { downstreamToolSchema =>
           val turnstileToolSchema = McpSchema.Tool.builder()
             .name(s"${mcpServerName}.${downstreamToolSchema.name()}")
-            //.name(toolSchema.name())
             .description(downstreamToolSchema.description())
             .inputSchema(downstreamToolSchema.inputSchema())
             .outputSchema(downstreamToolSchema.outputSchema())
@@ -182,14 +185,15 @@ class ToolsService(
 
   private def getDownstreamToolsSpec(
     mcpServerUuid: String,
-    mcpServerName: String
+    mcpServerName: String,
+    serverUrl: String,
   )(implicit
     system: ActorSystem[?],
     timeout: Timeout = 30.seconds
   ): Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]] = {
     require(mcpServerUuid.nonEmpty, "mcpClientActorId cannot be empty")
 
-    getDownstreamTools(mcpServerUuid, mcpServerName).map {
+    getDownstreamTools(mcpServerUuid, mcpServerName, serverUrl).map {
       case Right(tools) =>
         val toolSpecs = convertToAsyncToolSpec(tools)
         Right(toolSpecs)

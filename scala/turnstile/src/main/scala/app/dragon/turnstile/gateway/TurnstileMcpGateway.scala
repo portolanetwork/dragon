@@ -1,40 +1,17 @@
 package app.dragon.turnstile.gateway
 
-import app.dragon.turnstile.actor.McpClientActor.McpListTools
-import app.dragon.turnstile.actor.{ActorLookup, McpClientActor, McpServerActor}
-import app.dragon.turnstile.config.ApplicationConfig
-import app.dragon.turnstile.server.{PekkoToSpringRequestAdapter, SpringToPekkoResponseAdapter}
-import app.dragon.turnstile.utils.Random
+import app.dragon.turnstile.actor.{ActorLookup, McpServerActor}
 import com.typesafe.config.Config
-import io.modelcontextprotocol.json.McpJsonMapper
-import io.modelcontextprotocol.server.transport.WebFluxStreamableServerTransportProvider
-import io.modelcontextprotocol.server.{McpAsyncServer, McpServer}
-import io.modelcontextprotocol.spec.McpSchema
-import org.apache.pekko.actor.typed.{ActorSystem, Scheduler}
-import org.apache.pekko.actor.typed.scaladsl.Behaviors
+import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
 import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.model.*
 import org.apache.pekko.http.scaladsl.server.Directives.*
 import org.apache.pekko.http.scaladsl.server.Route
-import org.apache.pekko.stream.scaladsl.{Sink, Source}
-import org.apache.pekko.util.{ByteString, Timeout}
+import org.apache.pekko.util.Timeout
 import org.slf4j.{Logger, LoggerFactory}
-import org.springframework.http.server.reactive.ServerHttpRequest.Builder
-import org.springframework.http.server.reactive.{HttpHandler, ServerHttpRequest, ServerHttpResponse}
-import org.springframework.http.{HttpMethod, HttpHeaders as SpringHeaders}
-import org.springframework.web.reactive.function.server.RouterFunctions
-import reactor.core.publisher.Flux
-import reactor.core.scheduler.Schedulers
-import org.apache.pekko.actor.typed.ActorSystem
 
-
-import java.net.{InetSocketAddress, URI}
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.duration.*
-import scala.concurrent.{Await, ExecutionContext, Future, Promise}
-import scala.jdk.CollectionConverters.*
 import scala.util.{Failure, Success}
 
 /**
@@ -163,50 +140,59 @@ class TurnstileMcpGateway(config: Config)(implicit system: ActorSystem[?]) {
   ): Route = {
     path(mcpEndpoint.stripPrefix("/")) {
       extractRequest { pekkoRequest =>
-        onSuccess(sessionMap.lookup(pekkoRequest)) { routeResult =>
-          val mcpActorId = routeResult.mcpActorId
-          val entityRef = ActorLookup.getMcpServerActor(mcpActorId)
-          val askFuture = pekkoRequest.method.value match {
+        // Chain the lookup and the actor ask using flatMap/map so we can use map on Futures
+        val responseFuture = for {
+          routeResult <- sessionMap.lookup(pekkoRequest)
+          // derived values can be bound inside the for comprehension
+          mcpActorId = routeResult.mcpActorId
+          //entityRef = ActorLookup.getMcpServerActor(routeResult.mcpActorId)
+           askResult <- pekkoRequest.method.value match {
             case "GET" =>
-              entityRef.ask[Either[McpServerActor.McpActorError, HttpResponse]](replyTo => {
-                logger.debug(s"Routing GET request to MCP actor: $mcpActorId")
-                McpServerActor.McpGetRequest(pekkoRequest, replyTo)
-              })
+              ActorLookup.getMcpServerActor(mcpActorId)
+                .ask[Either[McpServerActor.McpActorError, HttpResponse]](replyTo => {
+                  logger.debug(s"Routing GET request to MCP actor: $mcpActorId")
+                  McpServerActor.McpGetRequest(pekkoRequest, replyTo)
+                })
             case "POST" =>
-              entityRef.ask[Either[McpServerActor.McpActorError, HttpResponse]](replyTo => {
+              ActorLookup.getMcpServerActor(mcpActorId)
+                .ask[Either[McpServerActor.McpActorError, HttpResponse]](replyTo => {
                 logger.debug(s"Routing POST request to MCP actor: $mcpActorId")
                 McpServerActor.McpPostRequest(pekkoRequest, replyTo)
               })
             case "DELETE" =>
-              entityRef.ask[Either[McpServerActor.McpActorError, HttpResponse]](replyTo => {
+              ActorLookup.getMcpServerActor(mcpActorId)
+                .ask[Either[McpServerActor.McpActorError, HttpResponse]](replyTo => {
                 logger.debug(s"Routing DELETE request to MCP actor: $mcpActorId")
                 McpServerActor.McpDeleteRequest(pekkoRequest, replyTo)
               })
             case other =>
-              // Return 405 Method Not Allowed for unsupported methods
               logger.warn(s"Method $other not supported by MCP gateway")
-
               scala.concurrent.Future.successful(Left(McpServerActor.ProcessingError(s"Method $other not supported")))
           }
-          onSuccess(askFuture) {
-            case Right(httpResponse) => {
-              logger.debug(s"---- Received response from MCP actor: $mcpActorId")
+        } yield {
+          askResult match {
+            case right @ Right(httpResponse) =>
               val sessionIdOpt = httpResponse.headers.find(_.name.toLowerCase == "mcp-session-id").map(_.value)
-
+              logger.debug(s"---- Received response from MCP actor: $mcpActorId")
               logger.debug(s"---- Updating session mapping: ${sessionIdOpt.orNull} -> $mcpActorId")
-              sessionMap.updateSessionMapping(sessionIdOpt.orNull, mcpActorId)
-              complete(httpResponse)
-            }
-            case Left(McpServerActor.ProcessingError(msg)) => {
-              logger.error(s"Error processing request in MCP actor $mcpActorId: $msg")
-              complete(HttpResponse(500, entity = msg))
-            }
+              sessionMap.updateSessionMapping(sessionIdOpt.getOrElse(""), mcpActorId)
+              right
+            case left @ Left(_) => left
           }
         }
-      }
-    }
+        // end for-comprehension
 
-  }
+        // Single onSuccess that handles the final Either result
+        onSuccess(responseFuture) {
+          case Right(httpResponse) =>
+            complete(httpResponse)
+          case Left(McpServerActor.ProcessingError(msg)) =>
+            logger.error(s"Error processing request: $msg")
+            complete(HttpResponse(500, entity = msg))
+        }
+       }
+     }
+   }
 
 
 }

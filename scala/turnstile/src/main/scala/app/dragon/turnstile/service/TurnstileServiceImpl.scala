@@ -16,6 +16,8 @@ import scala.concurrent.{ExecutionContext, Future}
  */
 object TurnstileServiceImpl {
   // Placeholder for future companion object utilities
+  def apply()(implicit db: Database): TurnstileServiceImpl =
+    new TurnstileServiceImpl()
 }
 
 /**
@@ -23,11 +25,11 @@ object TurnstileServiceImpl {
  *
  * This service provides MCP server registration functionality through gRPC.
  */
-class TurnstileServiceImpl(system: ActorSystem[_])(implicit db: Database) extends TurnstileService {
+class TurnstileServiceImpl()(implicit db: Database) extends TurnstileService {
   private val logger: Logger = LoggerFactory.getLogger(classOf[TurnstileServiceImpl])
-  private implicit val sys: ActorSystem[_] = system
-  private implicit val ec: ExecutionContext = system.executionContext
-
+  
+  implicit private val ec: ExecutionContext = ExecutionContext.global
+  
   /**
    * Create a new MCP server registration.
    *

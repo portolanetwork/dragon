@@ -6,7 +6,6 @@ import dragon.turnstile.api.v1.{TurnstileService, TurnstileServiceHandler}
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.grpc.scaladsl.{ServerReflection, ServiceHandler}
 import org.apache.pekko.http.scaladsl.Http
-import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse}
 import org.slf4j.{Logger, LoggerFactory}
 import slick.jdbc.JdbcBackend.Database
 
@@ -39,11 +38,8 @@ class TurnstileGrpcServer private(system: ActorSystem[Nothing]) {
     // Create database instance
     implicit val db: Database = Database.forConfig("", ApplicationConfig.dbConfig)
 
-    // Create service implementations
-    val turnstileServiceImpl = new TurnstileServiceImpl(system)
-
     // Create service handlers
-    val turnstileServiceHandler = TurnstileServiceHandler.partial(turnstileServiceImpl)
+    val turnstileServiceHandler = TurnstileServiceHandler.partial(TurnstileServiceImpl())
 
     // Create server reflection for both services
     val reflection = ServerReflection.partial(List(TurnstileService))
