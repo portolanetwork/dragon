@@ -9,10 +9,47 @@ import org.slf4j.LoggerFactory
 import scala.concurrent.Await
 import scala.concurrent.duration.*
 
+/**
+ * Main application entry point for Dragon Turnstile.
+ *
+ * Turnstile is a distributed MCP (Model Context Protocol) gateway built on Apache Pekko.
+ * It provides:
+ * - Multi-tenant MCP server management with session-based routing
+ * - Actor-based isolation for MCP servers and clients
+ * - gRPC service for server registration and management
+ * - Database-backed server configuration
+ * - Cluster-aware architecture with sharding
+ *
+ * Application Initialization Sequence:
+ * 1. Loads configuration based on DEPLOYMENT_NAME environment variable
+ * 2. Creates actor system with Guardian as root supervisor
+ * 3. Starts Pekko Management for cluster coordination
+ * 4. Starts Cluster Bootstrap for automatic cluster formation
+ * 5. Guardian initializes:
+ *    - Database migrations
+ *    - Actor sharding for McpServerActor, McpClientActor, McpSessionMapActor
+ *    - gRPC server for API access
+ *    - MCP gateway for WebFlux-based MCP protocol handling
+ *
+ * Environment Variables:
+ * - DEPLOYMENT_NAME: Determines which config file to load (ci, staging, production, or default)
+ *
+ * Usage:
+ * {{{
+ * sbt run
+ * # or
+ * java -jar turnstile.jar
+ * }}}
+ */
 object TurnstileMain extends App {
   private val logger = LoggerFactory.getLogger(getClass)
   init()
 
+  /**
+   * Initialize the Turnstile application.
+   *
+   * Sets up the actor system, cluster management, and registers shutdown hooks.
+   */
   private def init(): Unit = {
     logger.info("""
                 ⠀⠀⠀⠀⢀⣀⣀⣀⣀⣀⣠⣼⠂⠀⠀⠀⠀⠙⣦⢀⠀⠀⠀⠀⠀⢶⣤⣀⣀⣀⣀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀

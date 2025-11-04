@@ -16,7 +16,42 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.jdk.CollectionConverters.*
 
 /**
- * Adapter that converts a Spring WebFlux ServerHttpResponse to a Pekko HttpResponse.
+ * Adapter that converts Spring WebFlux ServerHttpResponse to Pekko HttpResponse.
+ *
+ * This adapter implements the Adapter pattern to bridge between Spring WebFlux's reactive
+ * HTTP response model and Pekko HTTP's response model. It allows MCP servers built with
+ * Spring WebFlux transport (from the MCP SDK) to be embedded in a Pekko HTTP application.
+ *
+ * Architecture:
+ * {{{
+ * TurnstileStreamingHttpMcpServer (Spring WebFlux)
+ *   ↓ writes to
+ * SpringToPekkoResponseAdapter (implements ServerHttpResponse)
+ *   ↓ converts to
+ * Pekko HttpResponse
+ *   ↓ returned to
+ * Pekko HTTP Gateway
+ * }}}
+ *
+ * Conversion Strategy:
+ * 1. Status Code: Spring HttpStatusCode → Pekko StatusCode
+ * 2. Headers: Spring HttpHeaders → Pekko headers (excluding Content-Type/Length)
+ * 3. Body: Spring DataBuffer stream → Pekko ByteString Source
+ * 4. Content-Type: Extracted separately and set via HttpEntity
+ *
+ * Streaming Support:
+ * - Supports both buffered and streaming responses
+ * - Converts reactive Spring DataBuffer publisher to Pekko Source
+ * - Handles Server-Sent Events (SSE) for MCP streaming protocol
+ *
+ * Usage:
+ * {{{
+ * val adapter = new SpringToPekkoResponseAdapter()
+ * springHandler.handle(springRequest, adapter)  // Spring writes to adapter
+ * val pekkoResponse = adapter.getPekkoResponse() // Get converted response
+ * }}}
+ *
+ * Note: This adapter is single-use - create a new instance for each request/response pair.
  */
 class SpringToPekkoResponseAdapter()(implicit system: ActorSystem[?], ec: ExecutionContext)
   extends ServerHttpResponse {

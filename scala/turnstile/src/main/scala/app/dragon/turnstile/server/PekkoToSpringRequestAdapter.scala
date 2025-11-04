@@ -13,7 +13,53 @@ import java.net.{InetSocketAddress, URI}
 import scala.concurrent.ExecutionContext
 
 /**
- * Adapter that converts a Pekko HttpRequest to a Spring WebFlux ServerHttpRequest.
+ * Adapter that converts Pekko HttpRequest to Spring WebFlux ServerHttpRequest.
+ *
+ * This adapter implements the Adapter pattern to bridge between Pekko HTTP's request
+ * model and Spring WebFlux's request model. It allows Spring WebFlux-based MCP servers
+ * (from the MCP SDK) to handle requests from a Pekko HTTP gateway.
+ *
+ * Architecture:
+ * {{{
+ * Pekko HTTP Gateway
+ *   ↓ receives
+ * Pekko HttpRequest
+ *   ↓ converts via
+ * PekkoToSpringRequestAdapter (implements ServerHttpRequest)
+ *   ↓ passes to
+ * TurnstileStreamingHttpMcpServer (Spring WebFlux)
+ * }}}
+ *
+ * Conversion Strategy:
+ * 1. Method: Pekko HttpMethod → Spring HttpMethod
+ * 2. URI: Pekko Uri → Java URI
+ * 3. Headers: Pekko headers → Spring HttpHeaders
+ * 4. Body: Pekko HttpEntity → Flux[DataBuffer]
+ *    - Strict entities → single DataBuffer
+ *    - Streamed entities → Flux from Pekko Source
+ *    - Chunked entities → Flux of chunk DataBuffers
+ *
+ * Entity Types Supported:
+ * - HttpEntity.Strict: Buffered content
+ * - HttpEntity.Default: Streaming content
+ * - HttpEntity.Chunked: Chunked transfer encoding
+ *
+ * Limitations:
+ * - Remote address not available from Pekko HttpRequest (returns 0.0.0.0:0)
+ * - Cookie handling not implemented
+ * - SSL info not available
+ * - mutate() not supported (throws UnsupportedOperationException)
+ *
+ * Usage:
+ * {{{
+ * val pekkoRequest: HttpRequest = // from gateway
+ * val adapter = new PekkoToSpringRequestAdapter(pekkoRequest)
+ * springHandler.handle(adapter, springResponse)
+ * }}}
+ *
+ * Note: This adapter is single-use - create a new instance for each request.
+ *
+ * @param pekkoRequest The Pekko HttpRequest to adapt
  */
 class PekkoToSpringRequestAdapter(pekkoRequest: HttpRequest)(implicit system: ActorSystem[?], ec: ExecutionContext)
   extends ServerHttpRequest {

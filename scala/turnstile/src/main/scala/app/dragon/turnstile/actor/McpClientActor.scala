@@ -8,20 +8,90 @@ import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity
 
 import scala.util.{Failure, Success, Try}
 
+/**
+ * Entity ID for McpClientActor instances.
+ *
+ * Format: {userId}-{mcpClientActorId}
+ * This allows for user-scoped client isolation when connecting to downstream MCP servers.
+ *
+ * @param userId The user identifier
+ * @param mcpClientActorId The unique actor identifier (typically the downstream server UUID)
+ */
 case class McpClientActorId(userId: String, mcpClientActorId: String) {
   override def toString: String = s"$userId-$mcpClientActorId"
 }
 
 object McpClientActorId {
+  /**
+   * Parse an entity ID string into a McpClientActorId.
+   *
+   * @param entityId The entity ID string in format "userId-mcpClientActorId"
+   * @return McpClientActorId instance
+   */
   def fromString(entityId: String): McpClientActorId = {
     val Array(userId, mcpClientActorId) = entityId.split("-", 2)
     McpClientActorId(userId, mcpClientActorId)
   }
 
+  /**
+   * Construct an entity ID string from components.
+   *
+   * @param userId The user identifier
+   * @param clientId The client identifier
+   * @return Entity ID string
+   */
   def getEntityId(userId: String, clientId: String): String =
     s"$userId-$clientId"
 }
 
+/**
+ * MCP Client Actor - manages a connection to a downstream MCP server.
+ *
+ * This actor wraps a TurnstileStreamingHttpAsyncMcpClient and provides actor-based
+ * access to downstream MCP servers. It handles tool calls, resource access, and
+ * notifications from the remote server.
+ *
+ * Architecture:
+ * - Each registered downstream MCP server gets its own client actor instance
+ * - Cluster sharding distributes actors across nodes
+ * - Actor provides isolation and fault tolerance per downstream server
+ * - Lazy initialization on first Initialize message
+ *
+ * Lifecycle States:
+ * 1. initWaitState: Waiting for Initialize message with server URL
+ *    - Actor starts in this state
+ *    - Stashes all messages until initialized
+ * 2. initializingState: Connecting to downstream server
+ *    - MCP handshake in progress
+ *    - Messages still stashed
+ * 3. activeState: Connected and ready
+ *    - Handles tool calls, list operations, notifications
+ *    - Full MCP protocol support
+ *
+ * Message Flow:
+ * {{{
+ * ToolsService → McpClientActor.McpListTools
+ *   ↓
+ * TurnstileStreamingHttpAsyncMcpClient.listTools()
+ *   ↓
+ * HTTP/SSE to downstream MCP server
+ *   ↓
+ * Reply with ListToolsResult
+ * }}}
+ *
+ * Supported Operations:
+ * - Tool calls (with streaming progress support)
+ * - List tools/resources/prompts
+ * - Read resources
+ * - Get prompts
+ * - Ping (health check)
+ * - Notifications (tools changed, resources changed, logging, progress)
+ *
+ * Failure Handling:
+ * - Connection failure → returns Left(ConnectionError)
+ * - Operation failure → returns Left(ProcessingError)
+ * - PostStop signal → closes client connection gracefully
+ */
 object McpClientActor {
   val TypeKey: EntityTypeKey[McpClientActor.Message] =
     EntityTypeKey[McpClientActor.Message]("McpClientActor")

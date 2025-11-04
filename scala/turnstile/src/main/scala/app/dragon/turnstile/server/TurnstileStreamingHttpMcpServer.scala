@@ -16,16 +16,71 @@ import slick.jdbc.JdbcBackend.Database
 import scala.concurrent.duration.*
 import scala.concurrent.{ExecutionContext, Future}
 
+/**
+ * Factory for creating user-scoped MCP server instances.
+ */
 object TurnstileStreamingHttpMcpServer {
   val logger: org.slf4j.Logger = LoggerFactory.getLogger(classOf[TurnstileStreamingHttpMcpServer])
 
   val serverName: String = ApplicationConfig.mcpStreaming.getString("server-name")
   val serverVersion: String = ApplicationConfig.mcpStreaming.getString("server-version")
 
+  /**
+   * Create a new MCP server instance for a specific user.
+   *
+   * @param userId The user identifier
+   * @param system The actor system
+   * @return A new TurnstileStreamingHttpMcpServer instance
+   */
   def apply(userId: String)(implicit system: ActorSystem[?]): TurnstileStreamingHttpMcpServer =
     new TurnstileStreamingHttpMcpServer(serverName, serverVersion, userId)
 }
 
+/**
+ * User-scoped MCP server implementation using Spring WebFlux transport.
+ *
+ * This class wraps the MCP Java SDK's McpAsyncServer and provides user-isolated
+ * MCP server instances. Each user gets their own server with custom tool sets
+ * combining default (built-in) tools and tools from registered downstream MCP servers.
+ *
+ * Architecture:
+ * - Built on MCP Java SDK (io.modelcontextprotocol.server.McpAsyncServer)
+ * - Uses Spring WebFlux for HTTP/SSE transport
+ * - Embedded in McpServerActor for actor isolation
+ * - User-scoped tool aggregation from multiple sources
+ *
+ * Tool Sources:
+ * 1. Default Tools: Built-in tools (echo, system_info, etc.)
+ * 2. Downstream Tools: Namespaced tools from registered MCP servers
+ *
+ * Lifecycle:
+ * 1. start(): Create McpAsyncServer, register default tools
+ * 2. refreshDownstreamTools(): Fetch and register namespaced tools from downstream servers
+ * 3. Active: Handle MCP protocol requests via HttpHandler
+ * 4. stop(): Clean shutdown of MCP server
+ *
+ * MCP Capabilities:
+ * - Tools: ✓ (tool listing and execution)
+ * - Resources: ✓ (with subscriptions)
+ * - Prompts: ✓
+ * - Logging: ✓
+ * - Completions: ✓
+ *
+ * Usage:
+ * {{{
+ * val mcpServer = TurnstileStreamingHttpMcpServer(userId).start()
+ * mcpServer.refreshDownstreamTools()  // Async tool registration
+ *
+ * // Get the HTTP handler for request processing
+ * val httpHandler = mcpServer.getHttpHandler.get
+ * httpHandler.handle(springRequest, springResponse)
+ * }}}
+ *
+ * @param serverName The MCP server name
+ * @param serverVersion The MCP server version
+ * @param userId The user identifier for tool scoping
+ * @param system The actor system (implicit)
+ */
 class TurnstileStreamingHttpMcpServer(
   val serverName: String,
   val serverVersion: String,

@@ -10,17 +10,71 @@ import reactor.core.scheduler.Schedulers
 import scala.concurrent.Future
 import scala.jdk.FutureConverters.*
 
+/**
+ * Entity ID for McpServerActor instances.
+ *
+ * Format: {userId}-{mcpServerActorId}
+ * This allows for user-scoped MCP server isolation within the cluster.
+ *
+ * @param userId The user identifier
+ * @param mcpServerActorId The unique actor identifier for this user's MCP server
+ */
 case class McpServerActorId(userId: String, mcpServerActorId: String) {
   override def toString: String = s"$userId-$mcpServerActorId"
 }
 
 object McpServerActorId {
+  /**
+   * Parse an entity ID string into a McpServerActorId.
+   *
+   * @param entityId The entity ID string in format "userId-mcpServerActorId"
+   * @return McpServerActorId instance
+   */
   def fromString(entityId: String): McpServerActorId = {
     val Array(userId, mcpServerActorId) = entityId.split("-", 2)
     McpServerActorId(userId, mcpServerActorId)
   }
 }
 
+/**
+ * MCP Server Actor - manages a user-scoped MCP server instance.
+ *
+ * This actor encapsulates a TurnstileStreamingHttpMcpServer (Spring WebFlux-based MCP server)
+ * and handles HTTP requests from the gateway by adapting between Pekko and Spring types.
+ *
+ * Architecture:
+ * - Each user can have their own MCP server instance(s)
+ * - Cluster sharding ensures actors are distributed across nodes
+ * - Actor isolates user state and provides session affinity
+ * - Adapters bridge Pekko HTTP ↔ Spring WebFlux
+ *
+ * Lifecycle States:
+ * 1. initState: Waiting for MCP server initialization and downstream tool refresh
+ *    - Stashes incoming requests
+ *    - Fetches tools from registered downstream MCP servers
+ * 2. activeState: Handling HTTP requests
+ *    - Processes GET, POST, DELETE requests
+ *    - Adapts Pekko requests to Spring WebFlux
+ *    - Converts Spring responses back to Pekko
+ *
+ * Message Flow:
+ * {{{
+ * Gateway → McpServerActor.McpPostRequest(pekkoRequest)
+ *   ↓
+ * PekkoToSpringRequestAdapter (converts HttpRequest → ServerHttpRequest)
+ *   ↓
+ * TurnstileStreamingHttpMcpServer.getHttpHandler (Spring WebFlux)
+ *   ↓
+ * SpringToPekkoResponseAdapter (converts ServerHttpResponse → HttpResponse)
+ *   ↓
+ * Reply to Gateway with HttpResponse
+ * }}}
+ *
+ * Failure Handling:
+ * - Initialization failure → transitions to active state anyway (graceful degradation)
+ * - Request processing errors → returns Left(ProcessingError) to caller
+ * - PostStop signal → stops embedded MCP server cleanly
+ */
 object McpServerActor {
   val TypeKey: EntityTypeKey[McpServerActor.Message] =
     EntityTypeKey[McpServerActor.Message]("McpServerActor")

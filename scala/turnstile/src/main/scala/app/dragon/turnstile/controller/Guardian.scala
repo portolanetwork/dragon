@@ -10,6 +10,34 @@ import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorSystem, Behavior}
 import org.slf4j.{Logger, LoggerFactory}
 
+/**
+ * Guardian actor - the root supervisor for the Turnstile application.
+ *
+ * The Guardian implements the Guardian Pattern from Pekko's actor model, serving as the
+ * top-level supervisor that initializes and monitors all critical application subsystems.
+ *
+ * Responsibilities:
+ * 1. Database Migration - Runs Flyway migrations before starting services
+ * 2. Actor Sharding Initialization - Sets up cluster sharding for:
+ *    - McpServerActor: User-scoped MCP server instances
+ *    - McpClientActor: Client connections to downstream MCP servers
+ *    - McpSessionMapActor: Session management and routing
+ * 3. gRPC Server - Starts the gRPC service for server registration/management
+ * 4. MCP Gateway - Starts the HTTP-based MCP protocol gateway
+ *
+ * Initialization Sequence:
+ * 1. Run database migrations (fail-fast if migration fails)
+ * 2. Initialize cluster sharding for all actor types
+ * 3. Start gRPC server for API access
+ * 4. Start MCP Gateway if enabled in configuration
+ *
+ * Failure Handling:
+ * - Database migration failure → terminates the system
+ * - MCP Gateway startup failure → logs error but continues (gRPC still available)
+ *
+ * The Guardian uses Behaviors.empty as its final state since it doesn't process messages
+ * after initialization - it simply supervises child actors.
+ */
 object Guardian {
   val logger: Logger = LoggerFactory.getLogger(this.getClass.getSimpleName)
 
@@ -17,6 +45,11 @@ object Guardian {
   val mcpStreamingConfig: Config = ApplicationConfig.mcpStreaming
   val databaseConfig: Config = ApplicationConfig.dbConfig
 
+  /**
+   * Creates the Guardian actor behavior.
+   *
+   * @return Behavior[Nothing] - The Guardian doesn't process messages after setup
+   */
   def apply(): Behavior[Nothing] =
     Behaviors.setup[Nothing] { context =>
       implicit val system: ActorSystem[?] = context.system

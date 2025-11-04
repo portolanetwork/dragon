@@ -11,16 +11,92 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.jdk.CollectionConverters.*
 
+/**
+ * Factory for creating MCP client instances.
+ */
 object TurnstileStreamingHttpAsyncMcpClient {
   private val logger = LoggerFactory.getLogger(classOf[TurnstileStreamingHttpAsyncMcpClient])
 
-  val clientName: String = "Streaming client" //ApplicationConfig.mcpStreaming.getString("client-name")
-  val clientVersion: String = "0.1.0" //ApplicationConfig.mcpStreaming.getString("client-version")
+  val clientName: String = "Streaming client"
+  val clientVersion: String = "0.1.0"
 
+  /**
+   * Create a new MCP client connected to a downstream server.
+   *
+   * @param serverUrl The base URL of the MCP server (e.g., "http://localhost:8080")
+   * @param endpoint The MCP endpoint path (default: "/mcp")
+   * @param ec Execution context for async operations
+   * @return A started TurnstileStreamingHttpAsyncMcpClient instance
+   */
   def apply(serverUrl: String, endpoint: String = "/mcp")(implicit ec: ExecutionContext): TurnstileStreamingHttpAsyncMcpClient =
     new TurnstileStreamingHttpAsyncMcpClient(clientName, clientVersion, serverUrl, endpoint).start()
 }
 
+/**
+ * Async MCP client for connecting to downstream MCP servers.
+ *
+ * This client wraps the MCP Java SDK's McpAsyncClient and provides a Scala-friendly
+ * Future-based API. It handles HTTP/SSE communication with downstream MCP servers
+ * and exposes their tools, resources, and prompts to the Turnstile gateway.
+ *
+ * Architecture:
+ * - Built on MCP Java SDK (io.modelcontextprotocol.client.McpAsyncClient)
+ * - Uses HTTP streaming transport with Server-Sent Events (SSE)
+ * - Embedded in McpClientActor for actor isolation
+ * - Bridges Reactor Mono ↔ Scala Future
+ *
+ * MCP Protocol Support:
+ * - Tools: Call tools, list available tools
+ * - Resources: Read resources, list available resources
+ * - Prompts: Get prompts, list available prompts
+ * - Notifications: Tools changed, resources changed, prompts changed, logging, progress
+ * - Health: Ping/pong for liveness checks
+ *
+ * Lifecycle:
+ * 1. start(): Create McpAsyncClient with transport and notification handlers
+ * 2. initialize(): Perform MCP handshake, exchange capabilities
+ * 3. Active: Handle requests and notifications
+ * 4. closeGracefully(): Send close message and wait for acknowledgment
+ * 5. close(): Immediate close without waiting
+ *
+ * Notification Handling:
+ * - Tools Changed: Logs tool list updates
+ * - Resources Changed: Logs resource list updates
+ * - Prompts Changed: Logs prompt list updates
+ * - Logging: Receives and logs server messages
+ * - Progress: Tracks long-running operations with correlation metadata
+ *
+ * Progress Notifications:
+ * Progress updates include correlation metadata (toolName, iteration, elapsedSeconds)
+ * to track streaming tool execution across multiple iterations.
+ *
+ * Usage:
+ * {{{
+ * val client = TurnstileStreamingHttpAsyncMcpClient("http://localhost:8080")
+ * client.initialize().map { result =>
+ *   println(s"Connected to ${result.serverInfo().name()}")
+ * }
+ *
+ * // List tools
+ * client.listTools().map { result =>
+ *   result.tools().forEach(tool => println(tool.name()))
+ * }
+ *
+ * // Call a tool
+ * val request = McpSchema.CallToolRequest.builder()
+ *   .name("example_tool")
+ *   .build()
+ * client.callTool(request).map { result =>
+ *   println(result.content())
+ * }
+ * }}}
+ *
+ * @param clientName The MCP client name
+ * @param clientVersion The MCP client version
+ * @param serverUrl The downstream server base URL
+ * @param endpoint The MCP endpoint path
+ * @param ec Execution context for async operations
+ */
 class TurnstileStreamingHttpAsyncMcpClient(
   val clientName: String,
   val clientVersion: String,
