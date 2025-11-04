@@ -2,7 +2,7 @@
 
 An open-source, distributed hub for Model Context Protocol (MCP).
 
-While initially supporting MCP spec, Dragon's architecture is protocol-agnostic  and build to support emerging connectivity standards as AI ecosystem evolves.
+While initially supporting MCP spec, Dragon's architecture is protocol-agnostic and built to support emerging connectivity standards as AI ecosystem evolves.
 
 Dragon is built on Apache Pekko's actor system, providing a foundation for scalable MCP routing and tool aggregation. It runs on a single machine or scales horizontally across a cluster.
 
@@ -10,56 +10,59 @@ Dragon is built on Apache Pekko's actor system, providing a foundation for scala
 
 Dragon is a distributed MCP hub that aggregates tools from multiple downstream MCP servers and exposes them through a unified, user-scoped API. It routes requests between AI applications and tool providers.
 
-## **Capabilities:**
+## Capabilities
 
 ### Current
-- Agreegate multiple MCP servers into one with their own namespace
-- Route requests to user-specific MCP server instances
-- Full support for streaming HTTP spec
+- **MCP Server Agreegation**: Aggregate multiple MCP servers into one
+- **Tenant/User level isolation**: Route requests to user-specific MCP server instances
+- **Spec compliant**: Full support for streaming HTTP spec
 
 ### Planned
-- Manage tool access via policies
-- Monitor tool usage via an event logging
+- **Auth**: Full Auth support via third part IDPs
+- **Console UI**: Web based console UI
+- **Policy Based Enforcement**: Manage tool access via policies
+- **Monitoring**: Monitor tool usage via event logging
+- **Compliance**: Compliance for enterprise use-cases
+
+## Modern & Extensible Tech Stack
+
+- Extensible in any JVM based languates (Scala prefered)
+- Async programming using Apache Pekko (Akka fork)
+- MCP implementation uses official MCP SDK
+- gRPC API for server management
+- PostgreSQL DB
+- Comprehensive logging and error handling
 
 
-## ✨ Key Features (0.1.0)
-For the first release, Dragon provides a robust foundation for self-hosting and managing MCP connections.
+## Key Features (0.1.x)
 
-- Self-Hostable & Distributed: Run on a single machine or scale horizontally across a cluster using its native Apache Pekko (Akka fork) foundation.
-- Protocol Support: Full support for the Model Context Protocol (MCP) specification.
-- Connectivity: gRPC and HTTP APIs for both management and high-throughput MCP operations.
-- Observability: Built-in Prometheus-compatible metrics and structured logging for easy integration with monitoring tools.
-- Reliable Persistence: PostgreSQL-backed configuration management using Flyway for database migrations.
-- Open Source: Released under the permissive Apache 2.0 license.
+For the first developer release, Dragon provides a robust foundation for self-hosting and managing MCP connections.
 
-## 🚀 Why Dragon?
+- **Self-Hostable & Distributed**: Run on a single machine or scale horizontally across a cluster using its native Apache Pekko (Akka fork) foundation.
+- **Protocol Support**: Full support for the Model Context Protocol (MCP) specification (2025-06-18).
+- **Connectivity**: gRPC and HTTP APIs for both management and high-throughput MCP operations.
+- **Observability**: TBD
+- **Reliable Persistence**: PostgreSQL-backed configuration management using Flyway for database migrations.
+- **Open Source**: Released under the permissive Apache 2.0 license.
+
+## Why Dragon?
+
 Dragon is engineered to address the demanding requirements of AI infrastructure with an emphasis on scalability, resilience, and high throughput.
 
-Built for Scale and Resilience
+### Built for Scale and Resilience
+
 Dragon is founded on the principles of the Reactive Manifesto and built atop Apache Pekko.
 
-- Actor-Based Architecture: Uses Apache Pekko for natural isolation, fault tolerance, and distribution (including automatic recovery and rebalancing).
-- Horizontally Scalable: Easily scales across multiple nodes with cluster sharding and service discovery.
-- Asynchronous Design: A fully asynchronous, event-driven model from HTTP to database access, enabling high throughput and minimizing resource usage for idle connections.
-- Reactive Streaming: Implements reactive streams with backpressure handling for stable, streaming MCP operations.
+- **Actor-Based Architecture**: Uses Apache Pekko for natural isolation, fault tolerance, and distribution (including automatic recovery and rebalancing).
+- **Horizontally Scalable**: Easily scales across multiple nodes with cluster sharding and service discovery.
+- **Asynchronous Design**: A fully asynchronous, event-driven model from HTTP to database access, enabling high throughput and minimizing resource usage for idle connections.
+- **Reactive Streaming**: Implements reactive streams with backpressure handling for stable, streaming MCP operations.
 
-Modern & Extensible Foundation
-- Protocol-Agnostic Core: The architecture is designed for rapid iteration and easy extension to new protocols and connectivity standards beyond MCP.
-- Scala 3: Written in modern Scala 3 with minimal boilerplate, leveraging its strong type system to catch errors at compile time and running reliably on the JVM.
+### Modern & Extensible Foundation
 
+- **Protocol-Agnostic Core**: The architecture is designed for rapid iteration and easy extension to new protocols and connectivity standards beyond MCP.
+- **Scala 3**: Written in modern Scala 3 with minimal boilerplate, leveraging its strong type system to catch errors at compile time and running reliably on the JVM.
 
-## First Release
-
-This is a developer release of Dragon MCP Gateway. It includes:
-
-- MCP protocol implementation that uses official MCP SDK
-- Cluster-aware actor system with sharding
-- gRPC API for server management
-- HTTP streaming support
-- PostgreSQL-backed configuration
-- Spring WebFlux ↔ Pekko HTTP adapters
-- Comprehensive logging and error handling
-- Deployment configuration for single-node and cluster setups
 
 ## Getting Started
 
@@ -133,14 +136,14 @@ Point your MCP client to the gateway:
 ## Deployment
 
 ### Single Node (Development)
+
 ```bash
 sbt run
 ```
 
 ### Cluster Deployment (Production)
 
-TBD
-
+Documentation coming soon.
 
 ## Contributing
 
@@ -152,16 +155,11 @@ Apache License 2.0 - See [LICENSE](LICENSE) for details.
 
 ## Branding and Attribution
 
-While this project is open source under the Apache 2.0 license, the name "Dragon" and related branding are protected trademarks.
-
-You may not use the name "Dragon", "Portola" or similar marks for derivative works, forks, or redistributions without written permission.
-
+While this project is open source under the Apache 2.0 license, the name "Dragon" and related branding are protected trademarks. You may not use the name "Dragon", "Portola" or similar marks for derivative works, forks, or redistributions without written permission.
 
 ## Commercial Support
 
 Portola Network, Inc. offers commercial support, enterprise features, and professional services for Dragon MCP Gateway.
-
-
 
 ---
 
