@@ -47,26 +47,31 @@ class TurnstileServiceImpl()(implicit db: Database) extends TurnstileService {
     for {
       _ <- validateNotEmpty(request.name, "name")
       _ <- validateNotEmpty(request.url, "url")
-      insertedRow <- DbInterface.insertMcpServer(McpServerRow(
-          id = 0L,
-          uuid = UUID.nameUUIDFromBytes(s"${request.name}:${request.url}".getBytes("UTF-8")).toString,
-          tenant = "default", // TODO: Replace with actual tenant id from auth context
-          userId = "changeThisToUserId", // TODO: Replace with actual user id from auth context
-          name = request.name,
-          url = request.url,
-          clientId = None,
-          clientSecret = None,
-          refreshToken = None,
-          createdAt = now,
-          updatedAt = now
-        ))
+      insertResult <- DbInterface.insertMcpServer(McpServerRow(
+        uuid = UUID.nameUUIDFromBytes(s"${request.name}:${request.url}".getBytes("UTF-8")).toString,
+        tenant = "default", // TODO: Replace with actual tenant id from auth context
+        userId = "changeThisToUserId", // TODO: Replace with actual user id from auth context
+        name = request.name,
+        url = request.url,
+        clientId = None,
+        clientSecret = None,
+        refreshToken = None,
+        createdAt = now,
+        updatedAt = now
+      ))
     } yield {
-      logger.info(s"Successfully created MCP server ${insertedRow.name} with uuid ${insertedRow.uuid}")
-      McpServer(
-        uuid = insertedRow.uuid,
-        name = insertedRow.name,
-        url = insertedRow.url
-      )
+      insertResult match {
+        case Left(dbError) =>
+          logger.error(s"Failed to insert MCP server into DB: ${dbError.message}")
+          throw new RuntimeException(s"Database error: ${dbError.message}")
+        case Right(row) =>
+          logger.info(s"Successfully created MCP server with UUID: ${row.uuid}")
+          McpServer(
+            uuid = row.uuid,
+            name = row.name,
+            url = row.url
+          )
+      }
     }
   }
 
@@ -83,15 +88,21 @@ class TurnstileServiceImpl()(implicit db: Database) extends TurnstileService {
     for {
       _ <- validateNotEmpty(request.userId, "userId")
       // TODO: Replace "default" with actual tenant from auth context
-      rows <- DbInterface.listMcpServers(tenant = "default", userId = request.userId)
+      listResult <- DbInterface.listMcpServers(tenant = "default", userId = request.userId)
     } yield {
-      val servers = rows.map(row => McpServer(
-        uuid = row.uuid,
-        name = row.name,
-        url = row.url
-      ))
-      logger.info(s"Returning ${servers.size} MCP servers for userId: ${request.userId}")
-      McpServerList(mcpServer = servers)
+      listResult match {
+        case Left(dbError) =>
+          logger.error(s"Failed to list MCP servers from DB: ${dbError.message}")
+          throw new RuntimeException(s"Database error: ${dbError.message}")
+        case Right(rows) =>
+          val servers = rows.map(row => McpServer(
+            uuid = row.uuid,
+            name = row.name,
+            url = row.url
+          ))
+          logger.info(s"Returning ${servers.size} MCP servers for userId: ${request.userId}")
+          McpServerList(mcpServer = servers)
+      }
     }
   }
 }

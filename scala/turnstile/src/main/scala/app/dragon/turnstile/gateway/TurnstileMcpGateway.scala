@@ -71,7 +71,6 @@ class TurnstileMcpGateway(config: Config)(implicit system: ActorSystem[?]) {
   private val sessionMap: SessionMap = new SessionMap()
 
   val serverVersion: String = config.getString("server-version")
-  val toolNamespace: String = "tool-namespace"
   val host: String = config.getString("host")
   val port: Int = config.getInt("port")
   val mcpEndpoint: String = config.getString("mcp-endpoint")

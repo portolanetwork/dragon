@@ -151,7 +151,7 @@ class ToolsService(
     logger.info(s"Fetching namespaced tools from MCP client actor: $mcpServerUuid for user=$userId")
 
     ActorLookup.getMcpClientActor(userId, mcpServerUuid) ! McpClientActor.Initialize(serverUrl)
-    
+
     // Query the actor for its tools
     ActorLookup.getMcpClientActor(userId, mcpServerUuid)
       .ask[Either[McpClientActor.McpClientError, McpSchema.ListToolsResult]](

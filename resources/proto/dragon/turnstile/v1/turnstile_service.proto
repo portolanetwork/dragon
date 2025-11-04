@@ -19,6 +19,7 @@ option go_package = "dragon/turnstile/api/v1";
 service TurnstileService {
     rpc ListMcpServers (ListMcpServersRequest)  returns (McpServerList) {}
     rpc CreateMcpServer (CreateMcpServerRequest) returns (McpServer) {}
+    rpc DeleteMcpServer (DeleteMcpServerRequest) returns (google.protobuf.Empty) {}
 }
 
 // MCP Servers
@@ -31,6 +32,10 @@ message ListMcpServersRequest {
     string user_id = 1;
     //string page_size = 2;
     //string page_token = 3;
+}
+
+message DeleteMcpServerRequest {
+    string uuid = 1;
 }
 
 message McpServerList {
