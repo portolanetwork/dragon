@@ -1,6 +1,6 @@
 # Dragon MCP Hub
 
-An open-source, distributed hub for Model Context Protocol (MCP).
+An open-source, cloud-native, distributed hub for Model Context Protocol (MCP).
 
 While initially supporting MCP spec, Dragon's architecture is protocol-agnostic and built to support emerging connectivity standards as AI ecosystem evolves.
 
@@ -26,7 +26,7 @@ Dragon is a distributed MCP hub that aggregates tools from multiple downstream M
 
 ## Modern & Extensible Tech Stack
 
-- Extensible in any JVM based languates (Scala prefered)
+- Extensible in any JVM based languates
 - Async programming using Apache Pekko (Akka fork)
 - MCP implementation uses official MCP SDK
 - gRPC API for server management
@@ -38,9 +38,10 @@ Dragon is a distributed MCP hub that aggregates tools from multiple downstream M
 
 For the first developer release, Dragon provides a robust foundation for self-hosting and managing MCP connections.
 
-- **Self-Hostable & Distributed**: Run on a single machine or scale horizontally across a cluster using its native Apache Pekko (Akka fork) foundation.
+- **Self-Hostable & Distributed**: Run on a single machine or scale horizontally across a cluster using its native Apache Pekko foundation.
 - **Protocol Support**: Full support for the Model Context Protocol (MCP) specification (2025-06-18).
 - **Connectivity**: gRPC and HTTP APIs for both management and high-throughput MCP operations.
+- **Auth**: TBD
 - **Observability**: TBD
 - **Reliable Persistence**: PostgreSQL-backed configuration management using Flyway for database migrations.
 - **Open Source**: Released under the permissive Apache 2.0 license.
@@ -67,8 +68,8 @@ Dragon is founded on the principles of the Reactive Manifesto and built atop Apa
 ## Getting Started
 
 ### Prerequisites
-- JDK 11 or later
-- sbt 1.9+
+- JDK 17 or later
+- sbt 1.11+
 - PostgreSQL 12+
 
 ### Running Locally
@@ -80,15 +81,17 @@ cd dragon/scala/turnstile
 
 # Create a database (Use neon.dev and updated env vars in .env file)
 export DEPLOYMENT_NAME=default
+export DATABASE_URL=<db-url>
+export DATABASE_PASSWORD=<db-password>
+
 
 # Start the gateway (migrations run automatically)
 sbt run
 ```
 
 The gateway starts with:
-- gRPC API: `localhost:8080` (server management)
-- MCP Gateway: `localhost:8081/mcp` (MCP protocol endpoint)
-- Cluster Management: `localhost:8558` (Pekko management)
+- gRPC API: `localhost:8082` (server management)
+- MCP Gateway: `localhost:8082/mcp` (MCP protocol endpoint)
 
 ### Register a Downstream MCP Server
 
