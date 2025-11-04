@@ -24,5 +24,16 @@ object ServiceValidationUtil {
       Future.successful(value)
     }
   }
+  
+  def validateHasNoSpaces(value: String, fieldName: String)(implicit ec: ExecutionContext): Future[String] = {
+    if (value.contains(" ")) {
+      Future.failed(
+        Status.INVALID_ARGUMENT
+          .withDescription(s"$fieldName cannot contain spaces")
+        .asRuntimeException())
+    } else {
+      Future.successful(value)
+    }
+  }
 }
 

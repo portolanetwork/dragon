@@ -52,8 +52,8 @@ object TurnstileClientExample {
 
   def main(args: Array[String]): Unit = {
     // Parse arguments
-    //val serverUrl = args.headOption.getOrElse("http://localhost:8082")
-    val serverUrl = args.headOption.getOrElse("https://mcp.deepwiki.com/mcp")
+    val serverUrl = args.headOption.getOrElse("http://localhost:8082")
+    //val serverUrl = args.headOption.getOrElse("https://mcp.deepwiki.com/mcp")
     val endpoint = args.lift(1).getOrElse("/mcp")
 
     logger.info("=" * 80)

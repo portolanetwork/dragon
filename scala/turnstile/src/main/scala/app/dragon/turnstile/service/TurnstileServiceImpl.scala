@@ -32,7 +32,9 @@ class TurnstileServiceImpl()(implicit db: Database) extends TurnstileService {
   private val logger: Logger = LoggerFactory.getLogger(classOf[TurnstileServiceImpl])
   
   implicit private val ec: ExecutionContext = ExecutionContext.global
-  
+
+  // TODO: Integrate auth. Currently userId and tenant are hardcoded or passed in requests.
+
   /**
    * Create a new MCP server registration.
    *
@@ -49,6 +51,7 @@ class TurnstileServiceImpl()(implicit db: Database) extends TurnstileService {
     // Validate request using generic utility
     for {
       _ <- validateNotEmpty(request.name, "name")
+      _ <- validateHasNoSpaces(request.name, "name")
       _ <- validateNotEmpty(request.url, "url")
       insertResult <- DbInterface.insertMcpServer(McpServerRow(
         tenant = "default", // TODO: Replace with actual tenant id from auth context
@@ -68,6 +71,9 @@ class TurnstileServiceImpl()(implicit db: Database) extends TurnstileService {
           throw new GrpcServiceException(Status.UNKNOWN, MetadataBuilder().addText("UNHANDLED_ERROR", dbError.message).build())
         case Right(row) =>
           logger.info(s"Successfully created MCP server with UUID: ${row.uuid}")
+
+          // TODO: ToolServer must pick up new server registration at runtime and start using it
+
           McpServer(uuid = row.uuid.toString, name = row.name, url = row.url)
       }
     }

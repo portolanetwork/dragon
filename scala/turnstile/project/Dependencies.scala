@@ -21,6 +21,7 @@ object Dependencies {
   val postgresqlVersion = "42.7.4"
   val hikariCPVersion = "6.2.1"
   val flywayVersion = "11.1.0"
+  val springVersion = "6.2.1"
 
   val dependencies = Seq(
     "org.apache.pekko" %% "pekko-actor" % pekkoVersion,
@@ -85,7 +86,7 @@ object Dependencies {
     "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
     "com.h2database" % "h2" % "2.3.232" % Test,  // H2 for testing
 
-    "org.springframework" % "spring-context" % "6.2.1",
+    "org.springframework" % "spring-webflux" % springVersion,
 
   )
 
