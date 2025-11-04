@@ -4,6 +4,7 @@ import app.dragon.turnstile.db.Tables
 import app.dragon.turnstile.db.TurnstilePostgresProfile.api.*
 import slick.jdbc.JdbcBackend.Database
 
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 
@@ -41,7 +42,10 @@ object DbInterface {
   )(
     implicit db: Database, ec: ExecutionContext
   ): Future[Either[DbError, McpServerRow]] = {
-    val insertAction = (Tables.mcpServers returning Tables.mcpServers.map(_.id) into ((row, id) => row.copy(id = id))) += row
+    val insertAction =
+      (Tables.mcpServers
+        returning Tables.mcpServers.map(_.id)
+        into ((row, id) => row.copy(id = id))) += row
     db.run(insertAction)
       .map(Right(_): Either[DbError, McpServerRow])
       .recover {
@@ -63,7 +67,9 @@ object DbInterface {
   )(
     implicit db: Database, ec: ExecutionContext
   ): Future[Either[DbError, Seq[McpServerRow]]] = {
-    val query = Tables.mcpServers.filter(s => s.tenant === tenant && s.userId === userId).result
+    val query =
+      Tables.mcpServers
+        .filter(s => s.tenant === tenant && s.userId === userId).result
     db.run(query).map(Right(_): Either[DbError, Seq[McpServerRow]]).recover {
       case NonFatal(t) => Left(mapDbError(t))
     }
@@ -77,11 +83,12 @@ object DbInterface {
    * @return `Future[Either[DbError, Int]]` number of rows deleted or DbError
    */
   def deleteMcpServerByUuid(
-    uuid: String
+    uuid: UUID
   )(
     implicit db: Database, ec: ExecutionContext
   ): Future[Either[DbError, Int]] = {
-    val deleteAction = Tables.mcpServers.filter(_.uuid === uuid).delete
+    val deleteAction = Tables.mcpServers
+      .filter(_.uuid === uuid).delete
     db.run(deleteAction).map(Right(_): Either[DbError, Int]).recover {
       case NonFatal(t) => Left(mapDbError(t))
     }

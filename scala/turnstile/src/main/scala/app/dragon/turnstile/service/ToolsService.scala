@@ -112,7 +112,7 @@ class ToolsService(
 
         // Sequence per-server futures and collect successful tool specs
         val toolsFutures: Seq[Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]]] =
-          servers.map(server => getDownstreamToolsSpec(server.uuid, server.name, server.url))
+          servers.map(server => getDownstreamToolsSpec(server.uuid.toString, server.name, server.url))
 
         Future.sequence(toolsFutures).map { results =>
           val allTools = results.collect { case Right(tools) => tools }.flatten.toList

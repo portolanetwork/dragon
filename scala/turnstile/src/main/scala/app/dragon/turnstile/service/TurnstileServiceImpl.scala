@@ -51,14 +51,10 @@ class TurnstileServiceImpl()(implicit db: Database) extends TurnstileService {
       _ <- validateNotEmpty(request.name, "name")
       _ <- validateNotEmpty(request.url, "url")
       insertResult <- DbInterface.insertMcpServer(McpServerRow(
-        uuid = UUID.randomUUID().toString,
         tenant = "default", // TODO: Replace with actual tenant id from auth context
         userId = "changeThisToUserId", // TODO: Replace with actual user id from auth context
         name = request.name,
         url = request.url,
-        clientId = None,
-        clientSecret = None,
-        refreshToken = None,
         createdAt = now,
         updatedAt = now
       ))
@@ -72,7 +68,7 @@ class TurnstileServiceImpl()(implicit db: Database) extends TurnstileService {
           throw new GrpcServiceException(Status.UNKNOWN, MetadataBuilder().addText("UNHANDLED_ERROR", dbError.message).build())
         case Right(row) =>
           logger.info(s"Successfully created MCP server with UUID: ${row.uuid}")
-          McpServer(uuid = row.uuid, name = row.name, url = row.url)
+          McpServer(uuid = row.uuid.toString, name = row.name, url = row.url)
       }
     }
   }
@@ -104,7 +100,7 @@ class TurnstileServiceImpl()(implicit db: Database) extends TurnstileService {
           throw new GrpcServiceException(Status.UNKNOWN, MetadataBuilder().addText("UNHANDLED_ERROR", dbError.message).build())
         case Right(rows) =>
           val servers = rows.map(row => McpServer(
-            uuid = row.uuid,
+            uuid = row.uuid.toString,
             name = row.name,
             url = row.url
           ))
@@ -126,7 +122,10 @@ class TurnstileServiceImpl()(implicit db: Database) extends TurnstileService {
     // Validate request and delete server
     for {
       _ <- validateNotEmpty(request.uuid, "uuid")
-      deleteResult <- DbInterface.deleteMcpServerByUuid(request.uuid)
+      uuid <- Future.fromTry(scala.util.Try(UUID.fromString(request.uuid)))
+        .recoverWith(_ => Future.failed(new GrpcServiceException(Status.INVALID_ARGUMENT,
+          MetadataBuilder().addText("INVALID_UUID", s"Invalid UUID format: ${request.uuid}").build())))
+      deleteResult <- DbInterface.deleteMcpServerByUuid(uuid)
     } yield {
       deleteResult match {
         case Left(DbAlreadyExists) =>
