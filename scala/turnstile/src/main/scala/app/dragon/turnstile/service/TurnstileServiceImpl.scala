@@ -1,9 +1,12 @@
 package app.dragon.turnstile.service
 
-import app.dragon.turnstile.db.{DbInterface, McpServerRow}
+import app.dragon.turnstile.db.*
 import app.dragon.turnstile.utils.ServiceValidationUtil.*
+import com.google.protobuf.empty.Empty
 import dragon.turnstile.api.v1.*
-import org.apache.pekko.actor.typed.ActorSystem
+import io.grpc.Status
+import org.apache.pekko.grpc.GrpcServiceException
+import org.apache.pekko.grpc.scaladsl.MetadataBuilder
 import org.slf4j.{Logger, LoggerFactory}
 import slick.jdbc.JdbcBackend.Database
 
@@ -48,7 +51,7 @@ class TurnstileServiceImpl()(implicit db: Database) extends TurnstileService {
       _ <- validateNotEmpty(request.name, "name")
       _ <- validateNotEmpty(request.url, "url")
       insertResult <- DbInterface.insertMcpServer(McpServerRow(
-        uuid = UUID.nameUUIDFromBytes(s"${request.name}:${request.url}".getBytes("UTF-8")).toString,
+        uuid = UUID.randomUUID().toString,
         tenant = "default", // TODO: Replace with actual tenant id from auth context
         userId = "changeThisToUserId", // TODO: Replace with actual user id from auth context
         name = request.name,
@@ -61,16 +64,15 @@ class TurnstileServiceImpl()(implicit db: Database) extends TurnstileService {
       ))
     } yield {
       insertResult match {
+        case Left(DbAlreadyExists) =>
+          logger.warn(s"MCP server already exists: ${DbAlreadyExists.message}")
+          throw new GrpcServiceException(Status.ALREADY_EXISTS, MetadataBuilder().addText("ALREADY_EXISTS", "Resource already exists").build())
         case Left(dbError) =>
           logger.error(s"Failed to insert MCP server into DB: ${dbError.message}")
-          throw new RuntimeException(s"Database error: ${dbError.message}")
+          throw new GrpcServiceException(Status.UNKNOWN, MetadataBuilder().addText("UNHANDLED_ERROR", dbError.message).build())
         case Right(row) =>
           logger.info(s"Successfully created MCP server with UUID: ${row.uuid}")
-          McpServer(
-            uuid = row.uuid,
-            name = row.name,
-            url = row.url
-          )
+          McpServer(uuid = row.uuid, name = row.name, url = row.url)
       }
     }
   }
@@ -91,9 +93,15 @@ class TurnstileServiceImpl()(implicit db: Database) extends TurnstileService {
       listResult <- DbInterface.listMcpServers(tenant = "default", userId = request.userId)
     } yield {
       listResult match {
-        case Left(dbError) =>
+        case Left(DbAlreadyExists) =>
+          logger.warn(s"DB reported already-exists when listing for userId: ${request.userId}")
+          throw new GrpcServiceException(Status.ALREADY_EXISTS, MetadataBuilder().addText("ALREADY_EXISTS", "Resource already exists").build())
+        case Left(DbNotFound) =>
+          logger.warn(s"No MCP servers found for userId: ${request.userId}")
+          throw new GrpcServiceException(Status.NOT_FOUND, MetadataBuilder().addText("NOT_FOUND", "No resources").build())
+        case Left(dbError: DbFailure) =>
           logger.error(s"Failed to list MCP servers from DB: ${dbError.message}")
-          throw new RuntimeException(s"Database error: ${dbError.message}")
+          throw new GrpcServiceException(Status.UNKNOWN, MetadataBuilder().addText("UNHANDLED_ERROR", dbError.message).build())
         case Right(rows) =>
           val servers = rows.map(row => McpServer(
             uuid = row.uuid,
@@ -102,6 +110,42 @@ class TurnstileServiceImpl()(implicit db: Database) extends TurnstileService {
           ))
           logger.info(s"Returning ${servers.size} MCP servers for userId: ${request.userId}")
           McpServerList(mcpServer = servers)
+      }
+    }
+  }
+
+  /**
+   * Delete an MCP server by UUID.
+   *
+   * @param request DeleteMcpServerRequest containing the uuid
+   * @return Future[Empty] on successful deletion
+   */
+  override def deleteMcpServer(request: DeleteMcpServerRequest): Future[Empty] = {
+    logger.info(s"Received DeleteMcpServer request for uuid: ${request.uuid}")
+
+    // Validate request and delete server
+    for {
+      _ <- validateNotEmpty(request.uuid, "uuid")
+      deleteResult <- DbInterface.deleteMcpServerByUuid(request.uuid)
+    } yield {
+      deleteResult match {
+        case Left(DbAlreadyExists) =>
+          logger.warn(s"DB reported already-exists when deleting uuid: ${request.uuid}")
+          throw new GrpcServiceException(Status.ALREADY_EXISTS, MetadataBuilder().addText("ALREADY_EXISTS", "Resource already exists").build())
+        case Left(DbNotFound) =>
+          logger.warn(s"No MCP server found to delete with UUID: ${request.uuid}")
+          throw new GrpcServiceException(Status.NOT_FOUND, MetadataBuilder().addText("NOT_FOUND", s"No resource with uuid ${request.uuid}").build())
+        case Left(dbError: DbFailure) =>
+          logger.error(s"Failed to delete MCP server from DB: ${dbError.message}")
+          throw new GrpcServiceException(Status.UNKNOWN, MetadataBuilder().addText("UNHANDLED_ERROR", dbError.message).build())
+        case Right(rowsDeleted) =>
+          if (rowsDeleted == 0) {
+            logger.warn(s"No MCP server found with UUID: ${request.uuid}")
+            throw new GrpcServiceException(Status.NOT_FOUND, MetadataBuilder().addText("NOT_FOUND", s"MCP server not found: ${request.uuid}").build())
+          } else {
+            logger.info(s"Successfully deleted MCP server with UUID: ${request.uuid}")
+            Empty()
+          }
       }
     }
   }

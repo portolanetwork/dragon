@@ -16,7 +16,10 @@ object ServiceValidationUtil {
    */
   def validateNotEmpty(value: String, fieldName: String)(implicit ec: ExecutionContext): Future[String] = {
     if (value.isEmpty) {
-      Future.failed(Status.INVALID_ARGUMENT.withDescription(s"$fieldName cannot be empty").asRuntimeException())
+      Future.failed(
+        Status.INVALID_ARGUMENT
+          .withDescription(s"$fieldName cannot be empty")
+        .asRuntimeException())
     } else {
       Future.successful(value)
     }

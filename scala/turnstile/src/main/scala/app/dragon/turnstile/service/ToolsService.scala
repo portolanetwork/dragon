@@ -106,18 +106,23 @@ class ToolsService(
     logger.info(s"Fetching all downstream tools for user=$userId, tenant=$tenant")
 
     // Fetch all MCP servers for this user from the database and fetch tools for each
-    DbInterface.listMcpServers(tenant, userId).flatMap { servers =>
-      logger.info(s"Found ${servers.size} MCP servers for user=$userId, fetching tools from each")
+    DbInterface.listMcpServers(tenant, userId).flatMap {
+      case Right(servers) =>
+        logger.info(s"Found ${servers.size} MCP servers for user=$userId, fetching tools from each")
 
-      // Sequence per-server futures and collect successful tool specs
-      val toolsFutures: Seq[Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]]] =
-        servers.map(server => getDownstreamToolsSpec(server.uuid, server.name, server.url))
+        // Sequence per-server futures and collect successful tool specs
+        val toolsFutures: Seq[Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]]] =
+          servers.map(server => getDownstreamToolsSpec(server.uuid, server.name, server.url))
 
-      Future.sequence(toolsFutures).map { results =>
-        val allTools = results.collect { case Right(tools) => tools }.flatten.toList
-        logger.info(s"Successfully fetched ${allTools.size} total tools from ${servers.size} MCP servers for user=$userId")
-        Right(allTools)
-      }
+        Future.sequence(toolsFutures).map { results =>
+          val allTools = results.collect { case Right(tools) => tools }.flatten.toList
+          logger.info(s"Successfully fetched ${allTools.size} total tools from ${servers.size} MCP servers for user=$userId")
+          Right(allTools)
+        }
+
+      case Left(dbError) =>
+        logger.error(s"Failed to fetch MCP servers from database for user=$userId, tenant=$tenant: $dbError")
+        Future.successful(Left(McpClientActor.ProcessingError(s"Database error: ${dbError}")))
     }.recover {
       case ex: Exception =>
         logger.error(s"Failed to fetch MCP servers from database for user=$userId, tenant=$tenant", ex)

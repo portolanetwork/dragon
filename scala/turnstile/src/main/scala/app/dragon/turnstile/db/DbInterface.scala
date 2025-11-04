@@ -1,11 +1,11 @@
 package app.dragon.turnstile.db
 
+import app.dragon.turnstile.db.Tables
+import app.dragon.turnstile.db.TurnstilePostgresProfile.api.*
+import slick.jdbc.JdbcBackend.Database
+
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
-import slick.jdbc.JdbcBackend.Database
-import app.dragon.turnstile.db.TurnstilePostgresProfile.api._
-import app.dragon.turnstile.db.Tables
-import app.dragon.turnstile.db.McpServerRow
 
 /**
  * Lightweight DB error ADT for wrapping database failures.
@@ -14,11 +14,21 @@ sealed trait DbError {
   def message: String
 }
 final case class DbFailure(message: String, cause: Option[Throwable] = None) extends DbError
-case object DbNotFound extends DbError {
-  val message: String = "not found"
-}
+case object DbNotFound extends DbError { val message: String = "not found" }
+case object DbAlreadyExists extends DbError { val message: String = "already exists" }
 
 object DbInterface {
+  // Helper that inspects a throwable (and its cause chain) to determine if it's a unique-constraint error
+  private def mapDbError(t: Throwable): DbError = {
+    // iterate through causes to find SQLExceptions with SQLState 23505 (unique violation) or messages containing "duplicate"
+    val found = Iterator.iterate(Option(t))(_.flatMap(th => Option(th.getCause))).takeWhile(_.isDefined).collectFirst {
+      case Some(ps: java.sql.SQLException) if Option(ps.getSQLState).contains("23505") => DbAlreadyExists
+      case Some(ps: java.sql.SQLException) if ps.getMessage != null && ps.getMessage.toLowerCase.contains("duplicate") => DbAlreadyExists
+      case Some(th) if th.getMessage != null && th.getMessage.toLowerCase.contains("duplicate") => DbAlreadyExists
+    }
+    found.getOrElse(DbFailure(t.getMessage, Some(t)))
+  }
+
   /**
    * Inserts a McpServerRow and returns the inserted row with the generated ID.
    * @param row The McpServerRow to insert
@@ -32,8 +42,10 @@ object DbInterface {
     implicit db: Database, ec: ExecutionContext
   ): Future[Either[DbError, McpServerRow]] = {
     val insertAction = (Tables.mcpServers returning Tables.mcpServers.map(_.id) into ((row, id) => row.copy(id = id))) += row
-    db.run(insertAction).map(Right(_): Either[DbError, McpServerRow]).recover {
-      case NonFatal(t) => Left(DbFailure(t.getMessage, Some(t)))
+    db.run(insertAction)
+      .map(Right(_): Either[DbError, McpServerRow])
+      .recover {
+        case NonFatal(t) => Left(mapDbError(t))
     }
   }
 
@@ -53,7 +65,7 @@ object DbInterface {
   ): Future[Either[DbError, Seq[McpServerRow]]] = {
     val query = Tables.mcpServers.filter(s => s.tenant === tenant && s.userId === userId).result
     db.run(query).map(Right(_): Either[DbError, Seq[McpServerRow]]).recover {
-      case NonFatal(t) => Left(DbFailure(t.getMessage, Some(t)))
+      case NonFatal(t) => Left(mapDbError(t))
     }
   }
 
@@ -71,7 +83,7 @@ object DbInterface {
   ): Future[Either[DbError, Int]] = {
     val deleteAction = Tables.mcpServers.filter(_.uuid === uuid).delete
     db.run(deleteAction).map(Right(_): Either[DbError, Int]).recover {
-      case NonFatal(t) => Left(DbFailure(t.getMessage, Some(t)))
+      case NonFatal(t) => Left(mapDbError(t))
     }
   }
 }
