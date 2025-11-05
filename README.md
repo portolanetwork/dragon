@@ -86,7 +86,16 @@ export DATABASE_PASSWORD=<db-password>
 
 
 # Start the gateway (migrations run automatically)
-sbt run
+sbt "runMain app.dragon.turnstile.controller.TurnstileMain"
+
+# Connect using MCP Inspector with following settings
+## Transport Type: Streamable HTTP
+## URL: http://127.0.0.1:8082/mcp
+## Connection Type: Via Proxy
+## Click: Connect
+## Click: Tools -> List Tools
+## You can create breakpoints to examine how individual example tools are called under: app.dragon.turnstile.service.tools
+
 ```
 
 The gateway starts with:
@@ -101,24 +110,24 @@ Use the gRPC API to register downstream servers:
 # Example using grpcurl
 grpcurl -plaintext -d '{
   "name": "my-mcp-server",
-  "url": "http://localhost:9000"
-}' localhost:8080 dragon.turnstile.api.v1.TurnstileService/CreateMcpServer
+  "url": "https://mcp.deepwiki.com/mcp1"
+}' localhost:8080 dragon.turnstile.v1.TurnstileService/CreateMcpServer
 ```
 
 ### Connect an MCP Client
 
-Point your MCP client to the gateway:
+Point your MCP client to the gateway. Setup MCP Inspector with following:
 
-```bash
-# Example: Claude Desktop config
-{
-  "mcpServers": {
-    "dragon-gateway": {
-      "url": "http://localhost:8081/mcp"
-    }
-  }
-}
-```
+- Transport Type: Streamable HTTP
+- URL: http://127.0.0.1:8082/mcp
+- Connection Type: Via Proxy
+
+Steps:
+
+- Click: Connect
+- Click: Tools -> List Tools
+- You can create breakpoints to examine how individual example tools are called under: app.dragon.turnstile.service.tools
+
 
 ## Documentation
 
@@ -141,7 +150,7 @@ Point your MCP client to the gateway:
 ### Single Node (Development)
 
 ```bash
-sbt run
+sbt "runMain app.dragon.turnstile.controller.TurnstileMain"
 ```
 
 ### Cluster Deployment (Production)
@@ -154,7 +163,7 @@ Contributions are welcome. This is an open-core project licensed under Apache 2.
 
 ## License
 
-Apache License 2.0 - See [LICENSE](LICENSE) for details.
+© 2025 Sami Malik, Portola Networki, Inc. Licensed under the Apache License, Version 2.0 - See [LICENSE](LICENSE) for details.
 
 ## Branding and Attribution
 
@@ -163,6 +172,15 @@ While this project is open source under the Apache 2.0 license, the name "Dragon
 ## Commercial Support
 
 Portola Network, Inc. offers commercial support, enterprise features, and professional services for Dragon MCP Gateway.
+
+## Maintained by
+
+**Sami Malik**  
+Founder, [Portola Network, Inc](https://portolanetwork.io)  
+📧 sami.malik@portolanetwork.io  
+[LinkedIn](https://www.linkedin.com/in/usamah) · [X](https://x.com/samimalik10101)
+
+For questions or contributions, please open an issue or pull request.
 
 ---
 
