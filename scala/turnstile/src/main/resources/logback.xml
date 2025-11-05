@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- This is a development logging configuration that logs to standard out, for an example of a production
+        logging config, see the Pekko docs: https://pekko.apache.org/docs/pekko/current/typed/logging.html#logback -->
+    <appender name="STDOUT" target="System.out" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <!-- pattern>[%date{ISO8601}] [%level] [%logger] [%thread] [%X{pekkoSource}] - %msg%n</pattern -->
+            <pattern>  [%date{ISO8601}] %highlight([%level]) %magenta([%thread]) %cyan([%X{akkaSource}])  %yellow(%logger{40}.%M\(%class{0}.scala:%line\)) - %msg%throwable%n</pattern>
+
+        </encoder>
+    </appender>
+
+    <appender name="ASYNC" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>1024</queueSize>
+        <neverBlock>true</neverBlock>
+        <appender-ref ref="STDOUT" />
+    </appender>
+
+    <logger name="app.dragon.turnstile" level="DEBUG" />
+    
+    <!-- Quiet this specific noisy transport class (suppress DEBUG logs from it) -->
+    <logger name="io.modelcontextprotocol.client" level="ERROR" />
+
+    <root level="INFO">
+        <appender-ref ref="ASYNC"/>
+    </root>
+
+</configuration>
