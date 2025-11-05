@@ -163,7 +163,7 @@ Contributions are welcome. This is an open-core project licensed under Apache 2.
 
 ## License
 
-© 2025 Sami Malik, Portola Networki, Inc. Licensed under the Apache License, Version 2.0 - See [LICENSE](LICENSE) for details.
+© 2025 Sami Malik, Portola Network, Inc. Licensed under the Apache License, Version 2.0 - See [LICENSE](LICENSE) for details.
 
 ## Branding and Attribution
 
