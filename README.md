@@ -65,6 +65,10 @@ Dragon is founded on the principles of the Reactive Manifesto and built atop Apa
 - **Scala 3**: Written in modern Scala 3 with minimal boilerplate, leveraging its strong type system to catch errors at compile time and running reliably on the JVM.
 
 
+## Architecture 
+
+TBD
+
 ## Getting Started
 
 ### Prerequisites
