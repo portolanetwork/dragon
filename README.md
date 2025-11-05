@@ -13,7 +13,7 @@ Dragon is a distributed MCP hub that aggregates tools from multiple downstream M
 ## Capabilities
 
 ### Current
-- **MCP Server Agreegation**: Aggregate multiple MCP servers into one
+- **MCP Server Aggregation**: Aggregate multiple MCP servers into one
 - **Tenant/User level isolation**: Route requests to user-specific MCP server instances
 - **Spec compliant**: Full support for streaming HTTP spec
 
