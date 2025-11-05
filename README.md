@@ -26,7 +26,7 @@ Dragon is a distributed MCP hub that aggregates tools from multiple downstream M
 
 ## Modern & Extensible Tech Stack
 
-- Extensible in any JVM based languates
+- Extensible in any JVM based languages
 - Async programming using Apache Pekko (Akka fork)
 - MCP implementation uses official MCP SDK
 - gRPC API for server management
