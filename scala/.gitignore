@@ -1,3 +1,7 @@
+.env
+.cruft
+docs
+
 # Scala & SBT
 *.class
 *.log
