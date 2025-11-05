@@ -80,18 +80,21 @@ object JsonUtils {
     val node = objectMapper.readTree(json)
     val schemaType = Option(node.get("type")).map(_.asText()).getOrElse("object")
     val properties = Option(node.get("properties")).map { propsNode =>
-      propsNode.fields().asScala.map { entry =>
+      import scala.jdk.CollectionConverters._
+      propsNode.properties().asScala.map { entry =>
         entry.getKey -> objectMapper.convertValue(entry.getValue, classOf[java.util.Map[String, Object]]).asInstanceOf[Object]
       }.toMap.asJava
     }.getOrElse(new java.util.HashMap[String, Object]())
     val required = Option(node.get("required")).map(_.elements().asScala.map(_.asText()).toList.asJava).getOrElse(new java.util.ArrayList[String]())
     val defs = Option(node.get("defs")).map { defsNode =>
-      defsNode.fields().asScala.map { entry =>
+      import scala.jdk.CollectionConverters._
+      defsNode.properties().asScala.map { entry =>
         entry.getKey -> objectMapper.convertValue(entry.getValue, classOf[java.util.Map[String, Object]]).asInstanceOf[Object]
       }.toMap.asJava
     }.getOrElse(new java.util.HashMap[String, Object]())
     val definitions = Option(node.get("definitions")).map { defsNode =>
-      defsNode.fields().asScala.map { entry =>
+      import scala.jdk.CollectionConverters._
+      defsNode.properties().asScala.map { entry =>
         entry.getKey -> objectMapper.convertValue(entry.getValue, classOf[java.util.Map[String, Object]]).asInstanceOf[Object]
       }.toMap.asJava
     }.getOrElse(new java.util.HashMap[String, Object]())

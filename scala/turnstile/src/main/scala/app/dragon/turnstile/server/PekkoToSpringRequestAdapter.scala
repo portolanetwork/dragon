@@ -136,7 +136,7 @@ class PekkoToSpringRequestAdapter(pekkoRequest: HttpRequest)(implicit system: Ac
           .map(chunk => dataBufferFactory.wrap(chunk.data.toByteBuffer))
           .runWith(Sink.asPublisher(fanout = false))
         Flux.from(publisher)
-      case _ =>
+      case null =>
         Flux.empty()
     }
   }

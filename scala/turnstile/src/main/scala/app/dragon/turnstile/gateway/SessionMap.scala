@@ -41,8 +41,8 @@ import org.apache.pekko.util.Timeout
  * If not found, optionally falls back to the default handler.
  */
 class SessionMap()(
-  implicit ec: ExecutionContext, 
-  system: ActorSystem[_], 
+  implicit ec: ExecutionContext,
+  system: ActorSystem[?],
   sharding: ClusterSharding, timeout: Timeout) {
   private val logger: Logger = LoggerFactory.getLogger(classOf[SessionMap])
 
@@ -130,7 +130,7 @@ object SessionMap {
   def apply()
     (implicit
       ec: ExecutionContext,
-      system: ActorSystem[_],
+      system: ActorSystem[?],
       sharding: ClusterSharding,
       timeout: Timeout): SessionMap = new SessionMap()
 }

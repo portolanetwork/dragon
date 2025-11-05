@@ -16,7 +16,7 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-package app.dragon.turnstile.controller
+package app.dragon.turnstile.main
 
 import app.dragon.turnstile.config.ApplicationConfig
 import org.apache.pekko.actor.typed.ActorSystem
@@ -58,7 +58,7 @@ import scala.io.StdIn
  * java -jar turnstile.jar
  * }}}
  */
-object TurnstileMain extends App {
+object Turnstile extends App {
   private val logger = LoggerFactory.getLogger(getClass)
   init()
 

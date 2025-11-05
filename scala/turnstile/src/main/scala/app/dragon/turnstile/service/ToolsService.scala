@@ -236,7 +236,7 @@ class ToolsService(
   ): List[McpServerFeatures.AsyncToolSpecification] = {
     tools.map { tool =>
       // Log schema
-      logger.debug(s"---------------------- Converting tool to AsyncToolSpecification: ${tool.getName()} with schema: ${tool.getSchema()}")
+      logger.debug(s"Converting tool to AsyncToolSpecification: ${tool.getName()} with schema: ${tool.getSchema()}")
 
       McpServerFeatures.AsyncToolSpecification.builder()
         .tool(tool.getSchema())

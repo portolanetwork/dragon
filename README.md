@@ -86,7 +86,7 @@ export DATABASE_PASSWORD=<db-password>
 
 
 # Start the gateway (migrations run automatically)
-sbt "runMain app.dragon.turnstile.controller.TurnstileMain"
+sbt "runMain app.dragon.turnstile.main.Turnstile"
 
 # Connect using MCP Inspector with following settings
 ## Transport Type: Streamable HTTP

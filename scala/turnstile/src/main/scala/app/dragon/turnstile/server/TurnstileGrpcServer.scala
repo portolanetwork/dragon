@@ -69,7 +69,7 @@ class TurnstileGrpcServer private(system: ActorSystem[Nothing]) {
     )
 
     // Bind the server
-    val bound: Future[Http.ServerBinding] = Http()(system)
+    val bound: Future[Http.ServerBinding] = Http()
       .newServerAt(host, port)
       .bind(serviceHandlers)
       .map(_.addToCoordinatedShutdown(hardTerminationDeadline = 10.seconds))

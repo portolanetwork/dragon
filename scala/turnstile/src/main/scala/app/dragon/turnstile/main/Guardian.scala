@@ -16,7 +16,7 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-package app.dragon.turnstile.controller
+package app.dragon.turnstile.main
 
 import app.dragon.turnstile.actor.{McpClientActor, McpServerActor, McpSessionMapActor}
 import app.dragon.turnstile.config.ApplicationConfig
@@ -82,40 +82,41 @@ object Guardian {
           if (result.targetSchemaVersion != null) {
             context.log.info(s"Target schema version: ${result.targetSchemaVersion}")
           }
+
+          val grpcHost = grpcConfig.getString("host")
+          val grpcPort = grpcConfig.getInt("port")
+
+          // Initialize sharding and actors here
+          McpServerActor.initSharding(context.system)
+          McpClientActor.initSharding(context.system)
+          McpSessionMapActor.initSharding(context.system)
+
+          // Start GRPC server (hosting both GreeterService and TurnstileService)
+          TurnstileGrpcServer.start(grpcHost, grpcPort, context.system)
+
+          // Start MCP Streaming HTTP server if enabled
+          if (mcpStreamingConfig.getBoolean("enabled")) {
+            try {
+              //val mcpStreamingServer = StreamingHttpMcpServer(mcpStreamingConfig)
+              val mcpStreamingServer = TurnstileMcpGateway(mcpStreamingConfig)
+
+              mcpStreamingServer.start()
+              context.log.info("MCP Streaming HTTP Server started successfully")
+            } catch {
+              case e: Exception =>
+                context.log.error("Failed to start MCP Streaming HTTP Server", e)
+            }
+          } else {
+            context.log.info("MCP Streaming HTTP Server is disabled")
+          }
+
+          Behaviors.empty
+
         case scala.util.Failure(ex) =>
           context.log.error("Database migration failed", ex)
           context.log.error("Application startup aborted due to migration failure")
           system.terminate()
-          return Behaviors.stopped
+          Behaviors.stopped
       }
-
-      val grpcHost = grpcConfig.getString("host")
-      val grpcPort = grpcConfig.getInt("port")
-
-      // Initialize sharding and actors here
-      McpServerActor.initSharding(context.system)
-      McpClientActor.initSharding(context.system)
-      McpSessionMapActor.initSharding(context.system)
-      
-      // Start GRPC server (hosting both GreeterService and TurnstileService)
-      TurnstileGrpcServer.start(grpcHost, grpcPort, context.system)
-      
-      // Start MCP Streaming HTTP server if enabled
-      if (mcpStreamingConfig.getBoolean("enabled")) {
-        try {
-          //val mcpStreamingServer = StreamingHttpMcpServer(mcpStreamingConfig)
-          val mcpStreamingServer = TurnstileMcpGateway(mcpStreamingConfig)
-
-          mcpStreamingServer.start()
-          context.log.info("MCP Streaming HTTP Server started successfully")
-        } catch {
-          case e: Exception =>
-            context.log.error("Failed to start MCP Streaming HTTP Server", e)
-        }
-      } else {
-        context.log.info("MCP Streaming HTTP Server is disabled")
-      }
-
-      Behaviors.empty
     }
 }

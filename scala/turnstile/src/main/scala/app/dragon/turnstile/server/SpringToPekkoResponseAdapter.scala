@@ -93,7 +93,7 @@ class SpringToPekkoResponseAdapter()(implicit system: ActorSystem[?], ec: Execut
     // Convert Spring DataBuffer stream to Pekko Source
     val bodySource = Source.fromPublisher(body)
       .map { dataBuffer =>
-        val byteBuffer = dataBuffer.asByteBuffer()
+        val byteBuffer = dataBuffer.toByteBuffer()
         val bytes = new Array[Byte](byteBuffer.remaining())
         byteBuffer.get(bytes)
         org.springframework.core.io.buffer.DataBufferUtils.release(dataBuffer)
