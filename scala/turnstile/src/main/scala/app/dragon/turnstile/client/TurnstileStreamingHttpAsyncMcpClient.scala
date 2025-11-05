@@ -46,7 +46,10 @@ object TurnstileStreamingHttpAsyncMcpClient {
    * @param ec Execution context for async operations
    * @return A started TurnstileStreamingHttpAsyncMcpClient instance
    */
-  def apply(serverUrl: String, endpoint: String = "/mcp")(implicit ec: ExecutionContext): TurnstileStreamingHttpAsyncMcpClient =
+  def apply(
+    serverUrl: String, 
+    endpoint: String = "/mcp"
+  )(implicit ec: ExecutionContext): TurnstileStreamingHttpAsyncMcpClient =
     new TurnstileStreamingHttpAsyncMcpClient(clientName, clientVersion, serverUrl, endpoint).start()
 }
 
@@ -242,7 +245,9 @@ class TurnstileStreamingHttpAsyncMcpClient(
   /**
    * Call a tool on the server.
    */
-  def callTool(request: McpSchema.CallToolRequest): Future[McpSchema.CallToolResult] = {
+  def callTool(
+    request: McpSchema.CallToolRequest
+  ): Future[McpSchema.CallToolResult] = {
     monoToFuture(mcpAsyncClient.callTool(request))
   }
 
@@ -256,7 +261,9 @@ class TurnstileStreamingHttpAsyncMcpClient(
   /**
    * Read a resource from the server.
    */
-  def readResource(uri: String): Future[McpSchema.ReadResourceResult] = {
+  def readResource(
+    uri: String
+  ): Future[McpSchema.ReadResourceResult] = {
     monoToFuture(mcpAsyncClient.readResource(new McpSchema.ReadResourceRequest(uri)))
   }
 
@@ -270,7 +277,9 @@ class TurnstileStreamingHttpAsyncMcpClient(
   /**
    * Get a prompt from the server.
    */
-  def getPrompt(request: McpSchema.GetPromptRequest): Future[McpSchema.GetPromptResult] = {
+  def getPrompt(
+    request: McpSchema.GetPromptRequest
+  ): Future[McpSchema.GetPromptResult] = {
     monoToFuture(mcpAsyncClient.getPrompt(request))
   }
 
@@ -298,7 +307,9 @@ class TurnstileStreamingHttpAsyncMcpClient(
   /**
    * Format timestamp for logging.
    */
-  private def formatTimestamp(millis: Long): String = {
+  private def formatTimestamp(
+    millis: Long
+  ): String = {
     val instant = java.time.Instant.ofEpochMilli(millis)
     val formatter = java.time.format.DateTimeFormatter
       .ofPattern("HH:mm:ss.SSS")

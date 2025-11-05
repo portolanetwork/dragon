@@ -29,7 +29,9 @@ import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity
 object McpSessionMapActor {
   val TypeKey: EntityTypeKey[Message] = EntityTypeKey[Message]("McpSessionMapActor")
 
-  def initSharding(system: ActorSystem[?]): Unit =
+  def initSharding(
+    system: ActorSystem[?]
+  ): Unit =
     ClusterSharding(system).init(Entity(TypeKey) { entityContext =>
       val userId = entityContext.entityId
       McpSessionMapActor(userId)

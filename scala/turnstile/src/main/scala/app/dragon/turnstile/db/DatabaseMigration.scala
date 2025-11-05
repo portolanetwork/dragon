@@ -47,7 +47,9 @@ object DatabaseMigration {
    * @param dbConfig Application configuration containing database settings
    * @return Success with migration result, or Failure with exception
    */
-  def migrate(dbConfig: Config): Try[MigrateResult] = {
+  def migrate(
+    dbConfig: Config
+  ): Try[MigrateResult] = {
     logger.info("Starting database migrations...")
 
     Try {
@@ -89,7 +91,9 @@ object DatabaseMigration {
   /**
    * Validate pending migrations without running them
    */
-  def validate(config: Config): Try[Unit] = {
+  def validate(
+    config: Config
+  ): Try[Unit] = {
     logger.info("Validating database migrations...")
 
     Try {
@@ -114,7 +118,9 @@ object DatabaseMigration {
   /**
    * Get information about migration status
    */
-  def info(config: Config): Try[String] = {
+  def info(
+    config: Config
+  ): Try[String] = {
     Try {
       val dbConfig = config.getConfig("turnstile.database.db")
       val url = dbConfig.getString("url")
@@ -152,7 +158,9 @@ object DatabaseMigration {
    * Clean database (WARNING: Drops all objects in configured schemas)
    * Only use for testing/development!
    */
-  def clean(config: Config): Try[Unit] = {
+  def clean(
+    config: Config
+  ): Try[Unit] = {
     logger.warn("CLEANING DATABASE - This will drop all objects!")
 
     Try {

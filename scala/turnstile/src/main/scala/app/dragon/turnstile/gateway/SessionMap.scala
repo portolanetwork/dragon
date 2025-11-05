@@ -43,7 +43,8 @@ import org.apache.pekko.util.Timeout
 class SessionMap()(
   implicit ec: ExecutionContext,
   system: ActorSystem[?],
-  sharding: ClusterSharding, timeout: Timeout) {
+  sharding: ClusterSharding, timeout: Timeout
+) {
   private val logger: Logger = LoggerFactory.getLogger(classOf[SessionMap])
 
   case class ActiveSessionResult(mcpActorId: String, sessionIdOpt: Option[String])
@@ -106,7 +107,10 @@ class SessionMap()(
   /**
    * Update the session-to-actor mapping if a new mcp-session-id is observed in a response.
    */
-  def updateSessionMapping(sessionId: String, actorId: String): Unit = {
+  def updateSessionMapping(
+    sessionId: String, 
+    actorId: String
+  ): Unit = {
     if (!sessionId.isEmpty && !actorId.isEmpty) {
       ActorLookup.getMcpSessionMapActor("changeThisToUserId") !
         McpSessionMapActor.SessionCreate(sessionId, actorId)

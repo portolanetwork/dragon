@@ -43,7 +43,9 @@ object JsonUtils {
    * @param jsonString The JSON string to convert
    * @return Try[Struct] containing the converted Struct or a Failure
    */
-  def stringToStruct(jsonString: String): Try[Struct] = Try {
+  def stringToStruct(
+    jsonString: String
+  ): Try[Struct] = Try {
     val jsonNode = objectMapper.readTree(jsonString)
     jsonNodeToStruct(jsonNode)
   }
@@ -54,7 +56,9 @@ object JsonUtils {
    * @param struct The Struct to convert
    * @return Try[String] containing the JSON string or a Failure
    */
-  def structToString(struct: Struct): Try[String] = Try {
+  def structToString(
+    struct: Struct
+  ): Try[String] = Try {
     val jsonNode = structToJsonNode(struct, objectMapper)
     objectMapper.writeValueAsString(jsonNode)
   }
@@ -65,7 +69,9 @@ object JsonUtils {
    * @param map The Java Map to convert
    * @return Try[Struct] containing the converted Struct or a Failure
    */
-  def mapToStruct(map: java.util.Map[String, Object]): Try[Struct] = Try {
+  def mapToStruct(
+    map: java.util.Map[String, Object]
+  ): Try[Struct] = Try {
     val jsonString = objectMapper.writeValueAsString(map)
     stringToStruct(jsonString).get
   }
@@ -76,7 +82,9 @@ object JsonUtils {
    * @param json The JSON schema as a string
    * @return Try[McpSchema.JsonSchema]
    */
-  def parseJsonSchema(json: String): Try[McpSchema.JsonSchema] = Try {
+  def parseJsonSchema(
+    json: String)
+  : Try[McpSchema.JsonSchema] = Try {
     val node = objectMapper.readTree(json)
     val schemaType = Option(node.get("type")).map(_.asText()).getOrElse("object")
     val properties = Option(node.get("properties")).map { propsNode =>
@@ -103,7 +111,9 @@ object JsonUtils {
 
   // --- Private helpers ---
 
-  private def jsonNodeToStruct(node: JsonNode): Struct = {
+  private def jsonNodeToStruct(
+    node: JsonNode
+  ): Struct = {
     if (!node.isObject) {
       throw new IllegalArgumentException("JsonNode must be an object to convert to Struct")
     }
@@ -115,7 +125,10 @@ object JsonUtils {
     Struct(fields = fields)
   }
 
-  private def structToJsonNode(struct: Struct, mapper: ObjectMapper): JsonNode = {
+  private def structToJsonNode(
+    struct: Struct, 
+    mapper: ObjectMapper
+  ): JsonNode = {
     val objectNode = mapper.createObjectNode()
     struct.fields.foreach { case (key, value) =>
       val jsonValue = valueToJsonNode(value, mapper)
@@ -124,7 +137,9 @@ object JsonUtils {
     objectNode
   }
 
-  private def jsonNodeToValue(node: JsonNode): Value = {
+  private def jsonNodeToValue(
+    node: JsonNode
+  ): Value = {
     node match {
       case n if n.isNull => Value(Value.Kind.NullValue(com.google.protobuf.struct.NullValue.NULL_VALUE))
       case n if n.isBoolean => Value(Value.Kind.BoolValue(n.asBoolean()))
@@ -140,7 +155,10 @@ object JsonUtils {
     }
   }
 
-  private def valueToJsonNode(value: Value, mapper: ObjectMapper): JsonNode = {
+  private def valueToJsonNode(
+    value: Value, 
+    mapper: ObjectMapper
+  ): JsonNode = {
     value.kind match {
       case Value.Kind.NullValue(_) =>
         mapper.nullNode()

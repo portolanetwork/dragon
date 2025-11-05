@@ -79,7 +79,9 @@ case class McpServerRow(
 /**
  * Slick table definition for mcp_server
  */
-class McpServersTable(tag: Tag) extends Table[McpServerRow](tag, "mcp_server") {
+class McpServersTable(
+  tag: Tag
+) extends Table[McpServerRow](tag, "mcp_server") {
   def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
   def uuid = column[UUID]("uuid", O.Default(java.util.UUID.randomUUID()))
   def tenant = column[String]("tenant")

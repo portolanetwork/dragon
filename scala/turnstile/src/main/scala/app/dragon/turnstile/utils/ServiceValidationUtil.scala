@@ -32,7 +32,12 @@ object ServiceValidationUtil {
    * @param ec ExecutionContext for the Future
    * @return Future[String] either successful or failed with INVALID_ARGUMENT
    */
-  def validateNotEmpty(value: String, fieldName: String)(implicit ec: ExecutionContext): Future[String] = {
+  def validateNotEmpty(
+    value: String, 
+    fieldName: String
+  )(
+    implicit ec: ExecutionContext
+  ): Future[String] = {
     if (value.isEmpty) {
       Future.failed(
         Status.INVALID_ARGUMENT
@@ -43,7 +48,10 @@ object ServiceValidationUtil {
     }
   }
   
-  def validateHasNoSpaces(value: String, fieldName: String)(implicit ec: ExecutionContext): Future[String] = {
+  def validateHasNoSpaces(
+    value: String, 
+    fieldName: String
+  )(implicit ec: ExecutionContext): Future[String] = {
     if (value.contains(" ")) {
       Future.failed(
         Status.INVALID_ARGUMENT

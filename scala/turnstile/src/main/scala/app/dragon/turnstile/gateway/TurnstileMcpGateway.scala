@@ -76,7 +76,11 @@ import scala.util.{Failure, Success}
  */
 
 
-class TurnstileMcpGateway(config: Config)(implicit system: ActorSystem[?]) {
+class TurnstileMcpGateway(
+  config: Config
+)(
+  implicit system: ActorSystem[?]
+) {
   implicit val timeout: Timeout = Timeout(10.seconds)
   implicit val sharding: ClusterSharding = ClusterSharding(system)
 

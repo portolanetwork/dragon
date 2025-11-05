@@ -63,7 +63,9 @@ object ActorLookup {
    */
   def getMcpServerActor(
     mcpServerActorId: String
-  )(implicit sharding: ClusterSharding): EntityRef[McpServerActor.Message] =
+  )(
+    implicit sharding: ClusterSharding
+  ): EntityRef[McpServerActor.Message] =
     sharding.entityRefFor(McpServerActor.TypeKey, mcpServerActorId)
 
   /**
@@ -75,7 +77,9 @@ object ActorLookup {
    */
   def getMcpClientActor(
     mcpClientActorId: String
-  )(implicit sharding: ClusterSharding): EntityRef[McpClientActor.Message] =
+  )(
+    implicit sharding: ClusterSharding
+  ): EntityRef[McpClientActor.Message] =
     sharding.entityRefFor(McpClientActor.TypeKey, mcpClientActorId)
 
   /**
@@ -91,7 +95,9 @@ object ActorLookup {
   def getMcpClientActor(
     userId: String,
     mcpServerUuid: String
-  )(implicit sharding: ClusterSharding): EntityRef[McpClientActor.Message] =
+  )(
+    implicit sharding: ClusterSharding
+  ): EntityRef[McpClientActor.Message] =
     getMcpClientActor(McpClientActorId.getEntityId(userId, mcpServerUuid))
 
   /**
@@ -103,6 +109,8 @@ object ActorLookup {
    */
   def getMcpSessionMapActor(
     userId: String
-  )(implicit sharding: ClusterSharding): EntityRef[McpSessionMapActor.Message] =
+  )(
+    implicit sharding: ClusterSharding
+  ): EntityRef[McpSessionMapActor.Message] =
     sharding.entityRefFor(McpSessionMapActor.TypeKey, userId)
 }

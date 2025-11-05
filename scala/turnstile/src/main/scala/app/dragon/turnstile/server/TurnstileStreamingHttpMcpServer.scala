@@ -103,7 +103,9 @@ class TurnstileStreamingHttpMcpServer(
   val serverName: String,
   val serverVersion: String,
   val userId: String,
-)(implicit val system: ActorSystem[?]) {
+)(
+  implicit val system: ActorSystem[?]
+) {
   private val logger: org.slf4j.Logger = LoggerFactory.getLogger(classOf[TurnstileStreamingHttpMcpServer])
   // Execution context derived from the provided actor system
   private implicit val ec: ExecutionContext = system.executionContext

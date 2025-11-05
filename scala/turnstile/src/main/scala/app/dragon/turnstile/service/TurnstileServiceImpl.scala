@@ -103,7 +103,9 @@ class TurnstileServiceImpl()(implicit db: Database) extends TurnstileService {
    * @param request ListMcpServersRequest containing the userId
    * @return Future[McpServerList] containing list of registered MCP servers
    */
-  override def listMcpServers(request: ListMcpServersRequest): Future[McpServerList] = {
+  override def listMcpServers(
+    request: ListMcpServersRequest
+  ): Future[McpServerList] = {
     logger.info(s"Received ListMcpServers request for userId: ${request.userId}")
 
     // Validate request and list servers
@@ -140,7 +142,9 @@ class TurnstileServiceImpl()(implicit db: Database) extends TurnstileService {
    * @param request DeleteMcpServerRequest containing the uuid
    * @return Future[Empty] on successful deletion
    */
-  override def deleteMcpServer(request: DeleteMcpServerRequest): Future[Empty] = {
+  override def deleteMcpServer(
+    request: DeleteMcpServerRequest
+  ): Future[Empty] = {
     logger.info(s"Received DeleteMcpServer request for uuid: ${request.uuid}")
 
     // Validate request and delete server

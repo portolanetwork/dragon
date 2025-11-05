@@ -51,7 +51,9 @@ object EchoTool {
   def apply(name: String): EchoTool = new EchoTool(name)
 }
 
-class EchoTool(name: String) extends McpTool {
+class EchoTool(
+  name: String
+) extends McpTool {
   override def getSchema(): McpSchema.Tool = {
     McpUtils.createToolSchemaBuilder(
       name = name,

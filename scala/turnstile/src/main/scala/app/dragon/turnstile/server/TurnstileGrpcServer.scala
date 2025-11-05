@@ -46,7 +46,9 @@ object TurnstileGrpcServer {
   }
 }
 
-class TurnstileGrpcServer private(system: ActorSystem[Nothing]) {
+class TurnstileGrpcServer private(
+  system: ActorSystem[Nothing]
+) {
   import TurnstileGrpcServer.logger
 
   def run(host: String, port: Int): Future[Http.ServerBinding] = {

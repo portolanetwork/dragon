@@ -35,7 +35,10 @@ import scala.util.{Failure, Success, Try}
  * @param userId The user identifier
  * @param mcpClientActorId The unique actor identifier (typically the downstream server UUID)
  */
-case class McpClientActorId(userId: String, mcpClientActorId: String) {
+case class McpClientActorId(
+  userId: String, 
+  mcpClientActorId: String
+) {
   override def toString: String = s"$userId-$mcpClientActorId"
 }
 
@@ -46,7 +49,9 @@ object McpClientActorId {
    * @param entityId The entity ID string in format "userId-mcpClientActorId"
    * @return McpClientActorId instance
    */
-  def fromString(entityId: String): McpClientActorId = {
+  def fromString(
+    entityId: String
+  ): McpClientActorId = {
     val Array(userId, mcpClientActorId) = entityId.split("-", 2)
     McpClientActorId(userId, mcpClientActorId)
   }
@@ -58,7 +63,10 @@ object McpClientActorId {
    * @param clientId The client identifier
    * @return Entity ID string
    */
-  def getEntityId(userId: String, clientId: String): String =
+  def getEntityId(
+    userId: String, 
+    clientId: String
+  ): String =
     s"$userId-$clientId"
 }
 

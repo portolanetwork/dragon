@@ -48,7 +48,9 @@ object McpServerActorId {
    * @param entityId The entity ID string in format "userId-mcpServerActorId"
    * @return McpServerActorId instance
    */
-  def fromString(entityId: String): McpServerActorId = {
+  def fromString(
+    entityId: String
+  ): McpServerActorId = {
     val Array(userId, mcpServerActorId) = entityId.split("-", 2)
     McpServerActorId(userId, mcpServerActorId)
   }
@@ -97,14 +99,19 @@ object McpServerActor {
   val TypeKey: EntityTypeKey[McpServerActor.Message] =
     EntityTypeKey[McpServerActor.Message]("McpServerActor")
 
-  def initSharding(system: ActorSystem[?]): Unit =
+  def initSharding(
+    system: ActorSystem[?]
+  ): Unit =
     ClusterSharding(system).init(Entity(TypeKey) { entityContext =>
       val id = McpServerActorId.fromString(entityContext.entityId)
 
       McpServerActor(id.userId, id.mcpServerActorId)
     })
 
-  def getEntityId(userId: String, chatId: String): String =
+  def getEntityId(
+    userId: String, 
+    chatId: String
+  ): String =
     s"$userId-$chatId"
 
   sealed trait Message extends TurnstileSerializable
@@ -158,7 +165,6 @@ class McpServerActor(
   userId: String,
   mcpServerActorId: String,
 ) {
-
   import McpServerActor.*
 
   // Provide required implicits for adapters

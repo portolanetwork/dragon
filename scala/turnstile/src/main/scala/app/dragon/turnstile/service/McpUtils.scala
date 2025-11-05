@@ -62,7 +62,10 @@ object McpUtils {
    * @param isError Whether this is an error result
    * @return CallToolResult instance
    */
-  def createTextResult(text: String, isError: Boolean = false): McpSchema.CallToolResult = {
+  def createTextResult(
+    text: String, 
+    isError: Boolean = false
+  ): McpSchema.CallToolResult = {
     val content: java.util.List[McpSchema.Content] = List(
       new McpSchema.TextContent(text)
     ).asJava.asInstanceOf[java.util.List[McpSchema.Content]]
@@ -80,7 +83,10 @@ object McpUtils {
    * @param description Tool description
    * @return Tool.Builder instance ready to have inputSchema set and build() called
    */
-  def createToolSchemaBuilder(name: String, description: String): McpSchema.Tool.Builder = {
+  def createToolSchemaBuilder(
+    name: String, 
+    description: String
+  ): McpSchema.Tool.Builder = {
     McpSchema.Tool.builder()
       .name(name)
       .description(description)

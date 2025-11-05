@@ -63,7 +63,6 @@ import scala.util.{Failure, Success}
  * }}}
  */
 object TurnstileClientExample {
-
   private val logger: Logger = LoggerFactory.getLogger(getClass)
 
   implicit val ec: ExecutionContext = ExecutionContext.global
@@ -157,7 +156,9 @@ object TurnstileClientExample {
   /**
    * Log initialization results.
    */
-  private def logInitialization(result: McpSchema.InitializeResult): Unit = {
+  private def logInitialization(
+    result: McpSchema.InitializeResult
+  ): Unit = {
     logger.info("")
     logger.info("=" * 80)
     logger.info("CONNECTION INITIALIZED")
@@ -191,7 +192,9 @@ object TurnstileClientExample {
   /**
    * Log available tools.
    */
-  private def logTools(tools: List[McpSchema.Tool]): Unit = {
+  private def logTools(
+    tools: List[McpSchema.Tool]
+  ): Unit = {
     logger.info("")
     logger.info("=" * 80)
     logger.info(s"AVAILABLE TOOLS (${tools.size})")
@@ -218,7 +221,9 @@ object TurnstileClientExample {
   /**
    * Log available resources.
    */
-  private def logResources(resources: List[McpSchema.Resource]): Unit = {
+  private def logResources(
+    resources: List[McpSchema.Resource]
+  ): Unit = {
     logger.info("")
     logger.info("=" * 80)
     logger.info(s"AVAILABLE RESOURCES (${resources.size})")
@@ -242,7 +247,9 @@ object TurnstileClientExample {
   /**
    * Log available prompts.
    */
-  private def logPrompts(prompts: List[McpSchema.Prompt]): Unit = {
+  private def logPrompts(
+    prompts: List[McpSchema.Prompt]
+  ): Unit = {
     logger.info("")
     logger.info("=" * 80)
     logger.info(s"AVAILABLE PROMPTS (${prompts.size})")
@@ -370,7 +377,9 @@ object TurnstileClientExample {
   /**
    * Format timestamp for logging
    */
-  private def formatTimestamp(millis: Long): String = {
+  private def formatTimestamp(
+    millis: Long
+  ): String = {
     val instant = java.time.Instant.ofEpochMilli(millis)
     val formatter = java.time.format.DateTimeFormatter
       .ofPattern("HH:mm:ss.SSS")

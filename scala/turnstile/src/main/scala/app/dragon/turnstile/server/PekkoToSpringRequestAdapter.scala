@@ -79,7 +79,12 @@ import scala.concurrent.ExecutionContext
  *
  * @param pekkoRequest The Pekko HttpRequest to adapt
  */
-class PekkoToSpringRequestAdapter(pekkoRequest: HttpRequest)(implicit system: ActorSystem[?], ec: ExecutionContext)
+class PekkoToSpringRequestAdapter(
+  pekkoRequest: HttpRequest
+)(
+  implicit system: ActorSystem[?], 
+  ec: ExecutionContext
+)
   extends ServerHttpRequest {
 
   private val logger = LoggerFactory.getLogger(classOf[PekkoToSpringRequestAdapter])

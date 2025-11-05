@@ -71,7 +71,10 @@ import scala.jdk.CollectionConverters.*
  *
  * Note: This adapter is single-use - create a new instance for each request/response pair.
  */
-class SpringToPekkoResponseAdapter()(implicit system: ActorSystem[?], ec: ExecutionContext)
+class SpringToPekkoResponseAdapter()(
+  implicit system: ActorSystem[?], 
+  ec: ExecutionContext
+)
   extends ServerHttpResponse {
 
   private val logger = LoggerFactory.getLogger(classOf[SpringToPekkoResponseAdapter])
@@ -89,7 +92,9 @@ class SpringToPekkoResponseAdapter()(implicit system: ActorSystem[?], ec: Execut
 
   override def getHeaders(): SpringHeaders = headersRef.get()
 
-  override def writeWith(body: org.reactivestreams.Publisher[? <: org.springframework.core.io.buffer.DataBuffer]): reactor.core.publisher.Mono[Void] = {
+  override def writeWith(
+    body: org.reactivestreams.Publisher[? <: org.springframework.core.io.buffer.DataBuffer]
+  ): reactor.core.publisher.Mono[Void] = {
     // Convert Spring DataBuffer stream to Pekko Source
     val bodySource = Source.fromPublisher(body)
       .map { dataBuffer =>
@@ -128,7 +133,9 @@ class SpringToPekkoResponseAdapter()(implicit system: ActorSystem[?], ec: Execut
     reactor.core.publisher.Mono.empty()
   }
 
-  override def writeAndFlushWith(body: org.reactivestreams.Publisher[? <: org.reactivestreams.Publisher[? <: org.springframework.core.io.buffer.DataBuffer]]): reactor.core.publisher.Mono[Void] = {
+  override def writeAndFlushWith(
+    body: org.reactivestreams.Publisher[? <: org.reactivestreams.Publisher[? <: org.springframework.core.io.buffer.DataBuffer]]
+  ): reactor.core.publisher.Mono[Void] = {
     writeWith(Flux.from(body).flatMap(p => Flux.from(p)))
   }
 
@@ -162,11 +169,15 @@ class SpringToPekkoResponseAdapter()(implicit system: ActorSystem[?], ec: Execut
     new org.springframework.util.LinkedMultiValueMap[String, org.springframework.http.ResponseCookie]()
   }
 
-  override def addCookie(cookie: org.springframework.http.ResponseCookie): Unit = {
+  override def addCookie(
+    cookie: org.springframework.http.ResponseCookie
+  ): Unit = {
     // Not implemented for this adapter
   }
 
-  override def beforeCommit(action: java.util.function.Supplier[? <: reactor.core.publisher.Mono[Void]]): Unit = {
+  override def beforeCommit(
+    action: java.util.function.Supplier[? <: reactor.core.publisher.Mono[Void]]
+  ): Unit = {
     // Not implemented for this adapter
   }
 
