@@ -38,7 +38,7 @@ jobs:
           branches: |
             ['main']
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN_DRAGON }}
 
       - name: Do something when a new release published
         if: steps.semantic_dry_run.outputs.new_release_published == 'true'
