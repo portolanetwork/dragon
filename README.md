@@ -150,7 +150,7 @@ Steps:
 ### Single Node (Development)
 
 ```bash
-sbt "runMain app.dragon.turnstile.controller.TurnstileMain"
+sbt "runMain app.dragon.turnstile.main.Turnstile"
 ```
 
 ### Cluster Deployment (Production)
