@@ -21,6 +21,10 @@ jobs:
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@v5'
+        with:
+          # This prevents actions/checkout from setting up the default GITHUB_TOKEN for git operations.
+          # Semantic-release will then rely on the token you pass via the GITHUB_TOKEN environment variable.
+          persist-credentials: false
 
       - name: 'Semantic Release'
         id: semantic_release
