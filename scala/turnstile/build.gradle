@@ -1,0 +1,53 @@
+buildscript {
+  repositories {
+    gradlePluginPortal()
+  }
+}
+plugins {
+  id 'java'
+  id 'application'
+  id 'org.apache.pekko.grpc.gradle' version '1.1.1'
+}
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  implementation 'org.scala-lang:scala-library:2.13.16'
+
+  implementation 'org.apache.pekko:pekko-actor-typed_2.13:1.2.0'
+  implementation 'org.apache.pekko:pekko-discovery_2.13:1.2.0'
+  implementation 'org.apache.pekko:pekko-stream_2.13:1.2.0'
+  implementation 'org.apache.pekko:pekko-pki_2.13:1.2.0'
+
+  implementation 'ch.qos.logback:logback-classic:1.3.15'
+
+  testImplementation 'org.apache.pekko:pekko-actor-testkit-typed_2.13:1.2.0'
+  testImplementation 'org.apache.pekko:pekko-stream-testkit_2.13:1.2.0'
+  testImplementation 'org.scalatest:scalatest_2.13:3.2.19'
+  // optional in Scalatest
+  testRuntimeOnly 'com.vladsch.flexmark:flexmark-all:0.62.2'
+  // Required by https://github.com/maiflai/gradle-scalatest
+  testRuntimeOnly 'org.pegdown:pegdown:1.4.2'
+}
+
+task runServer(type: JavaExec) {
+  classpath = sourceSets.main.runtimeClasspath
+
+  main = 'com.example.helloworld.GreeterServer'
+}
+
+
+task runClient(type: JavaExec) {
+  classpath = sourceSets.main.runtimeClasspath
+
+  main = 'com.example.helloworld.GreeterClient'
+
+  // arguments to pass to the application
+  if (project.hasProperty("GreeterClient.user"))
+    args  project.getProperty("GreeterClient.user")
+}
+
+application {
+  mainClassName = 'com.example.helloworld.GreeterServer'
+}

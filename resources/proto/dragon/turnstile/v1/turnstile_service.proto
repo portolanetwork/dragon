@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package dragon.turnstile.v1;
+
+option java_multiple_files = true;
+option java_package = "dragon.turnstile.api.v1";
+option java_outer_classname = "TurnstileProto";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+//import "dragon/common/v1/objects.proto";
+
+
+option go_package = "dragon/turnstile/api/v1";
+
+
+
+service TurnstileService {
+    rpc ListMcpServers (ListMcpServersRequest)  returns (McpServerList) {}
+    rpc CreateMcpServer (CreateMcpServerRequest) returns (McpServer) {}
+    rpc DeleteMcpServer (DeleteMcpServerRequest) returns (google.protobuf.Empty) {}
+}
+
+// MCP Servers
+message CreateMcpServerRequest {
+    string name = 1;
+    string url = 2;
+}
+
+message ListMcpServersRequest {
+    string user_id = 1;
+    //string page_size = 2;
+    //string page_token = 3;
+}
+
+message DeleteMcpServerRequest {
+    string uuid = 1;
+}
+
+message McpServerList {
+    repeated McpServer mcp_server = 1;
+}
+
+
+message McpServer {
+    string uuid = 1;
+    string name = 2;
+    string url = 3;
+}
+
