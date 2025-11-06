@@ -18,6 +18,7 @@
 
 package app.dragon.turnstile.actor
 
+import app.dragon.turnstile.serializer.TurnstileSerializable
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityTypeKey}

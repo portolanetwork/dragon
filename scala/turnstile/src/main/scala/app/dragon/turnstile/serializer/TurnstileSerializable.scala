@@ -16,7 +16,7 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-package app.dragon.turnstile.actor
+package app.dragon.turnstile.serializer
 
 /**
  * Marker trait for serializable messages in Turnstile

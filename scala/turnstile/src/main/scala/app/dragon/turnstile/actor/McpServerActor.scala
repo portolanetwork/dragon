@@ -18,6 +18,7 @@
 
 package app.dragon.turnstile.actor
 
+import app.dragon.turnstile.serializer.TurnstileSerializable
 import app.dragon.turnstile.server.{PekkoToSpringRequestAdapter, SpringToPekkoResponseAdapter, TurnstileStreamingHttpMcpServer}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
