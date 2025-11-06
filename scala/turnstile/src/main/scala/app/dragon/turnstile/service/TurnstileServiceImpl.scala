@@ -24,7 +24,7 @@ import com.google.protobuf.empty.Empty
 import dragon.turnstile.api.v1.*
 import io.grpc.Status
 import org.apache.pekko.grpc.GrpcServiceException
-import org.apache.pekko.grpc.scaladsl.MetadataBuilder
+import org.apache.pekko.grpc.scaladsl.{Metadata, MetadataBuilder}
 import org.slf4j.{Logger, LoggerFactory}
 import slick.jdbc.JdbcBackend.Database
 
@@ -46,7 +46,9 @@ object TurnstileServiceImpl {
  *
  * This service provides MCP server registration functionality through gRPC.
  */
-class TurnstileServiceImpl()(implicit db: Database) extends TurnstileService {
+class TurnstileServiceImpl()(
+  implicit db: Database
+) extends TurnstileServicePowerApi {
   private val logger: Logger = LoggerFactory.getLogger(classOf[TurnstileServiceImpl])
   
   implicit private val ec: ExecutionContext = ExecutionContext.global
@@ -60,7 +62,8 @@ class TurnstileServiceImpl()(implicit db: Database) extends TurnstileService {
    * @return Future[McpServer] containing the created MCP server info
    */
   override def createMcpServer(
-    request: CreateMcpServerRequest
+    request: CreateMcpServerRequest,
+    metadata: Metadata,
   ): Future[McpServer] = {
     logger.info(s"Received CreateMcpServer request for name: ${request.name}, url: ${request.url}")
 
@@ -104,7 +107,8 @@ class TurnstileServiceImpl()(implicit db: Database) extends TurnstileService {
    * @return Future[McpServerList] containing list of registered MCP servers
    */
   override def listMcpServers(
-    request: ListMcpServersRequest
+    request: ListMcpServersRequest,
+    metadata: Metadata,
   ): Future[McpServerList] = {
     logger.info(s"Received ListMcpServers request for userId: ${request.userId}")
 
@@ -143,7 +147,8 @@ class TurnstileServiceImpl()(implicit db: Database) extends TurnstileService {
    * @return Future[Empty] on successful deletion
    */
   override def deleteMcpServer(
-    request: DeleteMcpServerRequest
+    request: DeleteMcpServerRequest,
+    metadata: Metadata,
   ): Future[Empty] = {
     logger.info(s"Received DeleteMcpServer request for uuid: ${request.uuid}")
 

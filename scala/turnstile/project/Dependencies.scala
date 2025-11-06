@@ -32,6 +32,7 @@ object Dependencies {
   val bouncyCastleVersion = "1.70"
   val apacheCommonsIoVersion = "2.18.0"
   val jwtScalaVersion = "10.0.1"
+  val auth0JwksRsaVersion = "0.22.1"
   val protobufJavaUtilVersion = "3.25.6"
   val mcpSdkVersion = "0.14.1"
   val slickVersion = "3.5.2"
@@ -84,6 +85,7 @@ object Dependencies {
     "com.github.jwt-scala" %% "jwt-play-json" % jwtScalaVersion,
     "com.github.jwt-scala" %% "jwt-core" % jwtScalaVersion,
     "com.github.jwt-scala" %% "jwt-play" % jwtScalaVersion,
+    "com.auth0" % "jwks-rsa" % auth0JwksRsaVersion,
     "com.google.protobuf" % "protobuf-java-util" % protobufJavaUtilVersion,
     // MCP (Model Context Protocol)
     "io.modelcontextprotocol.sdk" % "mcp" % mcpSdkVersion,

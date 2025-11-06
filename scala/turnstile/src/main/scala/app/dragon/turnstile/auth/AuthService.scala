@@ -1,20 +1,44 @@
-package app.portola.spyder.auth
+/*
+ * Copyright 2025 Sami Malik
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * Author: Sami Malik (sami.malik [at] portolanetwork.io)
+ */
 
-import app.portola.spyder.controller.ApplicationConfig
+package app.dragon.turnstile.auth
+
+import app.dragon.turnstile.config.ApplicationConfig
 import com.auth0.jwk.UrlJwkProvider
 import pdi.jwt.{JwtAlgorithm, JwtBase64, JwtClaim, JwtJson}
 
 import java.time.Clock
 import scala.util.{Failure, Success, Try}
 
+/**
+ * Authentication service for validating JWT tokens.
+ *
+ * This service validates JWT tokens from Auth0, verifying the signature,
+ * issuer, audience, and expiration claims.
+ */
 class AuthService {
 
   // A regex that defines the JWT pattern and allows us to
   // extract the header, claims and signature
   private val jwtRegex = """(.+?)\.(.+?)\.(.+?)""".r
 
-  private def domain = ApplicationConfig.auth0Domain
-  private def audience = ApplicationConfig.auth0Audiance
+  private def domain = ApplicationConfig.authConfig.getString("auth0.domain")
+  private def audience = ApplicationConfig.authConfig.getString("auth0.audience")
   private def issuer = s"https://$domain/"
 
   // Validates a JWT and potentially returns the claims if the token was successfully parsed
@@ -24,21 +48,41 @@ class AuthService {
     _ <- validateClaims(claims)     // validate the data stored inside the token
   } yield claims
 
+  /**
+   * Extracts the user ID from JWT claims.
+   * Typically this is the 'sub' (subject) claim in Auth0 tokens.
+   */
+  def getUserIdFromClaims(claims: JwtClaim): Option[String] = {
+    claims.subject
+  }
+
+  /**
+   * Extracts custom claims from the JWT token.
+   * Auth0 custom claims are typically namespaced.
+   */
+  def getCustomClaim(claims: JwtClaim, key: String): Option[String] = {
+    import play.api.libs.json._
+    Try {
+      val json = Json.parse(claims.content)
+      (json \ key).asOpt[String]
+    }.toOption.flatten
+  }
+
   // Splits a JWT into it's 3 component parts
-  private val splitToken = (jwt: String) => jwt match {
+  private def splitToken(jwt: String): Try[(String, String, String)] = jwt match {
     case jwtRegex(header, body, sig) => Success((header, body, sig))
     case _ => Failure(new Exception("Token does not match the correct pattern"))
   }
 
   // As the header and claims data are base64-encoded, this function
   // decodes those elements
-  private val decodeElements = (data: Try[(String, String, String)]) => data map {
+  private def decodeElements(data: Try[(String, String, String)]): Try[(String, String, String)] = data map {
     case (header, body, sig) => (JwtBase64.decodeString(header), JwtBase64.decodeString(body), sig)
   }
 
   // Gets the JWK from the JWKS endpoint using the jwks-rsa library
-  private val getJwk = (token: String) =>
-    (splitToken andThen decodeElements) (token) flatMap {
+  private def getJwk(token: String): Try[com.auth0.jwk.Jwk] = {
+    (splitToken andThen decodeElements)(token) flatMap {
       case (header, _, _) =>
         val jwtHeader = JwtJson.parseHeader(header)     // extract the header
         val jwkProvider = new UrlJwkProvider(s"https://$domain")
@@ -48,18 +92,18 @@ class AuthService {
           Try(jwkProvider.get(k))
         } getOrElse Failure(new Exception("Unable to retrieve kid"))
     }
+  }
 
-  //var clock = null;
-
-  implicit val clock: Clock = Clock.systemUTC
+  given clock: Clock = Clock.systemUTC
 
   // Validates the claims inside the token. isValid checks the issuedAt, expiresAt,
   // issuer and audience fields.
-  private val validateClaims = (claims: JwtClaim) =>
-    if (claims.isValid(issuer, audience)(clock)) {
+  private def validateClaims(claims: JwtClaim): Try[JwtClaim] = {
+    if (claims.isValid(issuer, audience)(using clock)) {
       Success(claims)
     } else {
       Failure(new Exception("The JWT did not pass validation"))
     }
+  }
 
 }
