@@ -19,7 +19,8 @@
 package app.dragon.turnstile.gateway
 
 import app.dragon.turnstile.actor.{ActorLookup, McpServerActor}
-import app.dragon.turnstile.config.ApplicationConfig
+import app.dragon.turnstile.auth.AuthService
+import app.dragon.turnstile.auth.AuthService.{AccessDenied, MissingAuthHeader}
 import com.typesafe.config.Config
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
@@ -105,6 +106,51 @@ class TurnstileMcpGateway(
     sessionIdOpt: Option[String]
   )
 
+  /*
+  case class AuthContext(
+    userId: String,
+    tenant: String,
+    claims: JwtClaim
+  )
+
+  sealed trait AuthError
+  case object MissingAuthHeader extends AuthError
+  case object InvalidToken extends AuthError
+
+  /**
+   * Validates the JWT token from HTTP request headers.
+   * Extracts the Authorization header, validates the token, and returns AuthContext.
+   *
+   * @param request The HTTP request containing the Authorization header
+   * @return Either[AuthError, AuthContext] - Right(AuthContext) on success, Left(AuthError) on failure
+   */
+  private def validateHttpAuth(
+    request: HttpRequest
+  ): Either[AuthError, AuthContext] = {
+
+    request.h
+
+    request.headers.find(_.lowercaseName == "authorization") match {
+      case Some(authHeader) =>
+        val tokenWithoutPrefix = authHeader.value.replace("Bearer ", "")
+        OAuthHelper.validateJwt(tokenWithoutPrefix) match {
+          case Success(claims) =>
+            OAuthHelper.getUserIdFromClaims(claims) match {
+              case Some(userId) => Right(AuthContext(userId, "default", claims))
+              case None => Left(InvalidToken)
+            }
+          case Failure(ex) =>
+            logger.debug(s"Token validation failed: ${ex.getMessage}")
+            Left(InvalidToken)
+        }
+      case None => Left(MissingAuthHeader)
+    }
+  }
+
+   */
+
+
+
 
   def start(): Unit = {
     // Create actor system for Pekko HTTP
@@ -142,11 +188,6 @@ class TurnstileMcpGateway(
           logger.info("  - New sessions → routed to 'default' handler initially")
           logger.info("  - Sessions can be dynamically routed to different handlers")
           logger.info("")
-        //logger.info("Press ENTER to stop the server...")
-
-        // Provide the ClusterSharding instance explicitly to satisfy the implicit parameter
-        //ActorLookup.getMcpClientActor("client-actor")(ClusterSharding(system)) ! McpListTools(system.ignoreRef)
-        //ActorLookup.getMcpClientActor("client-actor") ! McpClientActor.Ping(system.ignoreRef)
 
         case Failure(ex) =>
           logger.error(s"✗ Failed to start MCP server: ${ex.getMessage}", ex)
@@ -202,61 +243,85 @@ class TurnstileMcpGateway(
 
   /**
    * Create a Pekko HTTP route that uses HeaderBasedRouter to route to different handlers.
+   * Requests are authenticated before being forwarded to MCP actors.
    */
   private def createHttpRoute(
     mcpEndpoint: String
   ): Route = {
     path(mcpEndpoint.stripPrefix("/")) {
       extractRequest { pekkoRequest =>
-        // Chain the lookup and the actor ask using flatMap/map so we can use map on Futures
-        val responseFuture = for {
-          routeResult <- sessionMap.lookup(pekkoRequest)
-          // derived values can be bound inside the for comprehension
-          mcpActorId = routeResult.mcpActorId
+        // Validate authentication first
+        AuthService.authenticate(pekkoRequest.headers) match {
+          case Left(MissingAuthHeader) =>
+            logger.warn("Request rejected: missing authorization header")
+            complete(HttpResponse(
+              status = StatusCodes.Unauthorized,
+              entity = HttpEntity(
+                ContentTypes.`application/json`,
+                """{"error": "unauthorized", "message": "Missing authorization header"}"""
+              )
+            ))
+          case Left(AccessDenied) =>
+            logger.warn("Request rejected: invalid or expired token")
+            complete(HttpResponse(
+              status = StatusCodes.Forbidden,
+              entity = HttpEntity(
+                ContentTypes.`application/json`,
+                """{"error": "forbidden", "message": "Invalid or expired token"}"""
+              )
+            ))
+          case Right(authContext) =>
+            logger.debug(s"Request authenticated for user: ${authContext.userId}")
+            // Chain the lookup and the actor ask using flatMap/map so we can use map on Futures
+            val responseFuture = for {
+              routeResult <- sessionMap.lookup(pekkoRequest)
+              // derived values can be bound inside the for comprehension
+              mcpActorId = routeResult.mcpActorId
 
-          askResult <- pekkoRequest.method.value match {
-            case "GET" =>
-              ActorLookup.getMcpServerActor(mcpActorId)
-                .ask[Either[McpServerActor.McpActorError, HttpResponse]](replyTo => {
-                  logger.debug(s"Routing GET request to MCP actor: $mcpActorId")
-                  McpServerActor.McpGetRequest(pekkoRequest, replyTo)
-                })
-            case "POST" =>
-              ActorLookup.getMcpServerActor(mcpActorId)
-                .ask[Either[McpServerActor.McpActorError, HttpResponse]](replyTo => {
-                  logger.debug(s"Routing POST request to MCP actor: $mcpActorId")
-                  McpServerActor.McpPostRequest(pekkoRequest, replyTo)
-                })
-            case "DELETE" =>
-              ActorLookup.getMcpServerActor(mcpActorId)
-                .ask[Either[McpServerActor.McpActorError, HttpResponse]](replyTo => {
-                  logger.debug(s"Routing DELETE request to MCP actor: $mcpActorId")
-                  McpServerActor.McpDeleteRequest(pekkoRequest, replyTo)
-                })
-            case other =>
-              logger.warn(s"Method $other not supported by MCP gateway")
-              scala.concurrent.Future.successful(Left(McpServerActor.ProcessingError(s"Method $other not supported")))
-          }
-        } yield {
-          askResult match {
-            case right@Right(httpResponse) =>
-              val sessionIdOpt = httpResponse.headers.find(_.name.toLowerCase == "mcp-session-id").map(_.value)
-              logger.debug(s"Received response from MCP actor: $mcpActorId")
-              logger.debug(s"Updating session mapping: ${sessionIdOpt.orNull} -> $mcpActorId")
-              sessionMap.updateSessionMapping(sessionIdOpt.getOrElse(""), mcpActorId)
-              right
-            case left@Left(_) => left
-          }
-        }
-        // end for-comprehension
+              askResult <- pekkoRequest.method.value match {
+                case "GET" =>
+                  ActorLookup.getMcpServerActor(mcpActorId)
+                    .ask[Either[McpServerActor.McpActorError, HttpResponse]](replyTo => {
+                      logger.debug(s"Routing GET request to MCP actor: $mcpActorId for user: ${authContext.userId}")
+                      McpServerActor.McpGetRequest(pekkoRequest, replyTo)
+                    })
+                case "POST" =>
+                  ActorLookup.getMcpServerActor(mcpActorId)
+                    .ask[Either[McpServerActor.McpActorError, HttpResponse]](replyTo => {
+                      logger.debug(s"Routing POST request to MCP actor: $mcpActorId for user: ${authContext.userId}")
+                      McpServerActor.McpPostRequest(pekkoRequest, replyTo)
+                    })
+                case "DELETE" =>
+                  ActorLookup.getMcpServerActor(mcpActorId)
+                    .ask[Either[McpServerActor.McpActorError, HttpResponse]](replyTo => {
+                      logger.debug(s"Routing DELETE request to MCP actor: $mcpActorId for user: ${authContext.userId}")
+                      McpServerActor.McpDeleteRequest(pekkoRequest, replyTo)
+                    })
+                case other =>
+                  logger.warn(s"Method $other not supported by MCP gateway")
+                  scala.concurrent.Future.successful(Left(McpServerActor.ProcessingError(s"Method $other not supported")))
+              }
+            } yield {
+              askResult match {
+                case right@Right(httpResponse) =>
+                  val sessionIdOpt = httpResponse.headers.find(_.name.toLowerCase == "mcp-session-id").map(_.value)
+                  logger.debug(s"Received response from MCP actor: $mcpActorId")
+                  logger.debug(s"Updating session mapping: ${sessionIdOpt.orNull} -> $mcpActorId")
+                  sessionMap.updateSessionMapping(sessionIdOpt.getOrElse(""), mcpActorId)
+                  right
+                case left@Left(_) => left
+              }
+            }
+            // end for-comprehension
 
-        // Single onSuccess that handles the final Either result
-        onSuccess(responseFuture) {
-          case Right(httpResponse) =>
-            complete(httpResponse)
-          case Left(McpServerActor.ProcessingError(msg)) =>
-            logger.error(s"Error processing request: $msg")
-            complete(HttpResponse(500, entity = msg))
+            // Single onSuccess that handles the final Either result
+            onSuccess(responseFuture) {
+              case Right(httpResponse) =>
+                complete(httpResponse)
+              case Left(McpServerActor.ProcessingError(msg)) =>
+                logger.error(s"Error processing request: $msg")
+                complete(HttpResponse(500, entity = msg))
+            }
         }
       }
     }
