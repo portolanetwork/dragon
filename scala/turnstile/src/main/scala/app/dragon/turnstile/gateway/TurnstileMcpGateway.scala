@@ -19,6 +19,7 @@
 package app.dragon.turnstile.gateway
 
 import app.dragon.turnstile.actor.{ActorLookup, McpServerActor}
+import app.dragon.turnstile.config.ApplicationConfig
 import com.typesafe.config.Config
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
@@ -77,7 +78,8 @@ import scala.util.{Failure, Success}
 
 
 class TurnstileMcpGateway(
-  config: Config
+  mcpConfig: Config,
+  authConfig: Config
 )(
   implicit system: ActorSystem[?]
 ) {
@@ -92,10 +94,11 @@ class TurnstileMcpGateway(
 
   private val sessionMap: SessionMap = new SessionMap()
 
-  val serverVersion: String = config.getString("server-version")
-  val host: String = config.getString("host")
-  val port: Int = config.getInt("port")
-  val mcpEndpoint: String = config.getString("mcp-endpoint")
+  val serverVersion: String = mcpConfig.getString("server-version")
+  val host: String = mcpConfig.getString("host")
+  val port: Int = mcpConfig.getInt("port")
+  val mcpEndpoint: String = mcpConfig.getString("mcp-endpoint")
+  val auth0Domain: String = authConfig.getString("auth0.domain")
 
   case class RouteLookupResult(
     mcpActorId: String,
@@ -111,7 +114,11 @@ class TurnstileMcpGateway(
       logger.info(s"  Fallback enabled: true")
 
       // 4. Create Pekko HTTP route with the router
-      val route = createHttpRoute(mcpEndpoint)
+      val route = pathPrefix(".well-known") {
+        extractUnmatchedPath { remainingPath =>
+          createWellKnown(s"/.well-known$remainingPath")
+        }
+      } ~ createHttpRoute(mcpEndpoint)
 
       // 5. Start the Pekko HTTP server
       logger.info(s"Starting Pekko HTTP server on http://${host}:${port}${mcpEndpoint}")
@@ -150,6 +157,46 @@ class TurnstileMcpGateway(
         logger.error("Failed to start decoupled embedded MCP server", ex)
         system.terminate()
         System.exit(1)
+    }
+  }
+
+  /**
+   * Proxy .well-known requests to Auth0 domain.
+   * This handles OIDC/OAuth2 discovery endpoints like:
+   * - /.well-known/openid-configuration
+   * - /.well-known/jwks.json
+   */
+  private def createWellKnown(
+    path: String
+  ): Route = {
+    extractRequest { _ =>
+      val auth0Url = s"https://$auth0Domain$path"
+      logger.debug(s"Proxying .well-known request to: $auth0Url")
+
+      val proxyRequest = HttpRequest(
+        method = HttpMethods.GET,
+        uri = auth0Url
+      )
+
+      val responseFuture = Http()
+        .singleRequest(proxyRequest)
+        .map { response =>
+          logger.debug(s"Received response from Auth0: ${response.status}")
+          response
+        }
+        .recover {
+          case ex: Exception =>
+            logger.error(s"Error proxying to Auth0: ${ex.getMessage}", ex)
+            HttpResponse(
+              status = StatusCodes.BadGateway,
+              entity = HttpEntity(
+                ContentTypes.`application/json`,
+                s"""{"error": "Failed to proxy to Auth0", "message": "${ex.getMessage}"}"""
+              )
+            )
+        }
+
+      complete(responseFuture)
     }
   }
 
@@ -221,5 +268,10 @@ class TurnstileMcpGateway(
 object TurnstileMcpGateway {
   private val logger: Logger = LoggerFactory.getLogger(classOf[TurnstileMcpGateway])
 
-  def apply(config: Config)(implicit system: ActorSystem[?]): TurnstileMcpGateway = new TurnstileMcpGateway(config)
+  def apply(
+    mcpStreamingConfig: Config,
+    authConfig: Config,
+  )(
+    implicit system: ActorSystem[?]
+  ): TurnstileMcpGateway = new TurnstileMcpGateway(mcpStreamingConfig, authConfig)
 }

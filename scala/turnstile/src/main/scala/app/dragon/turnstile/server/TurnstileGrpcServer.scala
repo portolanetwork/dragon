@@ -56,7 +56,7 @@ class TurnstileGrpcServer private(
     implicit val ec: ExecutionContext = system.executionContext
 
     // Create database instance
-    implicit val db: Database = Database.forConfig("", ApplicationConfig.dbConfig)
+    implicit val db: Database = Database.forConfig("", ApplicationConfig.db)
 
     // Create service handlers
     val turnstileServiceHandler = TurnstileServicePowerApiHandler.partial(TurnstileServiceImpl())

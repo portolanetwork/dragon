@@ -1,6 +1,6 @@
 .env
 .cruft
-docs
+claude-docs
 
 # Scala & SBT
 *.class

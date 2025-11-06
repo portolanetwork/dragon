@@ -37,8 +37,8 @@ object OAuthHelper {
   // extract the header, claims and signature
   private val jwtRegex = """(.+?)\.(.+?)\.(.+?)""".r
 
-  private def domain = ApplicationConfig.authConfig.getString("auth0.domain")
-  private def audience = ApplicationConfig.authConfig.getString("auth0.audience")
+  private def domain = ApplicationConfig.auth.getString("auth0.domain")
+  private def audience = ApplicationConfig.auth.getString("auth0.audience")
   private def issuer = s"https://$domain/"
 
   // Validates a JWT and potentially returns the claims if the token was successfully parsed

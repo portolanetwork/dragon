@@ -112,7 +112,7 @@ class TurnstileStreamingHttpMcpServer(
   private implicit val timeout: Timeout = 30.seconds
 
   // Provide an implicit Database for DbInterface calls
-  private implicit val db: Database = Database.forConfig("", ApplicationConfig.dbConfig)
+  private implicit val db: Database = Database.forConfig("", ApplicationConfig.db)
 
   // These are set in start()
   private var mcpAsyncServer: Option[McpAsyncServer] = None

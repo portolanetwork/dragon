@@ -91,7 +91,7 @@ object ApplicationConfig {
   val rootConfig: Config = ConfigFactory.load(configFile)
   
   /** Authentication configuration */
-  val authConfig: Config = rootConfig.getConfig("turnstile.auth")
+  val auth: Config = rootConfig.getConfig("turnstile.auth")
 
   /** gRPC server configuration (host, port) */
   val grpcConfig: Config = rootConfig.getConfig("turnstile.grpc")
@@ -100,7 +100,7 @@ object ApplicationConfig {
   val mcpStreaming: Config = rootConfig.getConfig("turnstile.mcp.streaming-http")
 
   /** Database configuration for Slick and Flyway */
-  val dbConfig: Config = rootConfig.getConfig("turnstile.database.db")
+  val db: Config = rootConfig.getConfig("turnstile.database.db")
 
   logger.info(s"Configuration loaded from: $configFile")
 }

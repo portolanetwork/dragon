@@ -61,7 +61,8 @@ object Guardian {
 
   val grpcConfig: Config = ApplicationConfig.grpcConfig
   val mcpStreamingConfig: Config = ApplicationConfig.mcpStreaming
-  val databaseConfig: Config = ApplicationConfig.dbConfig
+  val databaseConfig: Config = ApplicationConfig.db
+  val authConfig: Config = ApplicationConfig.auth
 
   /**
    * Creates the Guardian actor behavior.
@@ -76,7 +77,7 @@ object Guardian {
 
       // Run database migrations first
       context.log.info("Running database migrations...")
-      DatabaseMigration.migrate(ApplicationConfig.dbConfig) match {
+      DatabaseMigration.migrate(ApplicationConfig.db) match {
         case scala.util.Success(result) =>
           context.log.info(s"Database migrations completed: ${result.migrationsExecuted} migrations executed")
           if (result.targetSchemaVersion != null) {
@@ -98,7 +99,7 @@ object Guardian {
           if (mcpStreamingConfig.getBoolean("enabled")) {
             try {
               //val mcpStreamingServer = StreamingHttpMcpServer(mcpStreamingConfig)
-              val mcpStreamingServer = TurnstileMcpGateway(mcpStreamingConfig)
+              val mcpStreamingServer = TurnstileMcpGateway(mcpStreamingConfig, authConfig)
 
               mcpStreamingServer.start()
               context.log.info("MCP Streaming HTTP Server started successfully")
