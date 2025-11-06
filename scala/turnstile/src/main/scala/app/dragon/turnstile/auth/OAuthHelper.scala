@@ -21,6 +21,7 @@ package app.dragon.turnstile.auth
 import app.dragon.turnstile.config.ApplicationConfig
 import com.auth0.jwk.UrlJwkProvider
 import pdi.jwt.{JwtAlgorithm, JwtBase64, JwtClaim, JwtJson}
+import sun.security.krb5.internal.AuthContext
 
 import java.time.Clock
 import scala.util.{Failure, Success, Try}
@@ -31,7 +32,7 @@ import scala.util.{Failure, Success, Try}
  * This service validates JWT tokens from Auth0, verifying the signature,
  * issuer, audience, and expiration claims.
  */
-class AuthService {
+object OAuthHelper {
 
   // A regex that defines the JWT pattern and allows us to
   // extract the header, claims and signature
@@ -40,7 +41,7 @@ class AuthService {
   private def domain = ApplicationConfig.authConfig.getString("auth0.domain")
   private def audience = ApplicationConfig.authConfig.getString("auth0.audience")
   private def issuer = s"https://$domain/"
-
+  
   // Validates a JWT and potentially returns the claims if the token was successfully parsed
   def validateJwt(token: String): Try[JwtClaim] = for {
     jwk <- getJwk(token)           // Get the secret key for this token

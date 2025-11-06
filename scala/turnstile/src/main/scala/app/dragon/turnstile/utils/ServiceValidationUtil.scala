@@ -18,22 +18,25 @@
 
 package app.dragon.turnstile.utils
 
+import app.dragon.turnstile.auth.OAuthHelper
 import io.grpc.Status
+import org.apache.pekko.grpc.scaladsl.Metadata
+import pdi.jwt.JwtClaim
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success}
 
 object ServiceValidationUtil {
+
+
+  //private val authService = new AuthService()
+
   /**
    * Validates that a string is not empty. If empty, returns a failed Future with INVALID_ARGUMENT.
    * Otherwise, returns a successful Future with the value.
-   *
-   * @param value The string to validate
-   * @param fieldName The name of the field (for error messages)
-   * @param ec ExecutionContext for the Future
-   * @return Future[String] either successful or failed with INVALID_ARGUMENT
    */
   def validateNotEmpty(
-    value: String, 
+    value: String,
     fieldName: String
   )(
     implicit ec: ExecutionContext
@@ -42,24 +45,24 @@ object ServiceValidationUtil {
       Future.failed(
         Status.INVALID_ARGUMENT
           .withDescription(s"$fieldName cannot be empty")
-        .asRuntimeException())
+          .asRuntimeException())
     } else {
       Future.successful(value)
     }
   }
-  
+
   def validateHasNoSpaces(
-    value: String, 
+    value: String,
     fieldName: String
   )(implicit ec: ExecutionContext): Future[String] = {
     if (value.contains(" ")) {
       Future.failed(
         Status.INVALID_ARGUMENT
           .withDescription(s"$fieldName cannot contain spaces")
-        .asRuntimeException())
+          .asRuntimeException())
     } else {
       Future.successful(value)
     }
   }
-}
 
+}

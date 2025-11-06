@@ -18,6 +18,7 @@
 
 package app.dragon.turnstile.service
 
+import app.dragon.turnstile.auth.AuthService
 import app.dragon.turnstile.db.*
 import app.dragon.turnstile.utils.ServiceValidationUtil.*
 import com.google.protobuf.empty.Empty
@@ -53,8 +54,6 @@ class TurnstileServiceImpl()(
   
   implicit private val ec: ExecutionContext = ExecutionContext.global
 
-  // TODO: Integrate auth. Currently userId and tenant are hardcoded or passed in requests.
-
   /**
    * Create a new MCP server registration.
    *
@@ -65,18 +64,18 @@ class TurnstileServiceImpl()(
     request: CreateMcpServerRequest,
     metadata: Metadata,
   ): Future[McpServer] = {
-    logger.info(s"Received CreateMcpServer request for name: ${request.name}, url: ${request.url}")
-
     val now = Timestamp(System.currentTimeMillis())
 
     // Validate request using generic utility
     for {
+      authContext <- AuthService.authenticate(metadata)
+      //_ = logger.info(s"Received CreateMcpServer request for name: ${request.name}, url: ${request.url} from userId: ${authContext.userId}")
       _ <- validateNotEmpty(request.name, "name")
       _ <- validateHasNoSpaces(request.name, "name")
       _ <- validateNotEmpty(request.url, "url")
       insertResult <- DbInterface.insertMcpServer(McpServerRow(
-        tenant = "default", // TODO: Replace with actual tenant id from auth context
-        userId = "changeThisToUserId", // TODO: Replace with actual user id from auth context
+        tenant = authContext.tenant,
+        userId = authContext.userId,
         name = request.name,
         url = request.url,
         createdAt = now,
@@ -110,13 +109,12 @@ class TurnstileServiceImpl()(
     request: ListMcpServersRequest,
     metadata: Metadata,
   ): Future[McpServerList] = {
-    logger.info(s"Received ListMcpServers request for userId: ${request.userId}")
-
     // Validate request and list servers
     for {
+      authContext <- AuthService.authenticate(metadata)
+      _ = logger.info(s"Received ListMcpServers request for userId: ${request.userId} from authenticated userId: ${authContext.userId}")
       _ <- validateNotEmpty(request.userId, "userId")
-      // TODO: Replace "default" with actual tenant from auth context
-      listResult <- DbInterface.listMcpServers(tenant = "default", userId = request.userId)
+      listResult <- DbInterface.listMcpServers(tenant = authContext.tenant, userId = request.userId)
     } yield {
       listResult match {
         case Left(DbAlreadyExists) =>
@@ -150,10 +148,10 @@ class TurnstileServiceImpl()(
     request: DeleteMcpServerRequest,
     metadata: Metadata,
   ): Future[Empty] = {
-    logger.info(s"Received DeleteMcpServer request for uuid: ${request.uuid}")
-
     // Validate request and delete server
     for {
+      authContext <- AuthService.authenticate(metadata)
+      _ = logger.info(s"Received DeleteMcpServer request for uuid: ${request.uuid} from userId: ${authContext.userId}")
       _ <- validateNotEmpty(request.uuid, "uuid")
       uuid <- Future.fromTry(scala.util.Try(UUID.fromString(request.uuid)))
         .recoverWith(_ => Future.failed(new GrpcServiceException(Status.INVALID_ARGUMENT,
