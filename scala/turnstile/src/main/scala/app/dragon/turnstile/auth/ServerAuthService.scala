@@ -8,7 +8,7 @@ import pdi.jwt.JwtClaim
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
-object AuthService {
+object ServerAuthService {
 
   case class AuthContext(
     userId: String,

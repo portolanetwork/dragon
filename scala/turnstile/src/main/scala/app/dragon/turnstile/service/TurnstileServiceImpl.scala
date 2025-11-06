@@ -18,7 +18,7 @@
 
 package app.dragon.turnstile.service
 
-import app.dragon.turnstile.auth.AuthService
+import app.dragon.turnstile.auth.ServerAuthService
 import app.dragon.turnstile.db.*
 import app.dragon.turnstile.utils.ServiceValidationUtil.*
 import com.google.protobuf.empty.Empty
@@ -68,7 +68,7 @@ class TurnstileServiceImpl()(
 
     // Validate request using generic utility
     for {
-      authContext <- AuthService.authenticate(metadata)
+      authContext <- ServerAuthService.authenticate(metadata)
       //_ = logger.info(s"Received CreateMcpServer request for name: ${request.name}, url: ${request.url} from userId: ${authContext.userId}")
       _ <- validateNotEmpty(request.name, "name")
       _ <- validateHasNoSpaces(request.name, "name")
@@ -111,7 +111,7 @@ class TurnstileServiceImpl()(
   ): Future[McpServerList] = {
     // Validate request and list servers
     for {
-      authContext <- AuthService.authenticate(metadata)
+      authContext <- ServerAuthService.authenticate(metadata)
       _ = logger.info(s"Received ListMcpServers request for userId: ${request.userId} from authenticated userId: ${authContext.userId}")
       _ <- validateNotEmpty(request.userId, "userId")
       listResult <- DbInterface.listMcpServers(tenant = authContext.tenant, userId = request.userId)
@@ -150,7 +150,7 @@ class TurnstileServiceImpl()(
   ): Future[Empty] = {
     // Validate request and delete server
     for {
-      authContext <- AuthService.authenticate(metadata)
+      authContext <- ServerAuthService.authenticate(metadata)
       _ = logger.info(s"Received DeleteMcpServer request for uuid: ${request.uuid} from userId: ${authContext.userId}")
       _ <- validateNotEmpty(request.uuid, "uuid")
       uuid <- Future.fromTry(scala.util.Try(UUID.fromString(request.uuid)))

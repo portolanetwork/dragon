@@ -18,14 +18,12 @@
 
 package app.dragon.turnstile.client
 
-import app.dragon.turnstile.config.ApplicationConfig
-import io.modelcontextprotocol.client.{McpAsyncClient, McpClient}
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport
+import io.modelcontextprotocol.client.{McpAsyncClient, McpClient}
 import io.modelcontextprotocol.spec.McpSchema
 import org.slf4j.LoggerFactory
 import reactor.core.publisher.Mono
 
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.jdk.CollectionConverters.*
 

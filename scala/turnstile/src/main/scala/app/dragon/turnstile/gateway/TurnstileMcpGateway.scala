@@ -19,8 +19,8 @@
 package app.dragon.turnstile.gateway
 
 import app.dragon.turnstile.actor.{ActorLookup, McpServerActor}
-import app.dragon.turnstile.auth.AuthService
-import app.dragon.turnstile.auth.AuthService.{AccessDenied, MissingAuthHeader}
+import app.dragon.turnstile.auth.ServerAuthService
+import app.dragon.turnstile.auth.ServerAuthService.{AccessDenied, MissingAuthHeader}
 import com.typesafe.config.Config
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
@@ -251,7 +251,7 @@ class TurnstileMcpGateway(
     path(mcpEndpoint.stripPrefix("/")) {
       extractRequest { pekkoRequest =>
         // Validate authentication first
-        AuthService.authenticate(pekkoRequest.headers) match {
+        ServerAuthService.authenticate(pekkoRequest.headers) match {
           case Left(MissingAuthHeader) =>
             logger.warn("Request rejected: missing authorization header")
             complete(HttpResponse(
