@@ -135,11 +135,11 @@ class TurnstileMcpGateway(
           logger.info("  - New sessions → routed to 'default' handler initially")
           logger.info("  - Sessions can be dynamically routed to different handlers")
           logger.info("")
-          //logger.info("Press ENTER to stop the server...")
+        //logger.info("Press ENTER to stop the server...")
 
-          // Provide the ClusterSharding instance explicitly to satisfy the implicit parameter
-          //ActorLookup.getMcpClientActor("client-actor")(ClusterSharding(system)) ! McpListTools(system.ignoreRef)
-          //ActorLookup.getMcpClientActor("client-actor") ! McpClientActor.Ping(system.ignoreRef)
+        // Provide the ClusterSharding instance explicitly to satisfy the implicit parameter
+        //ActorLookup.getMcpClientActor("client-actor")(ClusterSharding(system)) ! McpListTools(system.ignoreRef)
+        //ActorLookup.getMcpClientActor("client-actor") ! McpClientActor.Ping(system.ignoreRef)
 
         case Failure(ex) =>
           logger.error(s"✗ Failed to start MCP server: ${ex.getMessage}", ex)
@@ -166,8 +166,8 @@ class TurnstileMcpGateway(
           routeResult <- sessionMap.lookup(pekkoRequest)
           // derived values can be bound inside the for comprehension
           mcpActorId = routeResult.mcpActorId
-          //entityRef = ActorLookup.getMcpServerActor(routeResult.mcpActorId)
-           askResult <- pekkoRequest.method.value match {
+
+          askResult <- pekkoRequest.method.value match {
             case "GET" =>
               ActorLookup.getMcpServerActor(mcpActorId)
                 .ask[Either[McpServerActor.McpActorError, HttpResponse]](replyTo => {
@@ -177,28 +177,28 @@ class TurnstileMcpGateway(
             case "POST" =>
               ActorLookup.getMcpServerActor(mcpActorId)
                 .ask[Either[McpServerActor.McpActorError, HttpResponse]](replyTo => {
-                logger.debug(s"Routing POST request to MCP actor: $mcpActorId")
-                McpServerActor.McpPostRequest(pekkoRequest, replyTo)
-              })
+                  logger.debug(s"Routing POST request to MCP actor: $mcpActorId")
+                  McpServerActor.McpPostRequest(pekkoRequest, replyTo)
+                })
             case "DELETE" =>
               ActorLookup.getMcpServerActor(mcpActorId)
                 .ask[Either[McpServerActor.McpActorError, HttpResponse]](replyTo => {
-                logger.debug(s"Routing DELETE request to MCP actor: $mcpActorId")
-                McpServerActor.McpDeleteRequest(pekkoRequest, replyTo)
-              })
+                  logger.debug(s"Routing DELETE request to MCP actor: $mcpActorId")
+                  McpServerActor.McpDeleteRequest(pekkoRequest, replyTo)
+                })
             case other =>
               logger.warn(s"Method $other not supported by MCP gateway")
               scala.concurrent.Future.successful(Left(McpServerActor.ProcessingError(s"Method $other not supported")))
           }
         } yield {
           askResult match {
-            case right @ Right(httpResponse) =>
+            case right@Right(httpResponse) =>
               val sessionIdOpt = httpResponse.headers.find(_.name.toLowerCase == "mcp-session-id").map(_.value)
               logger.debug(s"Received response from MCP actor: $mcpActorId")
               logger.debug(s"Updating session mapping: ${sessionIdOpt.orNull} -> $mcpActorId")
               sessionMap.updateSessionMapping(sessionIdOpt.getOrElse(""), mcpActorId)
               right
-            case left @ Left(_) => left
+            case left@Left(_) => left
           }
         }
         // end for-comprehension
@@ -211,9 +211,9 @@ class TurnstileMcpGateway(
             logger.error(s"Error processing request: $msg")
             complete(HttpResponse(500, entity = msg))
         }
-       }
-     }
-   }
+      }
+    }
+  }
 
 
 }

@@ -21,7 +21,6 @@ package app.dragon.turnstile.auth
 import app.dragon.turnstile.config.ApplicationConfig
 import com.auth0.jwk.UrlJwkProvider
 import pdi.jwt.{JwtAlgorithm, JwtBase64, JwtClaim, JwtJson}
-import sun.security.krb5.internal.AuthContext
 
 import java.time.Clock
 import scala.util.{Failure, Success, Try}
@@ -41,19 +40,25 @@ object OAuthHelper {
   private def domain = ApplicationConfig.authConfig.getString("auth0.domain")
   private def audience = ApplicationConfig.authConfig.getString("auth0.audience")
   private def issuer = s"https://$domain/"
-  
+
   // Validates a JWT and potentially returns the claims if the token was successfully parsed
-  def validateJwt(token: String): Try[JwtClaim] = for {
-    jwk <- getJwk(token)           // Get the secret key for this token
-    claims <- JwtJson.decode(token, jwk.getPublicKey, Seq(JwtAlgorithm.RS256)) // Decode the token using the secret key
-    _ <- validateClaims(claims)     // validate the data stored inside the token
-  } yield claims
+  def validateJwt(
+    token: String
+  ): Try[JwtClaim] = {
+    for {
+      jwk <- getJwk(token)           // Get the secret key for this token
+      claims <- JwtJson.decode(token, jwk.getPublicKey, Seq(JwtAlgorithm.RS256)) // Decode the token using the secret key
+      _ <- validateClaims(claims)     // validate the data stored inside the token
+    } yield claims
+  }
 
   /**
    * Extracts the user ID from JWT claims.
    * Typically this is the 'sub' (subject) claim in Auth0 tokens.
    */
-  def getUserIdFromClaims(claims: JwtClaim): Option[String] = {
+  def getUserIdFromClaims(
+    claims: JwtClaim
+  ): Option[String] = {
     claims.subject
   }
 
@@ -61,7 +66,10 @@ object OAuthHelper {
    * Extracts custom claims from the JWT token.
    * Auth0 custom claims are typically namespaced.
    */
-  def getCustomClaim(claims: JwtClaim, key: String): Option[String] = {
+  def getCustomClaim(
+    claims: JwtClaim,
+    key: String
+  ): Option[String] = {
     import play.api.libs.json._
     Try {
       val json = Json.parse(claims.content)
@@ -70,19 +78,25 @@ object OAuthHelper {
   }
 
   // Splits a JWT into it's 3 component parts
-  private def splitToken(jwt: String): Try[(String, String, String)] = jwt match {
+  private def splitToken(
+    jwt: String
+  ): Try[(String, String, String)] = jwt match {
     case jwtRegex(header, body, sig) => Success((header, body, sig))
     case _ => Failure(new Exception("Token does not match the correct pattern"))
   }
 
   // As the header and claims data are base64-encoded, this function
   // decodes those elements
-  private def decodeElements(data: Try[(String, String, String)]): Try[(String, String, String)] = data map {
+  private def decodeElements(
+    data: Try[(String, String, String)]
+  ): Try[(String, String, String)] = data map {
     case (header, body, sig) => (JwtBase64.decodeString(header), JwtBase64.decodeString(body), sig)
   }
 
   // Gets the JWK from the JWKS endpoint using the jwks-rsa library
-  private def getJwk(token: String): Try[com.auth0.jwk.Jwk] = {
+  private def getJwk(
+    token: String
+  ): Try[com.auth0.jwk.Jwk] = {
     (splitToken andThen decodeElements)(token) flatMap {
       case (header, _, _) =>
         val jwtHeader = JwtJson.parseHeader(header)     // extract the header
@@ -99,7 +113,9 @@ object OAuthHelper {
 
   // Validates the claims inside the token. isValid checks the issuedAt, expiresAt,
   // issuer and audience fields.
-  private def validateClaims(claims: JwtClaim): Try[JwtClaim] = {
+  private def validateClaims(
+    claims: JwtClaim
+  ): Try[JwtClaim] = {
     if (claims.isValid(issuer, audience)(using clock)) {
       Success(claims)
     } else {
