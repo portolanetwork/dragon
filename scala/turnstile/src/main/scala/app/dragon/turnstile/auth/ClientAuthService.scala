@@ -1,21 +1,18 @@
 package app.dragon.turnstile.auth
 
 import com.sun.net.httpserver.{HttpExchange, HttpHandler, HttpServer}
-import io.circe._
-import io.circe.generic.auto._
-import io.circe.parser._
-
+import io.circe.*
+import io.circe.generic.auto.*
 import org.slf4j.LoggerFactory
+import sttp.client4.*
+import sttp.client4.circe.*
+import sttp.client4.httpclient.HttpClientSyncBackend
 
 import java.awt.Desktop
-import java.io.{BufferedReader, InputStreamReader, OutputStream}
+import java.io.OutputStream
 import java.net.{InetSocketAddress, URI}
-import java.util.Base64
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import scala.util.Try
-
-import sttp.client4._
-import sttp.client4.circe._
 
 object ClientAuthService {
   private val logger = LoggerFactory.getLogger(getClass)
@@ -134,7 +131,7 @@ object ClientAuthService {
     metadata: Map[String, String]
   ): Either[String, Map[String, String]] = {
     Try {
-      val backend = HttpURLConnectionBackend()
+      val backend = HttpClientSyncBackend()
 
       // Build JSON body using circe to ensure correctness
       val bodyJson = Json.obj(
@@ -156,7 +153,7 @@ object ClientAuthService {
 
       (response.code.code, response.body)
     }.toEither.left.map(_.getMessage).flatMap {
-      case (status: Int, bodyEither: Either[ResponseException[String, io.circe.Error], DcrResponse]) =>
+      case (status: Int, bodyEither: Either[ResponseException[String], DcrResponse]) =>
         if (status >= 200 && status < 300) {
           bodyEither match {
             case Right(d) =>
@@ -183,13 +180,13 @@ object ClientAuthService {
         val base = if (domain.startsWith("http://") || domain.startsWith("https://")) domain else s"https://$domain"
         val urlStr = if (base.contains(".well-known")) base else s"${base.stripSuffix("/")}/.well-known/openid-configuration"
 
-        val backend = HttpURLConnectionBackend()
+        val backend = HttpClientSyncBackend()
         val request = basicRequest.get(uri"$urlStr").acceptEncoding("utf-8").response(asJson[Discovery])
         val response = request.send(backend)
         backend.close()
         (response.code.code, response.body)
       }.toEither.left.map(_.getMessage).flatMap {
-        case (status: Int, bodyEither: Either[ResponseException[String, io.circe.Error], Discovery]) =>
+        case (status: Int, bodyEither: Either[ResponseException[String], Discovery]) =>
           if (status >= 200 && status < 300) {
             bodyEither match {
               case Right(d) =>
@@ -415,7 +412,7 @@ object ClientAuthService {
      redirectUri: String
    ): Either[String, TokenResponse] = {
      Try {
-       val backend = HttpURLConnectionBackend()
+       val backend = HttpClientSyncBackend()
 
        val baseForm = Map(
          "grant_type" -> "authorization_code",
