@@ -27,6 +27,7 @@ import com.typesafe.config.Config
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorSystem, Behavior}
 import org.slf4j.{Logger, LoggerFactory}
+import slick.jdbc.JdbcBackend.Database
 
 /**
  * Guardian actor - the root supervisor for the Turnstile application.
@@ -87,6 +88,9 @@ object Guardian {
           val grpcHost = grpcConfig.getString("host")
           val grpcPort = grpcConfig.getInt("port")
 
+          // Create database instance for MCP gateway
+          implicit val db: Database = Database.forConfig("", ApplicationConfig.db)
+
           // Initialize sharding and actors here
           McpServerActor.initSharding(context.system)
           McpClientActor.initSharding(context.system)
@@ -99,7 +103,7 @@ object Guardian {
           if (mcpStreamingConfig.getBoolean("enabled")) {
             try {
               //val mcpStreamingServer = StreamingHttpMcpServer(mcpStreamingConfig)
-              val mcpStreamingServer = TurnstileMcpGateway(mcpStreamingConfig, authConfig)
+              val mcpStreamingServer = TurnstileMcpGateway(mcpStreamingConfig, authConfig, db)
 
               mcpStreamingServer.start()
               context.log.info("MCP Streaming HTTP Server started successfully")

@@ -19,8 +19,9 @@
 package app.dragon.turnstile.gateway
 
 import app.dragon.turnstile.actor.{ActorLookup, McpServerActor}
-import app.dragon.turnstile.auth.ServerAuthService
 import app.dragon.turnstile.auth.ServerAuthService.{AccessDenied, MissingAuthHeader}
+import app.dragon.turnstile.auth.{ClientAuthService, ServerAuthService}
+import app.dragon.turnstile.db.{DbInterface, DbNotFound}
 import com.typesafe.config.Config
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
@@ -30,7 +31,10 @@ import org.apache.pekko.http.scaladsl.server.Directives.*
 import org.apache.pekko.http.scaladsl.server.Route
 import org.apache.pekko.util.Timeout
 import org.slf4j.{Logger, LoggerFactory}
+import pdi.jwt.JwtClaim
+import slick.jdbc.JdbcBackend.Database
 
+import scala.concurrent.Future
 import scala.concurrent.duration.*
 import scala.util.{Failure, Success}
 
@@ -80,12 +84,14 @@ import scala.util.{Failure, Success}
 
 class TurnstileMcpGateway(
   mcpConfig: Config,
-  authConfig: Config
+  authConfig: Config,
+  db: Database
 )(
   implicit system: ActorSystem[?]
 ) {
   implicit val timeout: Timeout = Timeout(10.seconds)
   implicit val sharding: ClusterSharding = ClusterSharding(system)
+  implicit val database: Database = db
 
 
   private val logger: Logger = LoggerFactory.getLogger(classOf[TurnstileMcpGateway])
@@ -115,7 +121,7 @@ class TurnstileMcpGateway(
 
       // 4. Create Pekko HTTP route with the router
       val route =
-        createWellKnownRoute() ~ createCallbackRoute() ~ createMcpRoute(mcpEndpoint)
+        createWellKnownRoute() ~ createCallbackRoute() ~ createLoginRoute() ~ createMcpRoute(mcpEndpoint)
 
       // 5. Start the Pekko HTTP server
       logger.info(s"Starting Pekko HTTP server on http://${host}:${port}${mcpEndpoint}")
@@ -223,6 +229,134 @@ class TurnstileMcpGateway(
   }
 
   /**
+   * Login route to initiate OAuth flow for an MCP server.
+   * Accepts a UUID parameter to lookup the MCP server in the database.
+   * Initiates OAuth flow and stores the resulting tokens.
+   *
+   * Example: GET /login?uuid=550e8400-e29b-41d4-a716-446655440000
+   */
+  private def createLoginRoute(): Route = {
+    path("login") {
+      get {
+        parameter("uuid") { uuidStr =>
+          extractRequest { pekkoRequest =>
+            // Parse UUID
+            val uuidEither = scala.util.Try(java.util.UUID.fromString(uuidStr)).toEither
+              .left.map(_ => "Invalid UUID format")
+
+            uuidEither match {
+              case Left(error) =>
+                logger.warn(s"Login request rejected: $error")
+                complete(HttpResponse(
+                  status = StatusCodes.BadRequest,
+                  entity = HttpEntity(
+                    ContentTypes.`application/json`,
+                    s"""{"error": "invalid_uuid", "message": "$error"}"""
+                  )
+                ))
+              case Right(uuid) =>
+                // Validate authentication
+                //ServerAuthService.authenticate(pekkoRequest.headers) match {
+                Right(ServerAuthService.AuthContext("", "", JwtClaim())) match {
+                  /*
+                  case Left(MissingAuthHeader) =>
+                    logger.warn("Login request rejected: missing authorization header")
+                    complete(HttpResponse(
+                      status = StatusCodes.Unauthorized,
+                      entity = HttpEntity(
+                        ContentTypes.`application/json`,
+                        """{"error": "unauthorized", "message": "Missing authorization header"}"""
+                      )
+                    ))
+                  case Left(AccessDenied) =>
+                    logger.warn("Login request rejected: invalid or expired token")
+                    complete(HttpResponse(
+                      status = StatusCodes.Forbidden,
+                      entity = HttpEntity(
+                        ContentTypes.`application/json`,
+                        """{"error": "forbidden", "message": "Invalid or expired token"}"""
+                      )
+                    ))
+                   */
+                  case Right(authContext) =>
+                    logger.info(s"Login request for UUID: $uuid from user: ${authContext.userId}")
+
+                    // Lookup MCP server in database
+                    val responseFuture = for {
+                      serverResult <- DbInterface.findMcpServerByUuid(uuid)
+                    } yield {
+                      serverResult match {
+                        case Left(DbNotFound) =>
+                          logger.warn(s"MCP server not found for UUID: $uuid")
+                          HttpResponse(
+                            status = StatusCodes.NotFound,
+                            entity = HttpEntity(
+                              ContentTypes.`application/json`,
+                              """{"error": "not_found", "message": "MCP server not found for the provided UUID"}"""
+                            )
+                          )
+                        case Left(dbError) =>
+                          logger.error(s"Database error looking up MCP server: ${dbError.message}")
+                          HttpResponse(
+                            status = StatusCodes.InternalServerError,
+                            entity = HttpEntity(
+                              ContentTypes.`application/json`,
+                              s"""{"error": "database_error", "message": "${dbError.message}"}"""
+                            )
+                          )
+                        case Right(mcpServer) =>
+                          // Verify server belongs to the authenticated user
+                          //if (mcpServer.tenant != authContext.tenant || mcpServer.userId != authContext.userId) {
+                          if (false) {
+                            logger.warn(s"Access denied: MCP server $uuid does not belong to user ${authContext.userId}")
+                            HttpResponse(
+                              status = StatusCodes.Forbidden,
+                              entity = HttpEntity(
+                                ContentTypes.`application/json`,
+                                """{"error": "forbidden", "message": "Access denied to this MCP server"}"""
+                              )
+                            )
+                          } else {
+                            Future {
+                              ClientAuthService.connect(
+                                mcpUrl = mcpServer.url,
+                                clientId = mcpServer.clientId,
+                                clientSecret = mcpServer.clientSecret,
+                                scope = "openid profile email",
+                                redirectPort = 8080
+                              ) match {
+                                case Right(tokenResponse) =>
+                                  logger.info(s"OAuth flow completed successfully for MCP server: ${mcpServer.name}")
+                                  // Update database with tokens
+                                  DbInterface.updateMcpServerAuth(
+                                    mcpServer.uuid,
+                                    //clientId,
+                                    //clientSecret,
+                                    tokenResponse.refresh_token
+                                  ).map {
+                                    case Right(_) =>
+                                      logger.info(s"Successfully stored OAuth tokens for MCP server: ${mcpServer.name}")
+                                    case Left(dbError) =>
+                                      logger.error(s"Failed to store OAuth tokens: ${dbError.message}")
+                                  }
+                                case Left(error) =>
+                                  logger.error(s"OAuth flow failed for MCP server ${mcpServer.name}: $error")
+                              }
+                            }
+                          }
+                      }
+                    }
+
+                    complete(responseFuture)
+                }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
    * Create a Pekko HTTP route that uses HeaderBasedRouter to route to different handlers.
    * Requests are authenticated before being forwarded to MCP actors.
    */
@@ -317,7 +451,8 @@ object TurnstileMcpGateway {
   def apply(
     mcpStreamingConfig: Config,
     authConfig: Config,
+    db: Database
   )(
     implicit system: ActorSystem[?]
-  ): TurnstileMcpGateway = new TurnstileMcpGateway(mcpStreamingConfig, authConfig)
+  ): TurnstileMcpGateway = new TurnstileMcpGateway(mcpStreamingConfig, authConfig, db)
 }

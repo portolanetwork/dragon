@@ -111,4 +111,83 @@ object DbInterface {
       case NonFatal(t) => Left(mapDbError(t))
     }
   }
+
+  /**
+   * Finds an MCP server by UUID.
+   * @param uuid The UUID of the server
+   * @param db The database instance
+   * @param ec ExecutionContext
+   * @return `Future[Either[DbError, McpServerRow]]` with the server or DbNotFound/DbError
+   */
+  def findMcpServerByUuid(
+    uuid: UUID
+  )(
+    implicit db: Database, ec: ExecutionContext
+  ): Future[Either[DbError, McpServerRow]] = {
+    val query = Tables.mcpServers
+      .filter(_.uuid === uuid)
+      .result
+      .headOption
+    db.run(query).map {
+      case Some(row) => Right(row)
+      case None => Left(DbNotFound)
+    }.recover {
+      case NonFatal(t) => Left(mapDbError(t))
+    }
+  }
+
+  /**
+   * Finds an MCP server by URL for a given tenant and user.
+   * @param tenant The tenant identifier
+   * @param userId The user identifier
+   * @param url The server URL
+   * @param db The database instance
+   * @param ec ExecutionContext
+   * @return `Future[Either[DbError, McpServerRow]]` with the server or DbNotFound/DbError
+   */
+  def findMcpServerByUrl(
+    tenant: String,
+    userId: String,
+    url: String
+  )(
+    implicit db: Database, ec: ExecutionContext
+  ): Future[Either[DbError, McpServerRow]] = {
+    val query = Tables.mcpServers
+      .filter(s => s.tenant === tenant && s.userId === userId && s.url === url)
+      .result
+      .headOption
+    db.run(query).map {
+      case Some(row) => Right(row)
+      case None => Left(DbNotFound)
+    }.recover {
+      case NonFatal(t) => Left(mapDbError(t))
+    }
+  }
+
+  /**
+   * Updates OAuth credentials (clientId, clientSecret, refreshToken) for an MCP server by UUID.
+   * @param uuid The UUID of the server to update
+   * @param clientId The OAuth client ID
+   * @param clientSecret The OAuth client secret
+   * @param refreshToken The OAuth refresh token
+   * @param db The database instance
+   * @param ec ExecutionContext
+   * @return `Future[Either[DbError, Int]]` number of rows updated or DbError
+   */
+  def updateMcpServerAuth(
+    uuid: UUID,
+    clientId: String,
+    clientSecret: Option[String],
+    refreshToken: Option[String]
+  )(
+    implicit db: Database, ec: ExecutionContext
+  ): Future[Either[DbError, Int]] = {
+    val updateAction = Tables.mcpServers
+      .filter(_.uuid === uuid)
+      .map(s => (s.clientId, s.clientSecret, s.refreshToken, s.updatedAt))
+      .update((Some(clientId), clientSecret, refreshToken, new java.sql.Timestamp(System.currentTimeMillis())))
+    db.run(updateAction).map(Right(_): Either[DbError, Int]).recover {
+      case NonFatal(t) => Left(mapDbError(t))
+    }
+  }
 }

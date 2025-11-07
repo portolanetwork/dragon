@@ -20,6 +20,7 @@ package app.dragon.turnstile
 
 import app.dragon.turnstile.actor.{McpClientActor, McpServerActor, McpSessionMapActor}
 import app.dragon.turnstile.client.TurnstileStreamingHttpAsyncMcpClient
+import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.gateway.TurnstileMcpGateway
 import com.typesafe.config.ConfigFactory
 import io.modelcontextprotocol.spec.McpSchema
@@ -30,6 +31,7 @@ import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Seconds, Span}
 import org.scalatest.wordspec.AnyWordSpec
+import slick.jdbc.JdbcBackend.Database
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
@@ -119,8 +121,15 @@ class TurnstileServerIntegrationSpec
     // Wait for cluster to be up
     Thread.sleep(3000)
 
+    // Create test database instance
+    implicit val db: Database = Database.forConfig("", ApplicationConfig.db)
+
     // Start MCP Gateway
-    mcpGateway = TurnstileMcpGateway(testConfig.getConfig("turnstile.mcp-streaming"))(system)
+    mcpGateway = TurnstileMcpGateway(
+      testConfig.getConfig("turnstile.mcp-streaming"),
+      testConfig.getConfig("turnstile.auth"),
+      db
+    )(system)
     mcpGateway.start()
 
     // Wait for server to be ready
