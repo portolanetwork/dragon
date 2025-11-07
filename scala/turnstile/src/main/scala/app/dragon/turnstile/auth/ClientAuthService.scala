@@ -495,5 +495,4 @@ object ClientAuthService {
         System.exit(1)
     }
   }
-
 }
