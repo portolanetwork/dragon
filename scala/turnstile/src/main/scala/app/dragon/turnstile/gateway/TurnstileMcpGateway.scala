@@ -106,52 +106,6 @@ class TurnstileMcpGateway(
     sessionIdOpt: Option[String]
   )
 
-  /*
-  case class AuthContext(
-    userId: String,
-    tenant: String,
-    claims: JwtClaim
-  )
-
-  sealed trait AuthError
-  case object MissingAuthHeader extends AuthError
-  case object InvalidToken extends AuthError
-
-  /**
-   * Validates the JWT token from HTTP request headers.
-   * Extracts the Authorization header, validates the token, and returns AuthContext.
-   *
-   * @param request The HTTP request containing the Authorization header
-   * @return Either[AuthError, AuthContext] - Right(AuthContext) on success, Left(AuthError) on failure
-   */
-  private def validateHttpAuth(
-    request: HttpRequest
-  ): Either[AuthError, AuthContext] = {
-
-    request.h
-
-    request.headers.find(_.lowercaseName == "authorization") match {
-      case Some(authHeader) =>
-        val tokenWithoutPrefix = authHeader.value.replace("Bearer ", "")
-        OAuthHelper.validateJwt(tokenWithoutPrefix) match {
-          case Success(claims) =>
-            OAuthHelper.getUserIdFromClaims(claims) match {
-              case Some(userId) => Right(AuthContext(userId, "default", claims))
-              case None => Left(InvalidToken)
-            }
-          case Failure(ex) =>
-            logger.debug(s"Token validation failed: ${ex.getMessage}")
-            Left(InvalidToken)
-        }
-      case None => Left(MissingAuthHeader)
-    }
-  }
-
-   */
-
-
-
-
   def start(): Unit = {
     // Create actor system for Pekko HTTP
     try {
@@ -160,11 +114,8 @@ class TurnstileMcpGateway(
       logger.info(s"  Fallback enabled: true")
 
       // 4. Create Pekko HTTP route with the router
-      val route = pathPrefix(".well-known") {
-        extractUnmatchedPath { remainingPath =>
-          createWellKnown(s"/.well-known$remainingPath")
-        }
-      } ~ createHttpRoute(mcpEndpoint)
+      val route =
+        createWellKnownRoute() ~ createCallbackRoute() ~ createMcpRoute(mcpEndpoint)
 
       // 5. Start the Pekko HTTP server
       logger.info(s"Starting Pekko HTTP server on http://${host}:${port}${mcpEndpoint}")
@@ -207,37 +158,67 @@ class TurnstileMcpGateway(
    * - /.well-known/openid-configuration
    * - /.well-known/jwks.json
    */
-  private def createWellKnown(
-    path: String
-  ): Route = {
-    extractRequest { _ =>
-      val auth0Url = s"https://$auth0Domain$path"
-      logger.debug(s"Proxying .well-known request to: $auth0Url")
+  private def createWellKnownRoute(): Route = {
+    pathPrefix(".well-known") {
+      extractUnmatchedPath { remainingPath =>
+        extractRequest { _ =>
+          val path = s"/.well-known$remainingPath"
+          val auth0Url = s"https://$auth0Domain$path"
+          logger.debug(s"Proxying .well-known request to: $auth0Url")
 
-      val proxyRequest = HttpRequest(
-        method = HttpMethods.GET,
-        uri = auth0Url
-      )
+          val proxyRequest = HttpRequest(
+            method = HttpMethods.GET,
+            uri = auth0Url
+          )
 
-      val responseFuture = Http()
-        .singleRequest(proxyRequest)
-        .map { response =>
-          logger.debug(s"Received response from Auth0: ${response.status}")
-          response
+          val responseFuture = Http()
+            .singleRequest(proxyRequest)
+            .map { response =>
+              logger.debug(s"Received response from Auth0: ${response.status}")
+              response
+            }
+            .recover {
+              case ex: Exception =>
+                logger.error(s"Error proxying to Auth0: ${ex.getMessage}", ex)
+                HttpResponse(
+                  status = StatusCodes.BadGateway,
+                  entity = HttpEntity(
+                    ContentTypes.`application/json`,
+                    s"""{"error": "Failed to proxy to Auth0", "message": "${ex.getMessage}"}"""
+                  )
+                )
+            }
+
+          complete(responseFuture)
         }
-        .recover {
-          case ex: Exception =>
-            logger.error(s"Error proxying to Auth0: ${ex.getMessage}", ex)
-            HttpResponse(
-              status = StatusCodes.BadGateway,
-              entity = HttpEntity(
-                ContentTypes.`application/json`,
-                s"""{"error": "Failed to proxy to Auth0", "message": "${ex.getMessage}"}"""
-              )
-            )
-        }
+      }
+    }
+  }
 
-      complete(responseFuture)
+  /**
+   * OAuth2 / OpenID Connect redirect callback handler.
+   * Example callback URL: /callback?code=...&state=...&error=...
+   * Currently this extracts common params and logs them, then returns 200 OK.
+   */
+  private def createCallbackRoute(): Route = {
+    path("callback") {
+      get {
+        parameterMap { params =>
+          val code = params.get("code")
+          val state = params.get("state")
+          val error = params.get("error")
+          val errorDescription = params.get("error_description")
+          val redirectUri = params.get("redirect_uri")
+
+          logger.info(s"OAuth callback received - code=${code.orNull}, state=${state.orNull}, error=${error.orNull}, error_description=${errorDescription.orNull}, redirect_uri=${redirectUri.orNull}")
+          logger.debug(s"Full callback params: $params")
+
+          complete(HttpResponse(
+            status = StatusCodes.OK,
+            entity = HttpEntity(ContentTypes.`text/plain(UTF-8)`, "Callback received - check logs")
+          ))
+        }
+      }
     }
   }
 
@@ -245,7 +226,7 @@ class TurnstileMcpGateway(
    * Create a Pekko HTTP route that uses HeaderBasedRouter to route to different handlers.
    * Requests are authenticated before being forwarded to MCP actors.
    */
-  private def createHttpRoute(
+  private def createMcpRoute(
     mcpEndpoint: String
   ): Route = {
     path(mcpEndpoint.stripPrefix("/")) {
