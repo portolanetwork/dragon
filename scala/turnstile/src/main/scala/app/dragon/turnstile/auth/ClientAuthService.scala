@@ -25,6 +25,100 @@ object ClientAuthService {
     timeoutSeconds: Long = 120
   )
 
+  case class TokenResponse(
+    accessToken: String,
+    refreshToken: Option[String]
+  )
+
+  /**
+   * Connect to an OAuth server and obtain access and refresh tokens.
+   *
+   * @param mcpUrl The base URL of the OAuth server (e.g., "https://auth.example.com")
+   * @param clientId Optional client ID. If not provided, DCR will be attempted.
+   * @param clientSecret Optional client secret. Required if clientId is provided.
+   * @return Either an error message or TokenResponse with access and refresh tokens
+   */
+  def connect(
+    mcpUrl: String,
+    clientId: Option[String],
+    clientSecret: Option[String],
+    scope: String = "openid profile email",
+    redirectPort: Int = 8080
+  ): Either[String, TokenResponse] = {
+    logger.info(s"Connecting to OAuth server at $mcpUrl")
+
+    // Discover OAuth endpoints from well-known configuration
+    val discoveryResult = fetchWellKnown(mcpUrl)
+    val discoveredMap = discoveryResult match {
+      case Left(err) =>
+        return Left(s"Failed to fetch well-known configuration from $mcpUrl: $err")
+      case Right(map) => map
+    }
+
+    // Extract required endpoints
+    val authorizationEndpoint = discoveredMap.get("authorization_endpoint") match {
+      case Some(endpoint) => endpoint
+      case None => return Left("well-known document did not contain authorization_endpoint")
+    }
+
+    var tokenEndpoint: Option[String] = discoveredMap.get("token_endpoint") match {
+      case Some(endpoint) => Some(endpoint)
+      case None => return Left("well-known document did not contain token_endpoint")
+    }
+
+    // Determine client credentials
+    var finalClientId = clientId.getOrElse("")
+    var finalClientSecret = clientSecret
+
+    // If clientId is not provided, perform Dynamic Client Registration
+    if (clientId.isEmpty) {
+      val registrationEndpoint = discoveredMap.get("registration_endpoint") match {
+        case Some(endpoint) => endpoint
+        case None => return Left("DCR requested but no registration_endpoint found in discovery document")
+      }
+
+      val redirectUri = s"http://localhost:${redirectPort}/callback"
+      performDynamicClientRegistration(registrationEndpoint, redirectUri, Map.empty) match {
+        case Left(err) =>
+          return Left(s"Dynamic client registration failed: $err")
+        case Right(dcrResponse) =>
+          finalClientId = dcrResponse.getOrElse("client_id", "")
+          if (finalClientId.isEmpty) {
+            return Left("DCR response did not contain client_id")
+          }
+          finalClientSecret = dcrResponse.get("client_secret").orElse(finalClientSecret)
+          tokenEndpoint = dcrResponse.get("token_endpoint").orElse(tokenEndpoint)
+          logger.info(s"Successfully registered client with ID: $finalClientId")
+      }
+    }
+
+    // Validate that we have required credentials
+    if (finalClientId.isEmpty) {
+      return Left("client_id is empty — provide a client id or omit it to use dynamic registration")
+    }
+
+    // Create configuration for auth code flow
+    val cfg = Config(
+      clientId = finalClientId,
+      clientSecret = finalClientSecret,
+      authorizationEndpoint = authorizationEndpoint,
+      tokenEndpoint = tokenEndpoint,
+      scope = scope,
+      redirectPort = redirectPort
+    )
+
+    // Run the authorization code flow
+    runAuthCodeFlow(cfg) match {
+      case Right(Some(tokenResponse)) =>
+        logger.info("Successfully obtained access token")
+        Right(tokenResponse)
+      case Right(None) =>
+        Left("Token endpoint not configured; unable to complete token exchange")
+      case Left(err) =>
+        Left(s"Authorization flow failed: $err")
+    }
+  }
+
   def main(args: Array[String]): Unit = {
     logger.info("ClientAuthService started")
 
@@ -224,7 +318,7 @@ object ClientAuthService {
      println(usage)
    }
 
-   private def runAuthCodeFlow(cfg: Config): Either[String, Option[String]] = {
+   private def runAuthCodeFlow(cfg: Config): Either[String, Option[TokenResponse]] = {
      val redirectUri = s"http://${cfg.redirectHost}:${cfg.redirectPort}${cfg.redirectPath}"
      val state = java.util.UUID.randomUUID().toString
 
@@ -272,7 +366,7 @@ object ClientAuthService {
            case _: Throwable => // ignore
          }
 
-         val flowResult: Either[String, Option[String]] =
+         val flowResult: Either[String, Option[TokenResponse]] =
            if (!awaited) Left("Timed out waiting for authorization code")
            else if (result.contains("error")) Left(s"Authorization server returned error: ${result("error")}")
            else if (!result.contains("code")) Left("No authorization code received")
@@ -395,7 +489,7 @@ object ClientAuthService {
      }
    }
 
-   private def exchangeAuthorizationCode(tokenUrl: String, clientId: String, clientSecretOpt: Option[String], code: String, redirectUri: String): Either[String, String] = {
+   private def exchangeAuthorizationCode(tokenUrl: String, clientId: String, clientSecretOpt: Option[String], code: String, redirectUri: String): Either[String, TokenResponse] = {
      Try {
        val url = new URL(tokenUrl)
        val conn = url.openConnection().asInstanceOf[HttpURLConnection]
@@ -426,8 +520,13 @@ object ClientAuthService {
 
        if (status < 200 || status >= 300) Left(s"HTTP $status: $resp")
        else {
-         val tokenPattern = "\"access_token\"\\s*:\\s*\"([^\"]+)\"".r
-         tokenPattern.findFirstMatchIn(resp).map(_.group(1)).toRight("Access token not found in response")
+         val accessTokenPattern = "\"access_token\"\\s*:\\s*\"([^\"]+)\"".r
+         val refreshTokenPattern = "\"refresh_token\"\\s*:\\s*\"([^\"]+)\"".r
+
+         val accessToken = accessTokenPattern.findFirstMatchIn(resp).map(_.group(1))
+         val refreshToken = refreshTokenPattern.findFirstMatchIn(resp).map(_.group(1))
+
+         accessToken.map(at => TokenResponse(at, refreshToken)).toRight("Access token not found in response")
        }
      }.toEither.left.map(_.getMessage).flatMap(identity)
    }
