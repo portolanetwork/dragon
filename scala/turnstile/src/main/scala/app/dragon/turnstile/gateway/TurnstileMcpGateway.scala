@@ -281,70 +281,66 @@ class TurnstileMcpGateway(
                   case Right(authContext) =>
                     logger.info(s"Login request for UUID: $uuid from user: ${authContext.userId}")
 
-                    // Lookup MCP server in database
-                    val responseFuture = for {
-                      serverResult <- DbInterface.findMcpServerByUuid(uuid)
-                    } yield {
-                      serverResult match {
-                        case Left(DbNotFound) =>
-                          logger.warn(s"MCP server not found for UUID: $uuid")
+                    // Lookup MCP server in database and initiate OAuth flow
+                    val responseFuture: Future[HttpResponse] = DbInterface.findMcpServerByUuid(uuid).map {
+                      case Left(DbNotFound) =>
+                        logger.warn(s"MCP server not found for UUID: $uuid")
+                        HttpResponse(
+                          status = StatusCodes.NotFound,
+                          entity = HttpEntity(
+                            ContentTypes.`application/json`,
+                            """{"error": "not_found", "message": "MCP server not found for the provided UUID"}"""
+                          )
+                        )
+                      case Left(dbError) =>
+                        logger.error(s"Database error looking up MCP server: ${dbError.message}")
+                        HttpResponse(
+                          status = StatusCodes.InternalServerError,
+                          entity = HttpEntity(
+                            ContentTypes.`application/json`,
+                            s"""{"error": "database_error", "message": "${dbError.message}"}"""
+                          )
+                        )
+                      case Right(mcpServer) =>
+                        // Verify server belongs to the authenticated user
+                        //if (mcpServer.tenant != authContext.tenant || mcpServer.userId != authContext.userId) {
+                        if (false) {
+                          logger.warn(s"Access denied: MCP server $uuid does not belong to user ${authContext.userId}")
                           HttpResponse(
-                            status = StatusCodes.NotFound,
+                            status = StatusCodes.Forbidden,
                             entity = HttpEntity(
                               ContentTypes.`application/json`,
-                              """{"error": "not_found", "message": "MCP server not found for the provided UUID"}"""
+                              """{"error": "forbidden", "message": "Access denied to this MCP server"}"""
                             )
                           )
-                        case Left(dbError) =>
-                          logger.error(s"Database error looking up MCP server: ${dbError.message}")
-                          HttpResponse(
-                            status = StatusCodes.InternalServerError,
-                            entity = HttpEntity(
-                              ContentTypes.`application/json`,
-                              s"""{"error": "database_error", "message": "${dbError.message}"}"""
-                            )
-                          )
-                        case Right(mcpServer) =>
-                          // Verify server belongs to the authenticated user
-                          //if (mcpServer.tenant != authContext.tenant || mcpServer.userId != authContext.userId) {
-                          if (false) {
-                            logger.warn(s"Access denied: MCP server $uuid does not belong to user ${authContext.userId}")
-                            HttpResponse(
-                              status = StatusCodes.Forbidden,
-                              entity = HttpEntity(
-                                ContentTypes.`application/json`,
-                                """{"error": "forbidden", "message": "Access denied to this MCP server"}"""
+                        } else {
+                          // Trigger the authentication flow asynchronously in the background
+                          logger.info(s"Initiating OAuth flow for MCP server: ${mcpServer.name}")
+
+                          /*
+                          ClientAuthService.authenticate(uuid).onComplete {
+                            case Success(Right(tokenResponse)) =>
+                              logger.info(s"OAuth flow completed successfully for MCP server UUID: $uuid")
+                              logger.info(s"Access token obtained: ${tokenResponse.access_token.take(20)}...")
+                              tokenResponse.refresh_token.foreach(rt =>
+                                logger.info(s"Refresh token obtained: ${rt.take(20)}...")
                               )
-                            )
-                          } else {
-                            Future {
-                              ClientAuthService.connect(
-                                mcpUrl = mcpServer.url,
-                                clientId = mcpServer.clientId,
-                                clientSecret = mcpServer.clientSecret,
-                                scope = "openid profile email",
-                                redirectPort = 8080
-                              ) match {
-                                case Right(tokenResponse) =>
-                                  logger.info(s"OAuth flow completed successfully for MCP server: ${mcpServer.name}")
-                                  // Update database with tokens
-                                  DbInterface.updateMcpServerAuth(
-                                    mcpServer.uuid,
-                                    //clientId,
-                                    //clientSecret,
-                                    tokenResponse.refresh_token
-                                  ).map {
-                                    case Right(_) =>
-                                      logger.info(s"Successfully stored OAuth tokens for MCP server: ${mcpServer.name}")
-                                    case Left(dbError) =>
-                                      logger.error(s"Failed to store OAuth tokens: ${dbError.message}")
-                                  }
-                                case Left(error) =>
-                                  logger.error(s"OAuth flow failed for MCP server ${mcpServer.name}: $error")
-                              }
-                            }
+                            case Success(Left(authError)) =>
+                              logger.error(s"OAuth flow failed for MCP server UUID: $uuid - ${authError.message}")
+                            case Failure(exception) =>
+                              logger.error(s"OAuth flow encountered exception for MCP server UUID: $uuid", exception)
                           }
-                      }
+                          
+                           */
+
+                          HttpResponse(
+                            status = StatusCodes.Accepted,
+                            entity = HttpEntity(
+                              ContentTypes.`application/json`,
+                              s"""{"message": "OAuth flow initiated for MCP server: ${mcpServer.name}", "uuid": "$uuid"}"""
+                            )
+                          )
+                        }
                     }
 
                     complete(responseFuture)

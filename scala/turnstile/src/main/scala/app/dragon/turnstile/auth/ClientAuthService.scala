@@ -3,6 +3,11 @@ package app.dragon.turnstile.auth
 import com.sun.net.httpserver.{HttpExchange, HttpHandler, HttpServer}
 import io.circe.*
 import io.circe.generic.auto.*
+import org.apache.pekko.actor.typed.ActorSystem
+import org.apache.pekko.actor.typed.scaladsl.Behaviors
+import org.apache.pekko.actor.typed.scaladsl.adapter.*
+import org.apache.pekko.http.scaladsl.Http
+import org.apache.pekko.http.scaladsl.model.{HttpMethods, HttpRequest}
 import org.slf4j.LoggerFactory
 import sttp.client4.*
 import sttp.client4.circe.*
@@ -12,10 +17,15 @@ import java.awt.Desktop
 import java.io.OutputStream
 import java.net.{InetSocketAddress, URI}
 import java.util.concurrent.{CountDownLatch, TimeUnit}
-import scala.util.Try
+import scala.concurrent.duration.*
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
 
 object ClientAuthService {
   private val logger = LoggerFactory.getLogger(getClass)
+
+  // Provide a global execution context for async operations inside this small CLI tool
+  implicit private val ec: ExecutionContext = ExecutionContext.global
 
   private case class Config(
     clientId: String,
@@ -54,7 +64,7 @@ object ClientAuthService {
    * @param mcpUrl The base URL of the OAuth server (e.g., "https://auth.example.com")
    * @param clientId Optional client ID. If not provided, DCR will be attempted.
    * @param clientSecret Optional client secret. Required if clientId is provided.
-   * @return Either an error message or TokenResponse with access and refresh tokens
+   * @return Future of Either an error message or TokenResponse with access and refresh tokens
    */
   def connect(
     mcpUrl: String,
@@ -62,64 +72,95 @@ object ClientAuthService {
     clientSecret: Option[String],
     scope: String = "openid profile email",
     redirectPort: Int = 8080
-  ): Either[String, TokenResponse] = {
+  )(
+    implicit system: ActorSystem[Nothing],
+  ): Future[Either[String, TokenResponse]] = {
     logger.info(s"Connecting to OAuth server at $mcpUrl")
 
-    // Discover endpoints
-    val discovered = fetchWellKnown(mcpUrl) match {
-      case Right(m) => m
-      case Left(err) => return Left(s"Failed to fetch well-known configuration from $mcpUrl: $err")
-    }
+    // Discover endpoints asynchronously
+    fetchWellKnown(mcpUrl).flatMap {
+      case Left(err) =>
+        Future.successful(Left(s"Failed to fetch well-known configuration from $mcpUrl: $err"))
+      case Right(discovered) =>
+        Future {
+          // Imperative flow that returns a single Either value without using `return`
+          // 1) authorization endpoint
+          discovered.authorization_endpoint match {
+            case None => Left("well-known document did not contain authorization_endpoint")
+            case Some(authorizationEndpoint) =>
+              // 2) token endpoint must exist (or may be provided later by DCR)
+              var tokenEndpointOpt: Option[String] = discovered.token_endpoint
+              if (tokenEndpointOpt.isEmpty && clientId.nonEmpty) {
+                // If no token endpoint in discovery and clientId provided, we cannot proceed
+                Left("well-known document did not contain token_endpoint")
+              } else {
+                // 3) determine client id/secret (possibly via DCR)
+                var finalClientId: String = clientId.getOrElse("")
+                var finalClientSecret: Option[String] = clientSecret
 
-    val authorizationEndpoint = discovered.get("authorization_endpoint") match {
-      case Some(v) => v
-      case None => return Left("well-known document did not contain authorization_endpoint")
-    }
+                if (clientId.isEmpty) {
+                  // DCR requested
+                  discovered.registration_endpoint match {
+                    case None => Left("DCR requested but no registration_endpoint found in discovery document")
+                    case Some(registrationEndpoint) =>
+                      val redirectUri = s"http://localhost:${redirectPort}/callback"
+                      performDynamicClientRegistration(registrationEndpoint, redirectUri, Map.empty) match {
+                        case Left(err) => Left(s"Dynamic client registration failed: $err")
+                        case Right(dcrResp) =>
+                          finalClientId = dcrResp.getOrElse("client_id", "")
+                          if (finalClientId.trim.isEmpty) Left("DCR response did not contain client_id")
+                          else {
+                            finalClientSecret = dcrResp.get("client_secret").orElse(finalClientSecret)
+                            tokenEndpointOpt = dcrResp.get("token_endpoint").orElse(tokenEndpointOpt)
 
-    // token endpoint is required by current flow
-    var tokenEndpoint: Option[String] = discovered.get("token_endpoint") match {
-      case Some(v) => Some(v)
-      case None => return Left("well-known document did not contain token_endpoint")
-    }
+                            // proceed to auth flow after DCR
+                            if (finalClientId.trim.isEmpty) Left("client_id is empty — provide a client id or omit it to use dynamic registration")
+                            else {
+                              val cfg = Config(
+                                clientId = finalClientId,
+                                clientSecret = finalClientSecret,
+                                authorizationEndpoint = authorizationEndpoint,
+                                tokenEndpoint = tokenEndpointOpt,
+                                scope = scope,
+                                redirectPort = redirectPort
+                              )
 
-    var finalClientId = clientId.getOrElse("")
-    var finalClientSecret = clientSecret
+                              runAuthCodeFlow(cfg) match {
+                                case Right(Some(tokenResponse)) =>
+                                  logger.info("Successfully obtained access token")
+                                  Right(tokenResponse)
+                                case Right(None) => Left("Token endpoint not configured; unable to complete token exchange")
+                                case Left(err) => Left(s"Authorization flow failed: $err")
+                              }
+                            }
+                          }
+                      }
+                  }
+                } else {
+                  // clientId provided path
+                  if (finalClientId.trim.isEmpty) Left("client_id is empty — provide a client id or omit it to use dynamic registration")
+                  else {
+                    val cfg = Config(
+                      clientId = finalClientId,
+                      clientSecret = finalClientSecret,
+                      authorizationEndpoint = authorizationEndpoint,
+                      tokenEndpoint = tokenEndpointOpt,
+                      scope = scope,
+                      redirectPort = redirectPort
+                    )
 
-    // Optional Dynamic Client Registration
-    if (clientId.isEmpty) {
-      val registrationEndpoint = discovered.get("registration_endpoint") match {
-        case Some(v) => v
-        case None => return Left("DCR requested but no registration_endpoint found in discovery document")
-      }
-      val redirectUri = s"http://localhost:${redirectPort}/callback"
-      performDynamicClientRegistration(registrationEndpoint, redirectUri, Map.empty) match {
-        case Left(err) => return Left(s"Dynamic client registration failed: $err")
-        case Right(dcrResp) =>
-          finalClientId = dcrResp.getOrElse("client_id", "")
-          if (finalClientId.isEmpty) return Left("DCR response did not contain client_id")
-          finalClientSecret = dcrResp.get("client_secret").orElse(finalClientSecret)
-          tokenEndpoint = dcrResp.get("token_endpoint").orElse(tokenEndpoint)
-          logger.info(s"Successfully registered client with ID: $finalClientId")
-      }
-    }
-
-    if (finalClientId.trim.isEmpty) return Left("client_id is empty — provide a client id or omit it to use dynamic registration")
-
-    val cfg = Config(
-      clientId = finalClientId,
-      clientSecret = finalClientSecret,
-      authorizationEndpoint = authorizationEndpoint,
-      tokenEndpoint = tokenEndpoint,
-      scope = scope,
-      redirectPort = redirectPort
-    )
-
-    runAuthCodeFlow(cfg) match {
-      case Right(Some(tokenResponse)) =>
-        logger.info("Successfully obtained access token")
-        Right(tokenResponse)
-      case Right(None) => Left("Token endpoint not configured; unable to complete token exchange")
-      case Left(err) => Left(s"Authorization flow failed: $err")
+                    runAuthCodeFlow(cfg) match {
+                      case Right(Some(tokenResponse)) =>
+                        logger.info("Successfully obtained access token")
+                        Right(tokenResponse)
+                      case Right(None) => Left("Token endpoint not configured; unable to complete token exchange")
+                      case Left(err) => Left(s"Authorization flow failed: $err")
+                    }
+                  }
+                }
+              }
+          }
+        }(ec)
     }
   }
 
@@ -171,51 +212,47 @@ object ClientAuthService {
     }
   }
 
-   // Fetch a well-known OpenID Connect configuration and extract string-valued keys into a simple Map.
-   // This is a lightweight parser (no JSON dependency): it extracts string fields only.
-   private def fetchWellKnown(
-     domain: String
-   ): Either[String, Map[String, String]] = {
-      Try {
-        val base = if (domain.startsWith("http://") || domain.startsWith("https://")) domain else s"https://$domain"
-        val urlStr = if (base.contains(".well-known")) base else s"${base.stripSuffix("/")}/.well-known/openid-configuration"
+   // Fetch a well-known OpenID Connect configuration and return the parsed Discovery case class.
+   // Implemented using Apache Pekko HTTP instead of STTP. This creates a short-lived ActorSystem
+   // to perform the request, parses the JSON with circe, and then terminates the ActorSystem.
+  private def fetchWellKnown(
+    domain: String
+  )(
+      implicit system: ActorSystem[Nothing],
+    ): Future[Either[String, Discovery]] = {
+    val url = createWellKnownUrl_OpenIdCOnfiguration(domain)
 
-        val backend = HttpClientSyncBackend()
-        val request = basicRequest.get(uri"$urlStr").acceptEncoding("utf-8").response(asJson[Discovery])
-        val response = request.send(backend)
-        backend.close()
-        (response.code.code, response.body)
-      }.toEither.left.map(_.getMessage).flatMap {
-        case (status: Int, bodyEither: Either[ResponseException[String], Discovery]) =>
-          if (status >= 200 && status < 300) {
-            bodyEither match {
-              case Right(d) =>
-                val m = scala.collection.mutable.Map.empty[String, String]
-                d.authorization_endpoint.foreach(v => m.put("authorization_endpoint", v))
-                d.token_endpoint.foreach(v => m.put("token_endpoint", v))
-                d.registration_endpoint.foreach(v => m.put("registration_endpoint", v))
-                Right(m.toMap)
-              case Left(err) => Left(s"Failed to parse discovery document: ${err.getMessage}")
-            }
-          } else Left(s"HTTP $status")
+    Http().singleRequest(HttpRequest(uri = url))
+      .flatMap { res =>
+        res.entity.toStrict(10.seconds).map { entity =>
+          val body = entity.data.utf8String
+          if (res.status.isSuccess())
+            io.circe.parser.decode[Discovery](body).left.map(e => s"Failed to parse discovery: ${e.getMessage}")
+          else
+            Left(s"HTTP ${res.status.intValue()}")
+        }
       }
-   }
+      .recover { case t => Left(t.getMessage) }
+  }
 
-   private def printUsage(): Unit = {
-     val usage =
-       """
-         |Usage: ClientAuthService <clientId> <authorizationEndpoint|discover:domain> <tokenEndpoint|'none'> [clientSecret|'-'] [scope] [port]
-         |
-         |Example:
-         |  ClientAuthService my-client-id discover:auth.example.com none my-secret "openid profile" 8080
-         |
-         |If the token endpoint is 'none' or '-', the flow will only retrieve the authorization code and will not attempt an exchange.
-         |Client secret may be '-' if not applicable.
-         |""".stripMargin
-     println(usage)
-   }
 
-   private def runAuthCodeFlow(
+  private def createWellKnownUrl_OpenIdCOnfiguration(domain: String): String = {
+    // Ensure we have a scheme
+    val normalized =
+      if (domain.startsWith("http://") || domain.startsWith("https://")) domain
+      else s"https://$domain"
+
+    // Parse and reconstruct base (scheme + authority only)
+    val uri = new URI(normalized)
+    val port = if (uri.getPort == -1) "" else s":${uri.getPort}"
+
+    val base = s"${uri.getScheme}://${uri.getHost}${port}"
+    
+    s"$base/.well-known/openid-configuration"
+  }
+
+
+  private def runAuthCodeFlow(
      cfg: Config
    ): Either[String, Option[TokenResponse]] = {
      val redirectUri = s"http://${cfg.redirectHost}:${cfg.redirectPort}${cfg.redirectPath}"
@@ -462,6 +499,21 @@ object ClientAuthService {
     val scope = if (args.length >= 4) args(3) else "openid profile email"
     val port = if (args.length >= 5) Try(args(4).toInt).getOrElse(8080) else 8080
 
+    implicit val system: ActorSystem[Nothing] = {
+      val conf = com.typesafe.config.ConfigFactory.parseString(
+        """
+      pekko {
+        actor {
+          provider = local
+        }
+        loglevel = "OFF"
+      }
+      """
+      )
+      ActorSystem(Behaviors.empty, "client-auth-system", conf)
+    }
+
+
     // Extract the OAuth server URL
     val mcpUrl = if (mcpUrlArg.startsWith("discover:")) {
       mcpUrlArg.substring("discover:".length)
@@ -483,8 +535,19 @@ object ClientAuthService {
       Some(clientSecretArg)
     }
 
-    // Use the connect function
-    connect(mcpUrl, clientId, clientSecret, scope, port) match {
+    // Use the connect function (block for CLI)
+    val connectF = connect(mcpUrl, clientId, clientSecret, scope, port)
+
+    val result = try {
+      Await.result(connectF, 180.seconds)
+    } catch {
+      case t: Throwable =>
+        logger.error(s"Connection failed: ${t.getMessage}")
+        System.exit(1)
+        Left("internal error")
+    }
+
+    result match {
       case Right(tokenResponse) =>
         logger.info(s"Successfully obtained tokens:")
         logger.info(s"  Access Token: ${tokenResponse.access_token}")
