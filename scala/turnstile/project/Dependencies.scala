@@ -86,6 +86,10 @@ object Dependencies {
     "io.circe" %% "circe-core" % circeVersion,
     "io.circe" %% "circe-parser" % circeVersion,
     "io.circe" %% "circe-generic" % circeVersion,
+    // sttp client for HTTP calls used by ClientAuthService
+    "com.softwaremill.sttp.client4" %% "core" % "4.0.13",
+    "com.softwaremill.sttp.client4" %% "circe" % "4.0.13",
+    "com.softwaremill.sttp.client4" %% "okhttp-backend" % "4.0.13",
     // (using io.circe.generic.auto._ instead of circe-generic-extras)
     "ch.qos.logback" % "logback-classic" % logbackVersion,
     "com.github.jwt-scala" %% "jwt-play-json" % jwtScalaVersion,

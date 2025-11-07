@@ -9,10 +9,13 @@ import org.slf4j.LoggerFactory
 
 import java.awt.Desktop
 import java.io.{BufferedReader, InputStreamReader, OutputStream}
-import java.net.{HttpURLConnection, InetSocketAddress, URI, URL}
+import java.net.{InetSocketAddress, URI}
 import java.util.Base64
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import scala.util.Try
+
+import sttp.client4._
+import sttp.client4.circe._
 
 object ClientAuthService {
   private val logger = LoggerFactory.getLogger(getClass)
@@ -131,12 +134,7 @@ object ClientAuthService {
     metadata: Map[String, String]
   ): Either[String, Map[String, String]] = {
     Try {
-      val url = new URL(registrationEndpoint)
-      val conn = url.openConnection().asInstanceOf[HttpURLConnection]
-      conn.setRequestMethod("POST")
-      conn.setDoOutput(true)
-      conn.setRequestProperty("Content-Type", "application/json")
-      conn.setRequestProperty("Accept", "application/json")
+      val backend = HttpURLConnectionBackend()
 
       // Build JSON body using circe to ensure correctness
       val bodyJson = Json.obj(
@@ -146,33 +144,34 @@ object ClientAuthService {
         ("token_endpoint_auth_method", Json.fromString("client_secret_basic"))
       )
 
-      val bytes = bodyJson.noSpaces.getBytes("UTF-8")
-      conn.getOutputStream.write(bytes)
-      conn.getOutputStream.close()
+      val request = basicRequest
+        .post(uri"$registrationEndpoint")
+        .contentType("application/json")
+        .acceptEncoding("utf-8")
+        .body(bodyJson.noSpaces)
+        .response(asJson[DcrResponse])
 
-      val status = conn.getResponseCode
-      val is = if (status >= 200 && status < 300) conn.getInputStream else conn.getErrorStream
-      val reader = new BufferedReader(new InputStreamReader(is, "UTF-8"))
-      val sb = new StringBuilder
-      var line: String = null
-      while ({ line = reader.readLine(); line != null }) sb.append(line)
-      reader.close()
-      val resp = sb.toString()
+      val response = request.send(backend)
+      backend.close()
 
-      // Decode DCR response into typed model using circe.decode
-      val out = scala.collection.mutable.Map.empty[String, String]
-      io.circe.parser.decode[DcrResponse](resp).toOption.foreach { d =>
-        d.client_id.foreach(v => out.put("client_id", v))
-        d.client_secret.foreach(v => out.put("client_secret", v))
-        d.registration_client_uri.foreach(v => out.put("registration_client_uri", v))
-        d.token_endpoint.foreach(v => out.put("token_endpoint", v))
-      }
-
-      (status, out.toMap)
-    }.fold[Either[String, Map[String, String]]](t => Left(t.getMessage), {
-      case (status: Int, map: Map[String, String]) =>
-        if (status >= 200 && status < 300) Right(map) else Left(s"HTTP $status")
-    })
+      (response.code.code, response.body)
+    }.toEither.left.map(_.getMessage).flatMap {
+      case (status: Int, bodyEither: Either[ResponseException[String, io.circe.Error], DcrResponse]) =>
+        if (status >= 200 && status < 300) {
+          bodyEither match {
+            case Right(d) =>
+              val out = scala.collection.mutable.Map.empty[String, String]
+              d.client_id.foreach(v => out.put("client_id", v))
+              d.client_secret.foreach(v => out.put("client_secret", v))
+              d.registration_client_uri.foreach(v => out.put("registration_client_uri", v))
+              d.token_endpoint.foreach(v => out.put("token_endpoint", v))
+              Right(out.toMap)
+            case Left(err) => Left(s"Failed to parse DCR response: ${err.getMessage}")
+          }
+        } else {
+          Left(s"HTTP $status")
+        }
+    }
   }
 
    // Fetch a well-known OpenID Connect configuration and extract string-valued keys into a simple Map.
@@ -183,34 +182,26 @@ object ClientAuthService {
       Try {
         val base = if (domain.startsWith("http://") || domain.startsWith("https://")) domain else s"https://$domain"
         val urlStr = if (base.contains(".well-known")) base else s"${base.stripSuffix("/")}/.well-known/openid-configuration"
-        val url = new URL(urlStr)
-        val conn = url.openConnection().asInstanceOf[HttpURLConnection]
-        conn.setRequestMethod("GET")
-        conn.setRequestProperty("Accept", "application/json")
-        conn.setConnectTimeout(5000)
-        conn.setReadTimeout(5000)
 
-        val status = conn.getResponseCode
-        val is = if (status >= 200 && status < 300) conn.getInputStream else conn.getErrorStream
-        val reader = new BufferedReader(new InputStreamReader(is, "UTF-8"))
-        val sb = new StringBuilder
-        var line: String = null
-        while ({ line = reader.readLine(); line != null }) sb.append(line)
-        reader.close()
-        val resp = sb.toString()
-
-        // Decode discovery JSON into typed model and extract known fields
-        val map = io.circe.parser.decode[Discovery](resp).toOption.map { d =>
-          val m = scala.collection.mutable.Map.empty[String, String]
-          d.authorization_endpoint.foreach(v => m.put("authorization_endpoint", v))
-          d.token_endpoint.foreach(v => m.put("token_endpoint", v))
-          d.registration_endpoint.foreach(v => m.put("registration_endpoint", v))
-          m.toMap
-        }.getOrElse(Map.empty)
-        (status, map)
-      }.fold(t => Left(t.getMessage), { case (status, map) =>
-        if (status >= 200 && status < 300) Right(map) else Left(s"HTTP $status")
-      })
+        val backend = HttpURLConnectionBackend()
+        val request = basicRequest.get(uri"$urlStr").acceptEncoding("utf-8").response(asJson[Discovery])
+        val response = request.send(backend)
+        backend.close()
+        (response.code.code, response.body)
+      }.toEither.left.map(_.getMessage).flatMap {
+        case (status: Int, bodyEither: Either[ResponseException[String, io.circe.Error], Discovery]) =>
+          if (status >= 200 && status < 300) {
+            bodyEither match {
+              case Right(d) =>
+                val m = scala.collection.mutable.Map.empty[String, String]
+                d.authorization_endpoint.foreach(v => m.put("authorization_endpoint", v))
+                d.token_endpoint.foreach(v => m.put("token_endpoint", v))
+                d.registration_endpoint.foreach(v => m.put("registration_endpoint", v))
+                Right(m.toMap)
+              case Left(err) => Left(s"Failed to parse discovery document: ${err.getMessage}")
+            }
+          } else Left(s"HTTP $status")
+      }
    }
 
    private def printUsage(): Unit = {
@@ -424,37 +415,37 @@ object ClientAuthService {
      redirectUri: String
    ): Either[String, TokenResponse] = {
      Try {
-       val url = new URL(tokenUrl)
-       val conn = url.openConnection().asInstanceOf[HttpURLConnection]
-       conn.setRequestMethod("POST")
-       conn.setDoOutput(true)
-       conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-       conn.setRequestProperty("Accept", "application/json")
+       val backend = HttpURLConnectionBackend()
 
-       clientSecretOpt.foreach { secret =>
-         val auth = s"$clientId:$secret"
-         val encodedAuth = Base64.getEncoder.encodeToString(auth.getBytes("UTF-8"))
-         conn.setRequestProperty("Authorization", s"Basic $encodedAuth")
+       val baseForm = Map(
+         "grant_type" -> "authorization_code",
+         "code" -> code,
+         "redirect_uri" -> redirectUri
+       )
+
+       val formWithClient = clientSecretOpt match {
+         case Some(secret) => baseForm
+         case None => baseForm + ("client_id" -> clientId)
        }
 
-       val body = s"grant_type=authorization_code&code=${urlEncode(code)}&redirect_uri=${urlEncode(redirectUri)}"
-       val bytes = body.getBytes("UTF-8")
-       conn.getOutputStream.write(bytes)
-       conn.getOutputStream.close()
+       var request = basicRequest
+         .post(uri"$tokenUrl")
+         .contentType("application/x-www-form-urlencoded")
+         .response(asJson[TokenResponse])
 
-       val status = conn.getResponseCode
-       val is = if (status >= 200 && status < 300) conn.getInputStream else conn.getErrorStream
-       val reader = new BufferedReader(new InputStreamReader(is, "UTF-8"))
-       val sb = new StringBuilder
-       var line: String = null
-       while ({ line = reader.readLine(); line != null }) sb.append(line)
-       reader.close()
-       val resp = sb.toString()
+       // Use HTTP Basic auth if secret provided
+       request = clientSecretOpt match {
+         case Some(secret) => request.auth.basic(clientId, secret).body(formWithClient)
+         case None => request.body(formWithClient)
+       }
 
-       if (status < 200 || status >= 300) Left(s"HTTP $status: $resp")
-       else {
-         // Decode token response JSON into TokenResponse directly
-         decode[TokenResponse](resp).left.map(_.getMessage)
+       val response = request.send(backend)
+       backend.close()
+
+       if (response.code.code < 200 || response.code.code >= 300) {
+         Left(s"HTTP ${response.code.code}: ${response.statusText}")
+       } else {
+         response.body.left.map(err => s"Failed to parse token response: ${err.getMessage}")
        }
      }.toEither.left.map(_.getMessage).flatMap(identity)
    }
