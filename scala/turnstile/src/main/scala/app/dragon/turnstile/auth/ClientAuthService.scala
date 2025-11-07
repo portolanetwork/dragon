@@ -47,57 +47,46 @@ object ClientAuthService {
   ): Either[String, TokenResponse] = {
     logger.info(s"Connecting to OAuth server at $mcpUrl")
 
-    // Discover OAuth endpoints from well-known configuration
-    val discoveryResult = fetchWellKnown(mcpUrl)
-    val discoveredMap = discoveryResult match {
-      case Left(err) =>
-        return Left(s"Failed to fetch well-known configuration from $mcpUrl: $err")
-      case Right(map) => map
+    // Discover endpoints
+    val discovered = fetchWellKnown(mcpUrl) match {
+      case Right(m) => m
+      case Left(err) => return Left(s"Failed to fetch well-known configuration from $mcpUrl: $err")
     }
 
-    // Extract required endpoints
-    val authorizationEndpoint = discoveredMap.get("authorization_endpoint") match {
-      case Some(endpoint) => endpoint
+    val authorizationEndpoint = discovered.get("authorization_endpoint") match {
+      case Some(v) => v
       case None => return Left("well-known document did not contain authorization_endpoint")
     }
 
-    var tokenEndpoint: Option[String] = discoveredMap.get("token_endpoint") match {
-      case Some(endpoint) => Some(endpoint)
+    // token endpoint is required by current flow
+    var tokenEndpoint: Option[String] = discovered.get("token_endpoint") match {
+      case Some(v) => Some(v)
       case None => return Left("well-known document did not contain token_endpoint")
     }
 
-    // Determine client credentials
     var finalClientId = clientId.getOrElse("")
     var finalClientSecret = clientSecret
 
-    // If clientId is not provided, perform Dynamic Client Registration
+    // Optional Dynamic Client Registration
     if (clientId.isEmpty) {
-      val registrationEndpoint = discoveredMap.get("registration_endpoint") match {
-        case Some(endpoint) => endpoint
+      val registrationEndpoint = discovered.get("registration_endpoint") match {
+        case Some(v) => v
         case None => return Left("DCR requested but no registration_endpoint found in discovery document")
       }
-
       val redirectUri = s"http://localhost:${redirectPort}/callback"
       performDynamicClientRegistration(registrationEndpoint, redirectUri, Map.empty) match {
-        case Left(err) =>
-          return Left(s"Dynamic client registration failed: $err")
-        case Right(dcrResponse) =>
-          finalClientId = dcrResponse.getOrElse("client_id", "")
-          if (finalClientId.isEmpty) {
-            return Left("DCR response did not contain client_id")
-          }
-          finalClientSecret = dcrResponse.get("client_secret").orElse(finalClientSecret)
-          tokenEndpoint = dcrResponse.get("token_endpoint").orElse(tokenEndpoint)
+        case Left(err) => return Left(s"Dynamic client registration failed: $err")
+        case Right(dcrResp) =>
+          finalClientId = dcrResp.getOrElse("client_id", "")
+          if (finalClientId.isEmpty) return Left("DCR response did not contain client_id")
+          finalClientSecret = dcrResp.get("client_secret").orElse(finalClientSecret)
+          tokenEndpoint = dcrResp.get("token_endpoint").orElse(tokenEndpoint)
           logger.info(s"Successfully registered client with ID: $finalClientId")
       }
     }
 
-    // Validate that we have required credentials
-    if (finalClientId.isEmpty) {
-      return Left("client_id is empty — provide a client id or omit it to use dynamic registration")
-    }
+    if (finalClientId.trim.isEmpty) return Left("client_id is empty — provide a client id or omit it to use dynamic registration")
 
-    // Create configuration for auth code flow
     val cfg = Config(
       clientId = finalClientId,
       clientSecret = finalClientSecret,
@@ -107,113 +96,12 @@ object ClientAuthService {
       redirectPort = redirectPort
     )
 
-    // Run the authorization code flow
     runAuthCodeFlow(cfg) match {
       case Right(Some(tokenResponse)) =>
         logger.info("Successfully obtained access token")
         Right(tokenResponse)
-      case Right(None) =>
-        Left("Token endpoint not configured; unable to complete token exchange")
-      case Left(err) =>
-        Left(s"Authorization flow failed: $err")
-    }
-  }
-
-  def main(args: Array[String]): Unit = {
-    logger.info("ClientAuthService started")
-
-    //if (args.contains("-h") || args.contains("--help") || args.length < 3) {
-    //  printUsage()
-    //  System.exit(0)
-    //}
-
-    // Minimal argument parsing: required: clientId authorizationEndpoint tokenEndpoint(optional '-')
-    // Usage: <clientId> <authorizationEndpoint|discover:domain> <tokenEndpoint|'none'> [clientSecret] [scope] [port]
-    var clientId = "8ZaIuLcpf3fvBh7qH7sLuRjEe1Gy1Yax"//if (args.length >= 1) args(0) else ""
-    //var clientId = "dcr:auto"//if (args.length >= 1) args(0) else ""
-    val authArg = "discover:https://portola-dev.us.auth0.com"//if (args.length >= 2) args(1) else ""
-    var clientSecretX = "muG1iXaizOloSaOhi9uWqdufW19rk_meHzi2B7k1S74aJuWIPGE3Daaf0S5ivvVB"
-    //val authArg = "discover:auto"//if (args.length >= 2) args(1) else ""
-    //val tokenEndpointArg = if (args.length >= 3) args(2) else "none"
-    var authorizationEndpoint = ""//authArg
-    var tokenEndpoint: Option[String] = None//if (tokenEndpointArg == "none" || tokenEndpointArg == "-") None else Some(tokenEndpointArg)
-
-    // parse optional values early (we need port/redirect URI for DCR)
-    val clientSecretArg = if (args.length >= 4) args(3) else ""
-    val scope = if (args.length >= 5) args(4) else "openid profile email"
-    val port = if (args.length >= 6) Try(args(5).toInt).getOrElse(8080) else 8080
-    val clientSecretProvided = if (clientSecretArg != "-" && clientSecretArg.nonEmpty) Some(clientSecretArg) else None
-
-    // Support discovery: pass authorization argument as discover:domain.example (or discover:https://domain...)
-    var discoveredMap: Map[String, String] = Map.empty
-    if (authArg.startsWith("discover:")) {
-      val domain = authArg.substring("discover:".length)
-      fetchWellKnown(domain) match {
-        case Left(err) =>
-          logger.error(s"Failed to fetch well-known configuration from $domain: $err")
-          System.exit(1)
-        case Right(map) =>
-          discoveredMap = map
-          authorizationEndpoint = map.getOrElse("authorization_endpoint", {
-            logger.error("well-known document did not contain authorization_endpoint")
-            System.exit(1); ""
-          })
-          tokenEndpoint = map.get("token_endpoint").orElse(tokenEndpoint)
-      }
-    }
-
-    // Dynamic Client Registration (DCR): if the caller set clientId to "dcr:auto" and the well-known document provides a registration_endpoint,
-    // perform registration to obtain a client_id and client_secret automatically.
-    if (clientId == "dcr:auto") {
-      val regOpt = discoveredMap.get("registration_endpoint")
-      if (regOpt.isEmpty) {
-        logger.error("DCR requested (clientId=dcr:auto) but no registration_endpoint found in discovery document")
-        System.exit(1)
-      }
-      val registrationEndpoint = regOpt.get
-      val redirectUri = s"http://localhost:${port}/callback"
-      // Perform a minimal registration request (we build a small JSON body in the helper)
-      performDynamicClientRegistration(registrationEndpoint, redirectUri, Map.empty) match {
-        case Left(err) =>
-          logger.error(s"Dynamic client registration failed: $err")
-          System.exit(1)
-        case Right(resp) =>
-          // adopt client_id returned by the server
-          resp.get("client_id").foreach(id => clientId = id)
-          // prefer secret returned by DCR unless a clientSecretArg explicitly provided
-          val clientSecretFromDcr = resp.get("client_secret")
-          val clientSecretFinal = clientSecretProvided.orElse(clientSecretFromDcr)
-          // update tokenEndpoint if registration response contains it, else keep discovered/token provided
-          tokenEndpoint = tokenEndpoint.orElse(resp.get("token_endpoint")).orElse(discoveredMap.get("token_endpoint"))
-          // merge DCR response into discoveredMap so downstream code can read client_secret if needed
-          discoveredMap = discoveredMap ++ resp
-          // if DCR returned a secret and caller didn't provide one, prefer the DCR secret
-          // (we'll compute final clientSecret below)
-      }
-    }
-
-    // We'll determine the final clientSecret to use: prefer provided arg, else discovered/DCR result in discoveredMap
-    val clientSecret = clientSecretProvided.orElse(discoveredMap.get("client_secret")).orElse(Some(clientSecretX))
-
-    val cfg = Config(
-      clientId = clientId,
-      clientSecret = clientSecret,
-      authorizationEndpoint = authorizationEndpoint,
-      tokenEndpoint = tokenEndpoint,
-      scope = scope,
-      redirectPort = port
-    )
-
-    runAuthCodeFlow(cfg) match {
-      case Right(tokenResponseOpt) =>
-        tokenResponseOpt match {
-          case Some(tokenResp) => logger.info(s"Token response:\n$tokenResp")
-          case None => logger.info("Authorization code obtained but token endpoint not configured; flow finished.")
-        }
-        System.exit(0)
-      case Left(err) =>
-        logger.error(s"Authorization flow failed: $err")
-        System.exit(1)
+      case Right(None) => Left("Token endpoint not configured; unable to complete token exchange")
+      case Left(err) => Left(s"Authorization flow failed: $err")
     }
   }
 
@@ -530,4 +418,54 @@ object ClientAuthService {
        }
      }.toEither.left.map(_.getMessage).flatMap(identity)
    }
- }
+
+
+  def main(args: Array[String]): Unit = {
+    logger.info("ClientAuthService started")
+
+    // Usage: <mcpUrl|discover:domain> [clientId|'dcr:auto'] [clientSecret|'-'] [scope] [port]
+    // Example: main("discover:https://portola-dev.us.auth0.com", "my-client-id", "my-secret")
+    // Example with DCR: main("discover:https://portola-dev.us.auth0.com", "dcr:auto")
+
+    // Parse arguments with defaults for testing
+    val mcpUrlArg = if (args.length >= 1) args(0) else "discover:https://portola-dev.us.auth0.com"
+    val clientIdArg = if (args.length >= 2) args(1) else "8ZaIuLcpf3fvBh7qH7sLuRjEe1Gy1Yax"
+    val clientSecretArg = if (args.length >= 3) args(2) else "muG1iXaizOloSaOhi9uWqdufW19rk_meHzi2B7k1S74aJuWIPGE3Daaf0S5ivvVB"
+    val scope = if (args.length >= 4) args(3) else "openid profile email"
+    val port = if (args.length >= 5) Try(args(4).toInt).getOrElse(8080) else 8080
+
+    // Extract the OAuth server URL
+    val mcpUrl = if (mcpUrlArg.startsWith("discover:")) {
+      mcpUrlArg.substring("discover:".length)
+    } else {
+      mcpUrlArg
+    }
+
+    // Determine if DCR should be used (clientId is "dcr:auto" or empty)
+    val clientId = if (clientIdArg == "dcr:auto" || clientIdArg.isEmpty) {
+      None
+    } else {
+      Some(clientIdArg)
+    }
+
+    // Parse client secret (skip if "-" or empty, or if DCR is being used)
+    val clientSecret = if (clientSecretArg == "-" || clientSecretArg.isEmpty || clientId.isEmpty) {
+      None
+    } else {
+      Some(clientSecretArg)
+    }
+
+    // Use the connect function
+    connect(mcpUrl, clientId, clientSecret, scope, port) match {
+      case Right(tokenResponse) =>
+        logger.info(s"Successfully obtained tokens:")
+        logger.info(s"  Access Token: ${tokenResponse.accessToken}")
+        tokenResponse.refreshToken.foreach(rt => logger.info(s"  Refresh Token: $rt"))
+        System.exit(0)
+      case Left(err) =>
+        logger.error(s"Connection failed: $err")
+        System.exit(1)
+    }
+  }
+
+}
