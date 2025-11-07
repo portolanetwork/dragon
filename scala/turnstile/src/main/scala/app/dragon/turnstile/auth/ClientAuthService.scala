@@ -7,7 +7,9 @@ import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.scaladsl.adapter.*
 import org.apache.pekko.http.scaladsl.Http
-import org.apache.pekko.http.scaladsl.model.{HttpMethods, HttpRequest}
+import org.apache.pekko.http.scaladsl.model.{HttpMethods, HttpRequest, HttpEntity, ContentTypes, FormData}
+import org.apache.pekko.http.scaladsl.model.HttpCharsets
+import org.apache.pekko.http.scaladsl.model.headers.{Authorization, BasicHttpCredentials}
 import org.slf4j.LoggerFactory
 import sttp.client4.*
 import sttp.client4.circe.*
@@ -104,14 +106,15 @@ object ClientAuthService {
                     case None => Left("DCR requested but no registration_endpoint found in discovery document")
                     case Some(registrationEndpoint) =>
                       val redirectUri = s"http://localhost:${redirectPort}/callback"
-                      performDynamicClientRegistration(registrationEndpoint, redirectUri, Map.empty) match {
+                      val dcrEither = Await.result(performDynamicClientRegistration(registrationEndpoint, redirectUri, Map.empty)(system), 20.seconds)
+                      dcrEither match {
                         case Left(err) => Left(s"Dynamic client registration failed: $err")
                         case Right(dcrResp) =>
-                          finalClientId = dcrResp.getOrElse("client_id", "")
+                          finalClientId = dcrResp.client_id.getOrElse("")
                           if (finalClientId.trim.isEmpty) Left("DCR response did not contain client_id")
                           else {
-                            finalClientSecret = dcrResp.get("client_secret").orElse(finalClientSecret)
-                            tokenEndpointOpt = dcrResp.get("token_endpoint").orElse(tokenEndpointOpt)
+                            finalClientSecret = dcrResp.client_secret.orElse(finalClientSecret)
+                            tokenEndpointOpt = dcrResp.token_endpoint.orElse(tokenEndpointOpt)
 
                             // proceed to auth flow after DCR
                             if (finalClientId.trim.isEmpty) Left("client_id is empty — provide a client id or omit it to use dynamic registration")
@@ -165,51 +168,43 @@ object ClientAuthService {
   }
 
   // Perform dynamic client registration (DCR) by POSTing JSON metadata to the registration endpoint.
-  // Returns a map of string fields (e.g., client_id, client_secret) on success.
+  // Returns a DcrResponse on success.
   private def performDynamicClientRegistration(
     registrationEndpoint: String,
     redirectUri: String,
     metadata: Map[String, String]
-  ): Either[String, Map[String, String]] = {
-    Try {
-      val backend = HttpClientSyncBackend()
-
-      // Build JSON body using circe to ensure correctness
-      val bodyJson = Json.obj(
-        ("client_name", Json.fromString("turnstile-client")),
-        ("redirect_uris", Json.arr(Json.fromString(redirectUri))),
-        ("grant_types", Json.arr(Json.fromString("authorization_code"))),
-        ("token_endpoint_auth_method", Json.fromString("client_secret_basic"))
+  )(
+    implicit system: ActorSystem[Nothing]
+  ): Future[Either[String, DcrResponse]] = {
+    Http().singleRequest(
+        HttpRequest(
+          method = HttpMethods.POST,
+          uri = registrationEndpoint,
+          entity = HttpEntity(ContentTypes.`application/json`,
+            Json.obj(
+              ("client_name", Json.fromString("turnstile-client")),
+              ("redirect_uris", Json.arr(Json.fromString(redirectUri))),
+              ("grant_types", Json.arr(Json.fromString("authorization_code"))),
+              ("token_endpoint_auth_method", Json.fromString("client_secret_basic"))
+            ).noSpaces
+          )
+        )
       )
-
-      val request = basicRequest
-        .post(uri"$registrationEndpoint")
-        .contentType("application/json")
-        .acceptEncoding("utf-8")
-        .body(bodyJson.noSpaces)
-        .response(asJson[DcrResponse])
-
-      val response = request.send(backend)
-      backend.close()
-
-      (response.code.code, response.body)
-    }.toEither.left.map(_.getMessage).flatMap {
-      case (status: Int, bodyEither: Either[ResponseException[String], DcrResponse]) =>
-        if (status >= 200 && status < 300) {
-          bodyEither match {
-            case Right(d) =>
-              val out = scala.collection.mutable.Map.empty[String, String]
-              d.client_id.foreach(v => out.put("client_id", v))
-              d.client_secret.foreach(v => out.put("client_secret", v))
-              d.registration_client_uri.foreach(v => out.put("registration_client_uri", v))
-              d.token_endpoint.foreach(v => out.put("token_endpoint", v))
-              Right(out.toMap)
-            case Left(err) => Left(s"Failed to parse DCR response: ${err.getMessage}")
-          }
-        } else {
-          Left(s"HTTP $status")
+      .flatMap { res =>
+        res.entity.toStrict(10.seconds).map { entity =>
+          (res.status.intValue(), entity.data.utf8String)
         }
-    }
+      }
+      .map {
+        case (status, body) =>
+          if (status >= 200 && status < 300) {
+            io.circe.parser.decode[DcrResponse](body) match {
+              case Right(d) => Right(d)
+              case Left(err) => Left(s"Failed to parse DCR response: ${err.getMessage}")
+            }
+          } else Left(s"HTTP $status")
+      }
+      .recover { case t => Left(t.getMessage) }
   }
 
    // Fetch a well-known OpenID Connect configuration and return the parsed Discovery case class.
@@ -236,7 +231,9 @@ object ClientAuthService {
   }
 
 
-  private def createWellKnownUrl_OpenIdCOnfiguration(domain: String): String = {
+  private def createWellKnownUrl_OpenIdCOnfiguration(
+    domain: String
+  ): String = {
     // Ensure we have a scheme
     val normalized =
       if (domain.startsWith("http://") || domain.startsWith("https://")) domain
@@ -250,11 +247,29 @@ object ClientAuthService {
     
     s"$base/.well-known/openid-configuration"
   }
-
+  
+  private def getAuthUrl(
+    clientId: String,
+    discovery: Discovery,
+    redirectUrl: String,
+    scope: String
+  ): Try[String] = {
+    val state = java.util.UUID.randomUUID().toString
+    
+    discovery.authorization_endpoint match {
+      case None => 
+        Failure(new Exception("well-known document did not contain authorization_endpoint"))
+      case Some(authEndpoint) =>
+        Success(buildAuthorizationUrl(authEndpoint, clientId, redirectUrl, scope, state))
+    }
+  }
+  
+  
+  
 
   private def runAuthCodeFlow(
      cfg: Config
-   ): Either[String, Option[TokenResponse]] = {
+   )(implicit system: ActorSystem[Nothing]): Either[String, Option[TokenResponse]] = {
      val redirectUri = s"http://${cfg.redirectHost}:${cfg.redirectPort}${cfg.redirectPath}"
      val state = java.util.UUID.randomUUID().toString
 
@@ -316,8 +331,9 @@ object ClientAuthService {
              // If token endpoint configured, exchange
              cfg.tokenEndpoint match {
                case Some(tokenUrl) =>
-                 exchangeAuthorizationCode(tokenUrl, cfg.clientId, cfg.clientSecret, code, redirectUri)
-                   .left.map(err => s"Token exchange failed: $err").map(Some(_))
+                 // exchangeAuthorizationCode is now async; block briefly to keep this flow synchronous
+                 val exchangeEither = Await.result(exchangeAuthorizationCode(tokenUrl, cfg.clientId, cfg.clientSecret, code, redirectUri), 30.seconds)
+                 exchangeEither.left.map(err => s"Token exchange failed: $err").map(Some(_))
                case None => Right(None)
              }
            }
@@ -447,41 +463,49 @@ object ClientAuthService {
      clientSecretOpt: Option[String],
      code: String,
      redirectUri: String
-   ): Either[String, TokenResponse] = {
-     Try {
-       val backend = HttpClientSyncBackend()
+   )(implicit system: ActorSystem[Nothing]): Future[Either[String, TokenResponse]] = {
+     // Build form fields
+     val baseForm = Map(
+       "grant_type" -> "authorization_code",
+       "code" -> code,
+       "redirect_uri" -> redirectUri
+     )
 
-       val baseForm = Map(
-         "grant_type" -> "authorization_code",
-         "code" -> code,
-         "redirect_uri" -> redirectUri
-       )
+     val formWithClient = clientSecretOpt match {
+       case Some(_) => baseForm
+       case None => baseForm + ("client_id" -> clientId)
+     }
 
-       val formWithClient = clientSecretOpt match {
-         case Some(secret) => baseForm
-         case None => baseForm + ("client_id" -> clientId)
+     // Create request entity using Pekko FormData (provide charset)
+     val entity = FormData(formWithClient).toEntity(HttpCharsets.`UTF-8`)
+
+     // Build headers (use basic auth when secret provided)
+     val headers = clientSecretOpt match {
+       case Some(secret) => List(Authorization(BasicHttpCredentials(clientId, secret)))
+       case None => Nil
+     }
+
+     val request = HttpRequest(
+       method = HttpMethods.POST,
+       uri = tokenUrl,
+       entity = entity
+     ).withHeaders(headers)
+
+     Http().singleRequest(request)
+       .flatMap { res =>
+         res.entity.toStrict(10.seconds).map { strictEntity =>
+           val body = strictEntity.data.utf8String
+           if (res.status.isSuccess()) {
+             io.circe.parser.decode[TokenResponse](body) match {
+               case Right(tr) => Right(tr)
+               case Left(err) => Left(s"Failed to parse token response: ${err.getMessage}")
+             }
+           } else {
+             Left(s"HTTP ${res.status.intValue()}: $body")
+           }
+         }
        }
-
-       var request = basicRequest
-         .post(uri"$tokenUrl")
-         .contentType("application/x-www-form-urlencoded")
-         .response(asJson[TokenResponse])
-
-       // Use HTTP Basic auth if secret provided
-       request = clientSecretOpt match {
-         case Some(secret) => request.auth.basic(clientId, secret).body(formWithClient)
-         case None => request.body(formWithClient)
-       }
-
-       val response = request.send(backend)
-       backend.close()
-
-       if (response.code.code < 200 || response.code.code >= 300) {
-         Left(s"HTTP ${response.code.code}: ${response.statusText}")
-       } else {
-         response.body.left.map(err => s"Failed to parse token response: ${err.getMessage}")
-       }
-     }.toEither.left.map(_.getMessage).flatMap(identity)
+       .recover { case t => Left(t.getMessage) }
    }
 
 
