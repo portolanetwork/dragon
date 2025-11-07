@@ -1,6 +1,10 @@
 package app.dragon.turnstile.auth
 
 import com.sun.net.httpserver.{HttpExchange, HttpHandler, HttpServer}
+import io.circe._
+import io.circe.generic.auto._
+import io.circe.parser._
+
 import org.slf4j.LoggerFactory
 
 import java.awt.Desktop
@@ -25,9 +29,23 @@ object ClientAuthService {
     timeoutSeconds: Long = 120
   )
 
+  // Use single snake_case models that match upstream JSON directly
   case class TokenResponse(
-    accessToken: String,
-    refreshToken: Option[String]
+    access_token: String,
+    refresh_token: Option[String]
+  )
+
+  private case class Discovery(
+    authorization_endpoint: Option[String],
+    token_endpoint: Option[String],
+    registration_endpoint: Option[String]
+  )
+
+  private case class DcrResponse(
+    client_id: Option[String],
+    client_secret: Option[String],
+    registration_client_uri: Option[String],
+    token_endpoint: Option[String]
   )
 
   /**
@@ -107,7 +125,11 @@ object ClientAuthService {
 
   // Perform dynamic client registration (DCR) by POSTing JSON metadata to the registration endpoint.
   // Returns a map of string fields (e.g., client_id, client_secret) on success.
-  private def performDynamicClientRegistration(registrationEndpoint: String, redirectUri: String, metadata: Map[String, String]): Either[String, Map[String, String]] = {
+  private def performDynamicClientRegistration(
+    registrationEndpoint: String,
+    redirectUri: String,
+    metadata: Map[String, String]
+  ): Either[String, Map[String, String]] = {
     Try {
       val url = new URL(registrationEndpoint)
       val conn = url.openConnection().asInstanceOf[HttpURLConnection]
@@ -116,18 +138,15 @@ object ClientAuthService {
       conn.setRequestProperty("Content-Type", "application/json")
       conn.setRequestProperty("Accept", "application/json")
 
-      // Build a minimal JSON body. We expect metadata keys like "redirect_uris[0]" and "grant_types[0]" to be present.
-      val redirectUris = Seq(redirectUri)
-      val redirectJson = redirectUris.map(u => s"\"$u\"").mkString("[", ",", "]")
-      val jsonBody = new StringBuilder
-      jsonBody.append("{")
-      jsonBody.append("\"client_name\":\"turnstile-client\",")
-      jsonBody.append("\"redirect_uris\":" + redirectJson + ",")
-      jsonBody.append("\"grant_types\":[\"authorization_code\"],")
-      jsonBody.append("\"token_endpoint_auth_method\":\"client_secret_basic\"")
-      jsonBody.append("}")
+      // Build JSON body using circe to ensure correctness
+      val bodyJson = Json.obj(
+        ("client_name", Json.fromString("turnstile-client")),
+        ("redirect_uris", Json.arr(Json.fromString(redirectUri))),
+        ("grant_types", Json.arr(Json.fromString("authorization_code"))),
+        ("token_endpoint_auth_method", Json.fromString("client_secret_basic"))
+      )
 
-      val bytes = jsonBody.toString().getBytes("UTF-8")
+      val bytes = bodyJson.noSpaces.getBytes("UTF-8")
       conn.getOutputStream.write(bytes)
       conn.getOutputStream.close()
 
@@ -140,19 +159,14 @@ object ClientAuthService {
       reader.close()
       val resp = sb.toString()
 
-      // Extract common string fields from JSON response
-      val clientIdPattern = """"client_id"\s*:\s*"([^\"]+)"""".r
-      val clientSecretPattern = """"client_secret"\s*:\s*"([^\"]+)"""".r
-      val registrationUriPattern = """"registration_client_uri"\s*:\s*"([^\"]+)"""".r
-
-      val mClientId = clientIdPattern.findFirstMatchIn(resp).map(_.group(1))
-      val mClientSecret = clientSecretPattern.findFirstMatchIn(resp).map(_.group(1))
-      val mRegistrationUri = registrationUriPattern.findFirstMatchIn(resp).map(_.group(1))
-
+      // Decode DCR response into typed model using circe.decode
       val out = scala.collection.mutable.Map.empty[String, String]
-      mClientId.foreach(v => out.put("client_id", v))
-      mClientSecret.foreach(v => out.put("client_secret", v))
-      mRegistrationUri.foreach(v => out.put("registration_client_uri", v))
+      io.circe.parser.decode[DcrResponse](resp).toOption.foreach { d =>
+        d.client_id.foreach(v => out.put("client_id", v))
+        d.client_secret.foreach(v => out.put("client_secret", v))
+        d.registration_client_uri.foreach(v => out.put("registration_client_uri", v))
+        d.token_endpoint.foreach(v => out.put("token_endpoint", v))
+      }
 
       (status, out.toMap)
     }.fold[Either[String, Map[String, String]]](t => Left(t.getMessage), {
@@ -163,33 +177,40 @@ object ClientAuthService {
 
    // Fetch a well-known OpenID Connect configuration and extract string-valued keys into a simple Map.
    // This is a lightweight parser (no JSON dependency): it extracts string fields only.
-   private def fetchWellKnown(domain: String): Either[String, Map[String, String]] = {
-     Try {
-       val base = if (domain.startsWith("http://") || domain.startsWith("https://")) domain else s"https://$domain"
-       val urlStr = if (base.contains(".well-known")) base else s"${base.stripSuffix("/")}/.well-known/openid-configuration"
-       val url = new URL(urlStr)
-       val conn = url.openConnection().asInstanceOf[HttpURLConnection]
-       conn.setRequestMethod("GET")
-       conn.setRequestProperty("Accept", "application/json")
-       conn.setConnectTimeout(5000)
-       conn.setReadTimeout(5000)
+   private def fetchWellKnown(
+     domain: String
+   ): Either[String, Map[String, String]] = {
+      Try {
+        val base = if (domain.startsWith("http://") || domain.startsWith("https://")) domain else s"https://$domain"
+        val urlStr = if (base.contains(".well-known")) base else s"${base.stripSuffix("/")}/.well-known/openid-configuration"
+        val url = new URL(urlStr)
+        val conn = url.openConnection().asInstanceOf[HttpURLConnection]
+        conn.setRequestMethod("GET")
+        conn.setRequestProperty("Accept", "application/json")
+        conn.setConnectTimeout(5000)
+        conn.setReadTimeout(5000)
 
-       val status = conn.getResponseCode
-       val is = if (status >= 200 && status < 300) conn.getInputStream else conn.getErrorStream
-       val reader = new BufferedReader(new InputStreamReader(is, "UTF-8"))
-       val sb = new StringBuilder
-       var line: String = null
-       while ({ line = reader.readLine(); line != null }) sb.append(line)
-       reader.close()
-       val resp = sb.toString()
+        val status = conn.getResponseCode
+        val is = if (status >= 200 && status < 300) conn.getInputStream else conn.getErrorStream
+        val reader = new BufferedReader(new InputStreamReader(is, "UTF-8"))
+        val sb = new StringBuilder
+        var line: String = null
+        while ({ line = reader.readLine(); line != null }) sb.append(line)
+        reader.close()
+        val resp = sb.toString()
 
-       // crude JSON string-field extractor: "key" : "value"
-       val pattern = "\"([A-Za-z0-9_]+)\"\\s*:\\s*\"([^\"]*)\"".r
-       val map = pattern.findAllMatchIn(resp).map(m => m.group(1) -> m.group(2)).toMap
-       (status, map)
-     }.fold(t => Left(t.getMessage), { case (status, map) =>
-       if (status >= 200 && status < 300) Right(map) else Left(s"HTTP $status")
-     })
+        // Decode discovery JSON into typed model and extract known fields
+        val map = io.circe.parser.decode[Discovery](resp).toOption.map { d =>
+          val m = scala.collection.mutable.Map.empty[String, String]
+          d.authorization_endpoint.foreach(v => m.put("authorization_endpoint", v))
+          d.token_endpoint.foreach(v => m.put("token_endpoint", v))
+          d.registration_endpoint.foreach(v => m.put("registration_endpoint", v))
+          m.toMap
+        }.getOrElse(Map.empty)
+        (status, map)
+      }.fold(t => Left(t.getMessage), { case (status, map) =>
+        if (status >= 200 && status < 300) Right(map) else Left(s"HTTP $status")
+      })
    }
 
    private def printUsage(): Unit = {
@@ -206,7 +227,9 @@ object ClientAuthService {
      println(usage)
    }
 
-   private def runAuthCodeFlow(cfg: Config): Either[String, Option[TokenResponse]] = {
+   private def runAuthCodeFlow(
+     cfg: Config
+   ): Either[String, Option[TokenResponse]] = {
      val redirectUri = s"http://${cfg.redirectHost}:${cfg.redirectPort}${cfg.redirectPath}"
      val state = java.util.UUID.randomUUID().toString
 
@@ -279,7 +302,13 @@ object ClientAuthService {
      )
    }
 
-   private def buildAuthorizationUrl(authEndpoint: String, clientId: String, redirectUri: String, scope: String, state: String): String = {
+   private def buildAuthorizationUrl(
+     authEndpoint: String,
+     clientId: String,
+     redirectUri: String,
+     scope: String,
+     state: String
+   ): String = {
      val params = Map(
        "response_type" -> "code",
        "client_id" -> clientId,
@@ -290,9 +319,13 @@ object ClientAuthService {
      if (authEndpoint.contains("?")) s"$authEndpoint&$params" else s"$authEndpoint?$params"
    }
 
-   private def urlEncode(s: String): String = java.net.URLEncoder.encode(s, "UTF-8")
+   private def urlEncode(
+     s: String
+   ): String = java.net.URLEncoder.encode(s, "UTF-8")
 
-   private def openInBrowser(url: String): Unit = {
+   private def openInBrowser(
+     url: String
+   ): Unit = {
      Try {
        if (Desktop.isDesktopSupported) {
          try {
@@ -324,7 +357,11 @@ object ClientAuthService {
      }
    }
 
-   private def startCallbackServer(port: Int, path: String, onParams: Map[String, String] => Unit): HttpServer = {
+   private def startCallbackServer(
+     port: Int,
+     path: String,
+     onParams: Map[String, String] => Unit
+   ): HttpServer = {
      val server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0)
 
      server.createContext(path, (exchange: HttpExchange) => {
@@ -364,7 +401,9 @@ object ClientAuthService {
      server
    }
 
-   private def parseQuery(query: String): Map[String, String] = {
+   private def parseQuery(
+     query: String
+   ): Map[String, String] = {
      if (query.isEmpty) Map.empty
      else {
        query.split("&").toList.flatMap { part =>
@@ -377,7 +416,13 @@ object ClientAuthService {
      }
    }
 
-   private def exchangeAuthorizationCode(tokenUrl: String, clientId: String, clientSecretOpt: Option[String], code: String, redirectUri: String): Either[String, TokenResponse] = {
+   private def exchangeAuthorizationCode(
+     tokenUrl: String,
+     clientId: String,
+     clientSecretOpt: Option[String],
+     code: String,
+     redirectUri: String
+   ): Either[String, TokenResponse] = {
      Try {
        val url = new URL(tokenUrl)
        val conn = url.openConnection().asInstanceOf[HttpURLConnection]
@@ -408,13 +453,8 @@ object ClientAuthService {
 
        if (status < 200 || status >= 300) Left(s"HTTP $status: $resp")
        else {
-         val accessTokenPattern = "\"access_token\"\\s*:\\s*\"([^\"]+)\"".r
-         val refreshTokenPattern = "\"refresh_token\"\\s*:\\s*\"([^\"]+)\"".r
-
-         val accessToken = accessTokenPattern.findFirstMatchIn(resp).map(_.group(1))
-         val refreshToken = refreshTokenPattern.findFirstMatchIn(resp).map(_.group(1))
-
-         accessToken.map(at => TokenResponse(at, refreshToken)).toRight("Access token not found in response")
+         // Decode token response JSON into TokenResponse directly
+         decode[TokenResponse](resp).left.map(_.getMessage)
        }
      }.toEither.left.map(_.getMessage).flatMap(identity)
    }
@@ -459,8 +499,8 @@ object ClientAuthService {
     connect(mcpUrl, clientId, clientSecret, scope, port) match {
       case Right(tokenResponse) =>
         logger.info(s"Successfully obtained tokens:")
-        logger.info(s"  Access Token: ${tokenResponse.accessToken}")
-        tokenResponse.refreshToken.foreach(rt => logger.info(s"  Refresh Token: $rt"))
+        logger.info(s"  Access Token: ${tokenResponse.access_token}")
+        tokenResponse.refresh_token.foreach(rt => logger.info(s"  Refresh Token: $rt"))
         System.exit(0)
       case Left(err) =>
         logger.error(s"Connection failed: $err")

@@ -24,6 +24,7 @@ object Dependencies {
   val pekkoGrpcVersion = "1.1.1"
   val akkaManagementVersion = "1.1.1"
   val json4sJacksonVersion = "4.0.7"
+  val circeVersion = "0.14.6"
   val logbackVersion = "1.5.15"
   val scalaLoggingVersion = "3.9.5"
   val scalaMockVersion = "6.1.1"
@@ -81,6 +82,11 @@ object Dependencies {
     "org.apache.pekko" %% "pekko-management-cluster-bootstrap" % akkaManagementVersion,
     "org.apache.pekko" %% "pekko-discovery-kubernetes-api" % akkaManagementVersion,
     "org.json4s" %% "json4s-jackson" % json4sJacksonVersion,
+    // Circe for JSON parsing/encoding used by ClientAuthService
+    "io.circe" %% "circe-core" % circeVersion,
+    "io.circe" %% "circe-parser" % circeVersion,
+    "io.circe" %% "circe-generic" % circeVersion,
+    // (using io.circe.generic.auto._ instead of circe-generic-extras)
     "ch.qos.logback" % "logback-classic" % logbackVersion,
     "com.github.jwt-scala" %% "jwt-play-json" % jwtScalaVersion,
     "com.github.jwt-scala" %% "jwt-core" % jwtScalaVersion,

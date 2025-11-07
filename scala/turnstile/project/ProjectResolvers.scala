@@ -20,8 +20,11 @@ import sbt.*
 
 object ProjectResolvers {
   val publicAkkaRepo = "Akka library repository".at("https://repo.org.apache.pekko.io/maven")
+  val mavenCentral = "Maven Central" at "https://repo1.maven.org/maven2/"
 
+  // Include Maven Central so common OSS artifacts (circe, etc.) are resolvable.
   val resolvers = Seq(
+    mavenCentral,
     publicAkkaRepo
   )
 }
