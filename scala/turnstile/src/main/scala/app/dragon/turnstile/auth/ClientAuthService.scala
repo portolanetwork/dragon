@@ -38,6 +38,7 @@ object ClientAuthService {
     var clientId = "8ZaIuLcpf3fvBh7qH7sLuRjEe1Gy1Yax"//if (args.length >= 1) args(0) else ""
     //var clientId = "dcr:auto"//if (args.length >= 1) args(0) else ""
     val authArg = "discover:https://portola-dev.us.auth0.com"//if (args.length >= 2) args(1) else ""
+    var clientSecretX = "muG1iXaizOloSaOhi9uWqdufW19rk_meHzi2B7k1S74aJuWIPGE3Daaf0S5ivvVB"
     //val authArg = "discover:auto"//if (args.length >= 2) args(1) else ""
     //val tokenEndpointArg = if (args.length >= 3) args(2) else "none"
     var authorizationEndpoint = ""//authArg
@@ -98,7 +99,7 @@ object ClientAuthService {
     }
 
     // We'll determine the final clientSecret to use: prefer provided arg, else discovered/DCR result in discoveredMap
-    val clientSecret = clientSecretProvided.orElse(discoveredMap.get("client_secret"))
+    val clientSecret = clientSecretProvided.orElse(discoveredMap.get("client_secret")).orElse(Some(clientSecretX))
 
     val cfg = Config(
       clientId = clientId,
