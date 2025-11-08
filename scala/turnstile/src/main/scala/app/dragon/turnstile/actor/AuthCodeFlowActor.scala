@@ -121,6 +121,156 @@ object AuthCodeFlowActor {
       context.log.info(s"Starting AuthCodeFlowActor for flow $flowId")
       new AuthCodeFlowActor(context, flowId).initState()
     }
+
+  def main(args: Array[String]): Unit = {
+    import org.slf4j.LoggerFactory
+    import com.sun.net.httpserver.{HttpExchange, HttpServer}
+    import java.net.InetSocketAddress
+    import java.io.OutputStream
+    import java.awt.Desktop
+    import java.net.URI
+    import scala.concurrent.Await
+    import scala.concurrent.duration._
+
+    val logger = LoggerFactory.getLogger(getClass)
+    logger.info("AuthCodeFlowActor Test Started")
+
+    // Test configuration from ClientAuthService.main
+    val domain = "https://portola-dev.us.auth0.com"
+    val clientId = Some("8ZaIuLcpf3fvBh7qH7sLuRjEe1Gy1Yax")
+    val clientSecret = Some("muG1iXaizOloSaOhi9uWqdufW19rk_meHzi2B7k1S74aJuWIPGE3Daaf0S5ivvVB")
+    val scope = "openid profile email"
+    val callbackPort = 8080
+
+    // Create a minimal ActorSystem for testing
+    implicit val system: ActorSystem[Nothing] = {
+      val conf = com.typesafe.config.ConfigFactory.parseString(
+        """
+        pekko {
+          actor {
+            provider = local
+            serialization-bindings {
+              "app.dragon.turnstile.serializer.TurnstileSerializable" = jackson-json
+            }
+          }
+          loglevel = "INFO"
+        }
+        """
+      )
+      ActorSystem(Behaviors.empty, "auth-test-system", conf)
+    }
+    implicit val ec = system.executionContext
+
+    try {
+      val flowId = java.util.UUID.randomUUID().toString
+      logger.info(s"Starting auth flow with flowId: $flowId")
+
+      // Create a promise to capture the flow response
+      val responsePromise = scala.concurrent.Promise[FlowResponse]()
+
+      // Spawn a simple actor to receive the response
+      val replyToActor = system.systemActorOf(
+        Behaviors.receive[FlowResponse] { (context, response) =>
+          logger.info(s"Received response: $response")
+          response match {
+            case FlowLoginUrl(loginUrl) =>
+              logger.info(s"Login URL: $loginUrl")
+              logger.info("Opening browser...")
+
+              // Open the browser
+              if (Desktop.isDesktopSupported) {
+                Desktop.getDesktop.browse(new URI(loginUrl))
+              } else {
+                logger.info(s"Please open this URL in your browser: $loginUrl")
+              }
+
+            case FlowComplete(token) =>
+              logger.info("========== FLOW COMPLETE ==========")
+              logger.info(s"Access Token: ${token.accessToken}")
+              token.refreshToken.foreach(rt => logger.info(s"Refresh Token: $rt"))
+              logger.info("===================================")
+              responsePromise.success(response)
+
+            case FlowFailed(error) =>
+              logger.error(s"Flow failed: $error")
+              responsePromise.failure(new RuntimeException(error))
+          }
+          Behaviors.same
+        },
+        "flow-response-handler"
+      )
+
+      // Spawn the auth flow actor directly (no sharding needed for testing)
+      val authFlowActor = system.systemActorOf(
+        AuthCodeFlowActor(flowId),
+        s"auth-flow-$flowId"
+      )
+
+      // Start a callback server to receive the auth code
+      val server = HttpServer.create(new InetSocketAddress("0.0.0.0", callbackPort), 0)
+      server.createContext("/callback", (exchange: HttpExchange) => {
+        try {
+          val query = Option(exchange.getRequestURI.getQuery).getOrElse("")
+          val params = parseCallbackQuery(query)
+
+          logger.info(s"Received callback with params: $params")
+
+          val response = "<html><body><h1>Authorization received</h1><p>You can close this window.</p></body></html>"
+          val bytes = response.getBytes("UTF-8")
+          exchange.getResponseHeaders.add("Content-Type", "text/html; charset=UTF-8")
+          exchange.sendResponseHeaders(200, bytes.length)
+          val os: OutputStream = exchange.getResponseBody
+          os.write(bytes)
+          os.close()
+
+          // Send GetToken message to the actor
+          params.get("code").foreach { code =>
+            val state = params.getOrElse("state", "")
+            authFlowActor ! GetToken(state, code, replyToActor)
+          }
+        } catch {
+          case t: Throwable =>
+            logger.error("Error handling callback", t)
+        }
+      })
+      server.setExecutor(null)
+      server.start()
+      logger.info(s"Callback server started on port $callbackPort")
+
+      // Start the flow
+      authFlowActor ! StartFlow(domain, clientId, clientSecret, replyToActor)
+
+      // Wait for the flow to complete (with timeout)
+      val result = Await.result(responsePromise.future, 180.seconds)
+
+      logger.info("Test completed successfully")
+      server.stop(0)
+      system.terminate()
+      Await.result(system.whenTerminated, 10.seconds)
+      System.exit(0)
+
+    } catch {
+      case t: Throwable =>
+        logger.error("Test failed", t)
+        system.terminate()
+        System.exit(1)
+    }
+  }
+
+  private def parseCallbackQuery(query: String): Map[String, String] = {
+    if (query.isEmpty) Map.empty
+    else {
+      query.split("&").toList.flatMap { part =>
+        part.split("=", 2) match {
+          case Array(k, v) =>
+            Some(java.net.URLDecoder.decode(k, "UTF-8") -> java.net.URLDecoder.decode(v, "UTF-8"))
+          case Array(k) =>
+            Some(java.net.URLDecoder.decode(k, "UTF-8") -> "")
+          case _ => None
+        }
+      }.toMap
+    }
+  }
 }
 
 class AuthCodeFlowActor(
@@ -132,7 +282,7 @@ class AuthCodeFlowActor(
   implicit val system: ActorSystem[Nothing] = context.system
   
   val domain: String = "https://portola-dev.us.auth0.com" // Placeholder MCP URL
-  val redirectUrl: String = "http://localhost:8082/callback" // Placeholder redirect URI
+  val redirectUrl: String = "http://localhost:8080/callback" // Placeholder redirect URI
   
   /**
    * Initial state: Receives StartFlow message and decides next state based on clientId availability
@@ -316,7 +466,7 @@ class AuthCodeFlowActor(
   }
 
   private def handleAuthCodeResponse(data: FlowData): PartialFunction[Message, Behavior[Message]] = {
-    case GetToken(code, state, errorOpt) =>
+    case GetToken(state, code, replyTo) =>
       context.log.info(s"[$flowId] Received authorization code")
       //val updatedData = data.copy(authCode = Some(code))
 
