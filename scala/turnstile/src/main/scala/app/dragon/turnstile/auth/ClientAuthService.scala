@@ -47,13 +47,13 @@ object ClientAuthService {
     refresh_token: Option[String]
   )
 
-  private case class Discovery(
+  case class DiscoveryResponse(
     authorization_endpoint: Option[String],
     token_endpoint: Option[String],
     registration_endpoint: Option[String]
   )
 
-  private case class DcrResponse(
+  case class DcrResponse(
     client_id: Option[String],
     client_secret: Option[String],
     registration_client_uri: Option[String],
@@ -106,7 +106,7 @@ object ClientAuthService {
                     case None => Left("DCR requested but no registration_endpoint found in discovery document")
                     case Some(registrationEndpoint) =>
                       val redirectUri = s"http://localhost:${redirectPort}/callback"
-                      val dcrEither = Await.result(performDynamicClientRegistration(registrationEndpoint, redirectUri, Map.empty)(system), 20.seconds)
+                      val dcrEither = Await.result(performDynamicClientRegistration(registrationEndpoint, redirectUri)(system), 20.seconds)
                       dcrEither match {
                         case Left(err) => Left(s"Dynamic client registration failed: $err")
                         case Right(dcrResp) =>
@@ -169,10 +169,10 @@ object ClientAuthService {
 
   // Perform dynamic client registration (DCR) by POSTing JSON metadata to the registration endpoint.
   // Returns a DcrResponse on success.
-  private def performDynamicClientRegistration(
+  def performDynamicClientRegistration(
     registrationEndpoint: String,
     redirectUri: String,
-    metadata: Map[String, String]
+    //metadata: Map[String, String]
   )(
     implicit system: ActorSystem[Nothing]
   ): Future[Either[String, DcrResponse]] = {
@@ -210,11 +210,11 @@ object ClientAuthService {
    // Fetch a well-known OpenID Connect configuration and return the parsed Discovery case class.
    // Implemented using Apache Pekko HTTP instead of STTP. This creates a short-lived ActorSystem
    // to perform the request, parses the JSON with circe, and then terminates the ActorSystem.
-  private def fetchWellKnown(
+  def fetchWellKnown(
     domain: String
   )(
       implicit system: ActorSystem[Nothing],
-    ): Future[Either[String, Discovery]] = {
+    ): Future[Either[String, DiscoveryResponse]] = {
     val url = createWellKnownUrl_OpenIdCOnfiguration(domain)
 
     Http().singleRequest(HttpRequest(uri = url))
@@ -222,7 +222,7 @@ object ClientAuthService {
         res.entity.toStrict(10.seconds).map { entity =>
           val body = entity.data.utf8String
           if (res.status.isSuccess())
-            io.circe.parser.decode[Discovery](body).left.map(e => s"Failed to parse discovery: ${e.getMessage}")
+            io.circe.parser.decode[DiscoveryResponse](body).left.map(e => s"Failed to parse discovery: ${e.getMessage}")
           else
             Left(s"HTTP ${res.status.intValue()}")
         }
@@ -250,7 +250,7 @@ object ClientAuthService {
   
   private def getAuthUrl(
     clientId: String,
-    discovery: Discovery,
+    discovery: DiscoveryResponse,
     redirectUrl: String,
     scope: String
   ): Try[String] = {
@@ -343,7 +343,7 @@ object ClientAuthService {
      )
    }
 
-   private def buildAuthorizationUrl(
+   def buildAuthorizationUrl(
      authEndpoint: String,
      clientId: String,
      redirectUri: String,
@@ -457,7 +457,7 @@ object ClientAuthService {
      }
    }
 
-   private def exchangeAuthorizationCode(
+   def exchangeAuthorizationCode(
      tokenUrl: String,
      clientId: String,
      clientSecretOpt: Option[String],
