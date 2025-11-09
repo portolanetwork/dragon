@@ -16,7 +16,7 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-package app.dragon.turnstile.example
+package app.dragon.turnstile.examples
 
 import app.dragon.turnstile.client.TurnstileStreamingHttpAsyncMcpClient
 import io.modelcontextprotocol.spec.McpSchema

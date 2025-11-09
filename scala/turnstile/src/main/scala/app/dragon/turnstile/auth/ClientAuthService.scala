@@ -54,10 +54,12 @@ object ClientAuthService {
   )
 
   case class DcrResponse(
+    client_name: Option[String],
     client_id: Option[String],
     client_secret: Option[String],
-    registration_client_uri: Option[String],
-    token_endpoint: Option[String]
+    redirect_uris : Option[List[String]],
+    token_endpoint_auth_method : Option[String],
+    client_secret_expires_at : Option[Int]
   )
 
   /**
@@ -68,6 +70,7 @@ object ClientAuthService {
    * @param clientSecret Optional client secret. Required if clientId is provided.
    * @return Future of Either an error message or TokenResponse with access and refresh tokens
    */
+  /*
   def connect(
     mcpUrl: String,
     clientId: Option[String],
@@ -166,6 +169,7 @@ object ClientAuthService {
         }(ec)
     }
   }
+  */
 
   // Perform dynamic client registration (DCR) by POSTing JSON metadata to the registration endpoint.
   // Returns a DcrResponse on success.
@@ -265,7 +269,7 @@ object ClientAuthService {
   }
   
   
-  
+  /*
 
   private def runAuthCodeFlow(
      cfg: Config
@@ -342,6 +346,8 @@ object ClientAuthService {
        }
      )
    }
+   
+   */
 
    def buildAuthorizationUrl(
      authEndpoint: String,
@@ -364,6 +370,7 @@ object ClientAuthService {
      s: String
    ): String = java.net.URLEncoder.encode(s, "UTF-8")
 
+  /*
    private def openInBrowser(
      url: String
    ): Unit = {
@@ -441,7 +448,10 @@ object ClientAuthService {
      logger.info(s"Started local callback server on port $port path $path")
      server
    }
+   
+   */
 
+  /*
    private def parseQuery(
      query: String
    ): Map[String, String] = {
@@ -456,6 +466,8 @@ object ClientAuthService {
        }.toMap
      }
    }
+   
+   */
 
    def exchangeAuthorizationCode(
      tokenUrl: String,
@@ -508,7 +520,7 @@ object ClientAuthService {
        .recover { case t => Left(t.getMessage) }
    }
 
-
+/*
   def main(args: Array[String]): Unit = {
     logger.info("ClientAuthService started")
 
@@ -582,4 +594,6 @@ object ClientAuthService {
         System.exit(1)
     }
   }
+  
+ */
 }
