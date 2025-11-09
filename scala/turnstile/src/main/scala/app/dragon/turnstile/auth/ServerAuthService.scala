@@ -74,9 +74,9 @@ object ServerAuthService {
     tokenOption match {
       case Some(authHeader) =>
         val tokenWithoutPrefix = authHeader.replace("Bearer ", "")
-        OAuthHelper.validateJwt(tokenWithoutPrefix) match {
+        ServerOAuthHelper.validateJwt(tokenWithoutPrefix) match {
           case Success(claims) =>
-            OAuthHelper.getUserIdFromClaims(claims) match {
+            ServerOAuthHelper.getUserIdFromClaims(claims) match {
               case Some(userId) => Right(AuthContext(userId, "default", claims))
               case None => Left(AccessDenied)
             }

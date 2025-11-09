@@ -20,7 +20,7 @@ package app.dragon.turnstile.gateway
 
 import app.dragon.turnstile.actor.{ActorLookup, McpServerActor}
 import app.dragon.turnstile.auth.ServerAuthService.{AccessDenied, MissingAuthHeader}
-import app.dragon.turnstile.auth.{ClientAuthService, ServerAuthService}
+import app.dragon.turnstile.auth.{ClientOAuthHelper, ServerAuthService}
 import app.dragon.turnstile.db.{DbInterface, DbNotFound}
 import com.typesafe.config.Config
 import org.apache.pekko.actor.typed.ActorSystem

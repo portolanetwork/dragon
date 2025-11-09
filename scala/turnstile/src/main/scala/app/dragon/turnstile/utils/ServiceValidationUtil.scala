@@ -18,7 +18,7 @@
 
 package app.dragon.turnstile.utils
 
-import app.dragon.turnstile.auth.OAuthHelper
+import app.dragon.turnstile.auth.ServerOAuthHelper
 import io.grpc.Status
 import org.apache.pekko.grpc.scaladsl.Metadata
 import pdi.jwt.JwtClaim

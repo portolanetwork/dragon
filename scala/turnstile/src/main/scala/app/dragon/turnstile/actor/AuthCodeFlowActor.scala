@@ -18,8 +18,8 @@
 
 package app.dragon.turnstile.actor
 
-import app.dragon.turnstile.auth.ClientAuthService
-import app.dragon.turnstile.auth.ClientAuthService.DiscoveryResponse
+import app.dragon.turnstile.auth.ClientOAuthHelper
+import app.dragon.turnstile.auth.ClientOAuthHelper.OpenIdConfigurationResponse
 import app.dragon.turnstile.serializer.TurnstileSerializable
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
@@ -77,14 +77,14 @@ object AuthCodeFlowActor {
     //authorizationEndpoint: String,
     //tokenEndpoint: String,
     //registrationEndpoint: Option[String],
-    clientDiscoveryResponse: ClientAuthService.DiscoveryResponse,
+    clientDiscoveryResponse: ClientOAuthHelper.OpenIdConfigurationResponse,
     replaysTo: ActorRef[FlowResponse]
   ) extends Message
 
   private final case class DcrResponse(
     //clientId: String,
     //clientSecret: String,
-    clientDcrResponse: ClientAuthService.DcrResponse,
+    clientDcrResponse: ClientOAuthHelper.DcrResponse,
     replyTo: ActorRef[FlowResponse]
   ) extends Message
 
@@ -107,7 +107,7 @@ object AuthCodeFlowActor {
 
     //authCode: Option[String] = None,
     token: Option[TokenResponse] = None,
-    wellKnownResponse: Option[DiscoveryResponse] = None,
+    wellKnownResponse: Option[OpenIdConfigurationResponse] = None,
     
     replyTo: Option[ActorRef[FlowResponse]] = None
   )
@@ -158,7 +158,7 @@ class AuthCodeFlowActor(
       // TODO: Trigger well-known lookup HTTP request
       
       // pass the actor system explicitly to the ClientAuthService call (it expects an implicit ActorSystem)
-      context.pipeToSelf(ClientAuthService.fetchWellKnown(msg.domain)) {
+      context.pipeToSelf(ClientOAuthHelper.fetchWellKnown(msg.domain)) {
         case Success(Right(discovery)) =>
             WellKnownResponse(
               //discovery.authorization_endpoint.getOrElse(""), 
@@ -214,7 +214,7 @@ class AuthCodeFlowActor(
         case Some(clientId) =>
           context.log.info(s"[$flowId] ClientId exists ($clientId), proceeding to auth code request")
           
-          val authUrl = ClientAuthService.buildAuthorizationUrl(
+          val authUrl = ClientOAuthHelper.buildAuthorizationUrl(
             discoveryResponse.authorization_endpoint.getOrElse(""),  // TODO: Handle missing endpoint
             clientId, 
             redirectUrl,
@@ -232,7 +232,7 @@ class AuthCodeFlowActor(
               context.log.info(s"[$flowId] No clientId, proceeding to DCR at $regEndpoint")
               // TODO: Trigger DCR request
               // pass actor system explicitly and fix typo (removed stray dot)
-              context.pipeToSelf(ClientAuthService.performDynamicClientRegistration(regEndpoint, redirectUrl)) {
+              context.pipeToSelf(ClientOAuthHelper.performDCR(regEndpoint, redirectUrl)) {
                 case Success(Right(dcrResp)) =>
                   DcrResponse(
                     //dcrResp.client_id.getOrElse(""), 
@@ -296,7 +296,7 @@ class AuthCodeFlowActor(
         case _ => context.log.debug(s"[$flowId] Redirect URI $redirectUrl is registered")
       }
 
-      val authUrl = ClientAuthService.buildAuthorizationUrl(
+      val authUrl = ClientOAuthHelper.buildAuthorizationUrl(
         data.wellKnownResponse.get.authorization_endpoint.getOrElse(""),  // TODO: Handle missing endpoint
         clientDcrResponse.client_id.getOrElse(""),
         redirectUrl,
@@ -341,7 +341,7 @@ class AuthCodeFlowActor(
       // TODO: Verify state matches
       
       
-      context.pipeToSelf(ClientAuthService.exchangeAuthorizationCode(
+      context.pipeToSelf(ClientOAuthHelper.exchangeAuthorizationCode(
         data.wellKnownResponse.get.token_endpoint.get,  // TODO: Handle missing token endpoint
         data.clientId.get,  // TODO: Handle missing clientId
         data.clientSecret,

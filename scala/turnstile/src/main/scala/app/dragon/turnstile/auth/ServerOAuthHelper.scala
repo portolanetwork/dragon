@@ -31,7 +31,7 @@ import scala.util.{Failure, Success, Try}
  * This service validates JWT tokens from Auth0, verifying the signature,
  * issuer, audience, and expiration claims.
  */
-object OAuthHelper {
+object ServerOAuthHelper {
 
   // A regex that defines the JWT pattern and allows us to
   // extract the header, claims and signature
