@@ -37,6 +37,7 @@ import java.util.UUID
  *   - client_id: OAuth client ID (optional)
  *   - client_secret: OAuth client secret (optional)
  *   - refresh_token: OAuth refresh token (optional)
+ *   - token_endpoint: OAuth token endpoint URL (optional)
  *   - created_at: Timestamp of creation
  *   - updated_at: Timestamp of last update
  *
@@ -59,6 +60,7 @@ import java.util.UUID
  * @param clientId OAuth client ID (optional)
  * @param clientSecret OAuth client secret (optional)
  * @param refreshToken OAuth refresh token (optional)
+ * @param tokenEndpoint OAuth token endpoint URL (optional)
  * @param createdAt Creation timestamp
  * @param updatedAt Last update timestamp
  */
@@ -72,6 +74,7 @@ case class McpServerRow(
   clientId: Option[String] = None,
   clientSecret: Option[String] = None,
   refreshToken: Option[String] = None,
+  tokenEndpoint: Option[String] = None,
   createdAt: Timestamp = new Timestamp(System.currentTimeMillis()),
   updatedAt: Timestamp = new Timestamp(System.currentTimeMillis())
 )
@@ -91,6 +94,7 @@ class McpServersTable(
   def clientId = column[Option[String]]("client_id")
   def clientSecret = column[Option[String]]("client_secret")
   def refreshToken = column[Option[String]]("refresh_token")
+  def tokenEndpoint = column[Option[String]]("token_endpoint")
   def createdAt = column[Timestamp]("created_at")
   def updatedAt = column[Timestamp]("updated_at")
 
@@ -106,7 +110,7 @@ class McpServersTable(
   // Unique index on (tenant, user_id, name)
   def idxTenantUserName = index("idx_mcp_servers_tenant_user_name", (tenant, userId, name), unique = true)
 
-  def * = (id, uuid, tenant, userId, name, url, clientId, clientSecret, refreshToken, createdAt, updatedAt).mapTo[McpServerRow]
+  def * = (id, uuid, tenant, userId, name, url, clientId, clientSecret, refreshToken, tokenEndpoint, createdAt, updatedAt).mapTo[McpServerRow]
 }
 
 /**

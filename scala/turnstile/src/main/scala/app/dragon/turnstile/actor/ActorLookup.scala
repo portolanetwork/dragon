@@ -113,4 +113,11 @@ object ActorLookup {
     implicit sharding: ClusterSharding
   ): EntityRef[McpSessionMapActor.Message] =
     sharding.entityRefFor(McpSessionMapActor.TypeKey, userId)
+    
+  def getAuthCodeFlowActor(
+    flowId: String
+  )(
+    implicit sharding: ClusterSharding
+  ): EntityRef[AuthCodeFlowActor.Message] =
+    sharding.entityRefFor(AuthCodeFlowActor.TypeKey, flowId)
 }
