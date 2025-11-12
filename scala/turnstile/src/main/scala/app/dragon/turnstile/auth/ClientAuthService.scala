@@ -38,8 +38,10 @@ object ClientAuthService {
   ): Future[Either[AuthError, String]] = {
     implicit val timeout: Timeout = Timeout(30.seconds)
 
+    val serverUuid = UUID.fromString(mcpServerUuid)
+
     for {
-      mcpServerRowEither <- DbInterface.findMcpServerByUuid(UUID.fromString(mcpServerUuid))
+      mcpServerRowEither <- DbInterface.findMcpServerByUuid(serverUuid)
       loginUrl <- mcpServerRowEither match {
         case Right(serverRow) =>
           val flowId = UUID.randomUUID().toString
@@ -51,13 +53,23 @@ object ClientAuthService {
               clientSecret = serverRow.clientSecret,
               replyTo = replyTo
             )
-          ).map {
+          ).flatMap {
             case AuthCodeFlowActor.FlowAuthResponse(loginUrl, tokenEndpoint, clientId, clientSecret) =>
-              Right(loginUrl)
+              // Update the database with OAuth configuration
+              DbInterface.updateMcpServerAuth(
+                uuid = serverUuid,
+                clientId = clientId,
+                clientSecret = clientSecret,
+                refreshToken = None,
+                tokenEndpoint = Some(tokenEndpoint)
+              ).map {
+                case Right(_) => Right(loginUrl)
+                case Left(dbError) => Left(DatabaseError(s"Failed to update OAuth config: ${dbError.message}"))
+              }
             case AuthCodeFlowActor.FlowFailed(error) =>
-              Left(AuthFlowFailed(s"Auth flow failed: $error"))
+              Future.successful(Left(AuthFlowFailed(s"Auth flow failed: $error")))
             case AuthCodeFlowActor.FlowComplete(_) =>
-              Left(AuthFlowFailed("Unexpected FlowComplete response during flow initiation"))
+              Future.successful(Left(AuthFlowFailed("Unexpected FlowComplete response during flow initiation")))
           }
 
         case Left(dbError) =>

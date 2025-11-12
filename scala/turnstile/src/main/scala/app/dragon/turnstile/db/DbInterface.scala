@@ -165,11 +165,12 @@ object DbInterface {
   }
 
   /**
-   * Updates OAuth credentials (clientId, clientSecret, refreshToken) for an MCP server by UUID.
+   * Updates OAuth credentials (clientId, clientSecret, refreshToken, tokenEndpoint) for an MCP server by UUID.
    * @param uuid The UUID of the server to update
    * @param clientId The OAuth client ID
    * @param clientSecret The OAuth client secret
    * @param refreshToken The OAuth refresh token
+   * @param tokenEndpoint The OAuth token endpoint
    * @param db The database instance
    * @param ec ExecutionContext
    * @return `Future[Either[DbError, Int]]` number of rows updated or DbError
@@ -178,14 +179,15 @@ object DbInterface {
     uuid: UUID,
     clientId: String,
     clientSecret: Option[String],
-    refreshToken: Option[String]
+    refreshToken: Option[String],
+    tokenEndpoint: Option[String] = None
   )(
     implicit db: Database, ec: ExecutionContext
   ): Future[Either[DbError, Int]] = {
     val updateAction = Tables.mcpServers
       .filter(_.uuid === uuid)
-      .map(s => (s.clientId, s.clientSecret, s.refreshToken, s.updatedAt))
-      .update((Some(clientId), clientSecret, refreshToken, new java.sql.Timestamp(System.currentTimeMillis())))
+      .map(s => (s.clientId, s.clientSecret, s.refreshToken, s.tokenEndpoint, s.updatedAt))
+      .update((Some(clientId), clientSecret, refreshToken, tokenEndpoint, new java.sql.Timestamp(System.currentTimeMillis())))
     db.run(updateAction).map(Right(_): Either[DbError, Int]).recover {
       case NonFatal(t) => Left(mapDbError(t))
     }
