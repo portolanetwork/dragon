@@ -132,7 +132,7 @@ class AuthCodeFlowActor(
 
   implicit val system: ActorSystem[Nothing] = context.system
   
-  val domain: String = "https://portola-dev.us.auth0.com" // Placeholder MCP URL
+  //val domain: String = "https://portola-dev.us.auth0.com" // Placeholder MCP URL
   val redirectUrl: String = "http://localhost:8080/callback" // Placeholder redirect URI
   
   /**
