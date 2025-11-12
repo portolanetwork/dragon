@@ -108,9 +108,12 @@ class TurnstileServerIntegrationSpec
   override def beforeAll(): Unit = {
     super.beforeAll()
 
+    // Create test database instance first (needed for actor initialization)
+    implicit val db: Database = Database.forConfig("", ApplicationConfig.db)
+
     // Initialize cluster sharding for MCP actors
     McpServerActor.initSharding(system)
-    McpClientActor.initSharding(system)
+    McpClientActor.initSharding(system, db)
     McpSessionMapActor.initSharding(system)
 
     // Join the cluster
@@ -120,9 +123,6 @@ class TurnstileServerIntegrationSpec
 
     // Wait for cluster to be up
     Thread.sleep(3000)
-
-    // Create test database instance
-    implicit val db: Database = Database.forConfig("", ApplicationConfig.db)
 
     // Start MCP Gateway
     mcpGateway = TurnstileMcpGateway(

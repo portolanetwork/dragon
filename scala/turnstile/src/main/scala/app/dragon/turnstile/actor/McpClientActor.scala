@@ -18,13 +18,16 @@
 
 package app.dragon.turnstile.actor
 
+import app.dragon.turnstile.auth.ClientAuthService
 import app.dragon.turnstile.client.TurnstileStreamingHttpAsyncMcpClient
 import app.dragon.turnstile.serializer.TurnstileSerializable
 import io.modelcontextprotocol.spec.McpSchema
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityTypeKey}
+import slick.jdbc.JdbcBackend.Database
 
+import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -34,13 +37,13 @@ import scala.util.{Failure, Success, Try}
  * This allows for user-scoped client isolation when connecting to downstream MCP servers.
  *
  * @param userId The user identifier
- * @param mcpClientActorId The unique actor identifier (typically the downstream server UUID)
+ * @param mcpServerUuid The unique actor identifier (typically the downstream server UUID)
  */
 case class McpClientActorId(
   userId: String, 
-  mcpClientActorId: String
+  mcpServerUuid: String
 ) {
-  override def toString: String = s"$userId-$mcpClientActorId"
+  override def toString: String = s"$userId-$mcpServerUuid"
 }
 
 object McpClientActorId {
@@ -53,22 +56,22 @@ object McpClientActorId {
   def fromString(
     entityId: String
   ): McpClientActorId = {
-    val Array(userId, mcpClientActorId) = entityId.split("-", 2)
-    McpClientActorId(userId, mcpClientActorId)
+    val Array(userId, mcpServerUuid) = entityId.split("-", 2)
+    McpClientActorId(userId, mcpServerUuid)
   }
 
   /**
    * Construct an entity ID string from components.
    *
    * @param userId The user identifier
-   * @param clientId The client identifier
+   * @param mcpServerUuid The client identifier
    * @return Entity ID string
    */
   def getEntityId(
-    userId: String, 
-    clientId: String
+    userId: String,
+    mcpServerUuid: String
   ): String =
-    s"$userId-$clientId"
+    s"$userId-$mcpServerUuid"
 }
 
 /**
@@ -123,17 +126,21 @@ object McpClientActor {
   val TypeKey: EntityTypeKey[McpClientActor.Message] =
     EntityTypeKey[McpClientActor.Message]("McpClientActor")
 
-  def initSharding(system: ActorSystem[?]): Unit =
+  def initSharding(
+    system: ActorSystem[?],
+    db: Database
+  ): Unit =
     ClusterSharding(system).init(Entity(TypeKey) { entityContext =>
       val id = McpClientActorId.fromString(entityContext.entityId)
 
-      McpClientActor(id.userId, id.mcpClientActorId)
+      McpClientActor(id.userId, id.mcpServerUuid, db)
     })
 
   sealed trait Message extends TurnstileSerializable
 
   final case class Initialize(
-    serverUrl: String,
+    mcpServerUuid: String,
+    mcpServerUrl: String
   ) extends Message
 
   final case class McpToolCallRequest(
@@ -193,6 +200,7 @@ object McpClientActor {
   def apply(
     userId: String,
     mcpClientActorId: String,
+    db: Database
   ): Behavior[Message] = {
     Behaviors.withStash(100) { buffer =>
       Behaviors.setup { context =>
@@ -201,10 +209,7 @@ object McpClientActor {
 
         context.log.info(s"Creating MCP client actor for user $userId, client $mcpClientActorId")
 
-        // Create the client
-        //val mcpClient = TurnstileStreamingHttpAsyncMcpClient(serverUrl)
-
-        new McpClientActor(context, buffer, userId, mcpClientActorId).initWaitState()
+        new McpClientActor(context, buffer, userId, mcpClientActorId, db).initWaitState()
       }
     }
   }
@@ -215,11 +220,14 @@ class McpClientActor(
   buffer: StashBuffer[McpClientActor.Message],
   userId: String,
   mcpClientActorId: String,
+  db: Database
 ) {
 
   import McpClientActor.*
 
   implicit val ec: scala.concurrent.ExecutionContext = context.executionContext
+  implicit val database: Database = db
+  implicit val system: ActorSystem[Nothing] = context.system
 
   /**
    * State while waiting for client initialization.
@@ -263,10 +271,16 @@ class McpClientActor(
 
   def handleInitialize(
   ): PartialFunction[Message, Behavior[Message]] = {
-    case Initialize(serverUrl: String) =>
-      context.log.info(s"Initializing MCP client actor $mcpClientActorId with server URL $serverUrl")
+    case Initialize(mcpServerUuid, mcpServerUrl) =>
+      val authTokenProvider: Option[() => Future[String]] = getAccessToken(mcpServerUuid)
+      
+      val authInfo = if (authTokenProvider.isDefined) "with authentication" else "without authentication"
+      context.log.info(s"Initializing MCP client actor $mcpClientActorId with server URL $mcpServerUrl $authInfo")
 
-      val mcpClient = TurnstileStreamingHttpAsyncMcpClient(serverUrl)
+      val mcpClient = TurnstileStreamingHttpAsyncMcpClient(
+        serverUrl = mcpServerUrl,
+        authTokenProvider = authTokenProvider
+      )
 
       context.pipeToSelf(mcpClient.initialize()) {
         case Success(initResult) =>
@@ -436,5 +450,20 @@ class McpClientActor(
       }
 
       activeState(mcpClient)
+  }
+
+  private def getAccessToken(
+    mcpServerUuid: String
+  ): Option[() => Future[String]] = {
+    Some(() => {
+      ClientAuthService.getAuthToken(mcpServerUuid).map {
+        case Left(error) =>
+          // Log error and throw exception
+          // The asyncHttpRequestCustomizer will catch this and log it
+          throw new RuntimeException(s"Failed to get access token: ${error.toString}")
+        case Right(authToken) =>
+          authToken.accessToken
+      }
+    })
   }
 }

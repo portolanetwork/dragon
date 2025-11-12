@@ -103,7 +103,8 @@ object ClientOAuthHelper {
   )(
     implicit system: ActorSystem[Nothing],
   ): Future[Either[String, OpenIdConfigurationResponse]] = {
-    val url = getOpenIdCOnfigurationUrl(domain)
+    //val url = getOpenIdCOnfigurationUrl(domain)
+    val url = getOAuthAuthorizationServerUrl(domain)
 
     Http().singleRequest(HttpRequest(uri = url))
       .flatMap { res =>
@@ -116,6 +117,24 @@ object ClientOAuthHelper {
         }
       }
       .recover { case t => Left(t.getMessage) }
+  }
+
+
+  private def getOAuthAuthorizationServerUrl(
+    domain: String
+  ): String = {
+    // Ensure we have a scheme
+    val normalized =
+      if (domain.startsWith("http://") || domain.startsWith("https://")) domain
+      else s"https://$domain"
+
+    // Parse and reconstruct base (scheme + authority only)
+    val uri = new URI(normalized)
+    val port = if (uri.getPort == -1) "" else s":${uri.getPort}"
+
+    val base = s"${uri.getScheme}://${uri.getHost}${port}"
+
+    s"$base/.well-known/oauth-authorization-server"
   }
 
 

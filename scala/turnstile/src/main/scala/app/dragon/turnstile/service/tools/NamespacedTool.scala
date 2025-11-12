@@ -46,7 +46,7 @@ class NamespacedTool(
   mcpServerUuid: String
 )(
   implicit system: ActorSystem[?]
-) extends McpTool {
+) extends McpTool { 
 
   implicit val timeout: Timeout = 30.seconds
   implicit val sharding: ClusterSharding = ClusterSharding(system)

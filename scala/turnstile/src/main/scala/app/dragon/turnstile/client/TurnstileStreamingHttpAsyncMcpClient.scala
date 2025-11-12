@@ -19,6 +19,7 @@
 package app.dragon.turnstile.client
 
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport
+import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer
 import io.modelcontextprotocol.client.{McpAsyncClient, McpClient}
 import io.modelcontextprotocol.spec.McpSchema
 import org.slf4j.LoggerFactory
@@ -26,6 +27,7 @@ import reactor.core.publisher.Mono
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.jdk.CollectionConverters.*
+import scala.jdk.FutureConverters.*
 
 /**
  * Factory for creating MCP client instances.
@@ -41,14 +43,16 @@ object TurnstileStreamingHttpAsyncMcpClient {
    *
    * @param serverUrl The base URL of the MCP server (e.g., "http://localhost:8080")
    * @param endpoint The MCP endpoint path (default: "/mcp")
+   * @param authTokenProvider Optional function to get access token for authentication
    * @param ec Execution context for async operations
    * @return A started TurnstileStreamingHttpAsyncMcpClient instance
    */
   def apply(
-    serverUrl: String, 
-    endpoint: String = "/mcp"
+    serverUrl: String,
+    endpoint: String = "/mcp",
+    authTokenProvider: Option[() => Future[String]] = None
   )(implicit ec: ExecutionContext): TurnstileStreamingHttpAsyncMcpClient =
-    new TurnstileStreamingHttpAsyncMcpClient(clientName, clientVersion, serverUrl, endpoint).start()
+    new TurnstileStreamingHttpAsyncMcpClient(clientName, clientVersion, serverUrl, endpoint, authTokenProvider).start()
 }
 
 /**
@@ -89,6 +93,11 @@ object TurnstileStreamingHttpAsyncMcpClient {
  * Progress updates include correlation metadata (toolName, iteration, elapsedSeconds)
  * to track streaming tool execution across multiple iterations.
  *
+ * Authentication:
+ * - Supports OAuth token injection via authTokenProvider
+ * - Tokens are dynamically fetched for each HTTP request
+ * - Uses asyncHttpRequestCustomizer to inject Authorization header
+ *
  * Usage:
  * {{{
  * val client = TurnstileStreamingHttpAsyncMcpClient("http://localhost:8080")
@@ -114,13 +123,15 @@ object TurnstileStreamingHttpAsyncMcpClient {
  * @param clientVersion The MCP client version
  * @param serverUrl The downstream server base URL
  * @param endpoint The MCP endpoint path
+ * @param authTokenProvider Optional function to get access token for authentication
  * @param ec Execution context for async operations
  */
 class TurnstileStreamingHttpAsyncMcpClient(
   val clientName: String,
   val clientVersion: String,
   val serverUrl: String,
-  val endpoint: String
+  val endpoint: String,
+  val authTokenProvider: Option[() => Future[String]]
 )(implicit ec: ExecutionContext) {
   private val logger = LoggerFactory.getLogger(classOf[TurnstileStreamingHttpAsyncMcpClient])
 
@@ -150,12 +161,39 @@ class TurnstileStreamingHttpAsyncMcpClient(
     logger.info(s"Creating MCP async client: $clientName v$clientVersion")
     logger.info(s"Target server: $serverUrl$endpoint")
 
-    // Create the transport
-    val transport = HttpClientStreamableHttpTransport.builder(serverUrl)
+    // Create the transport with optional auth customizer
+    val transportBuilder = HttpClientStreamableHttpTransport.builder(serverUrl)
       .endpoint(endpoint)
       .connectTimeout(java.time.Duration.ofSeconds(10))
       .resumableStreams(true)
-      .build()
+
+    // Add auth header customizer if token provider is available
+    val transportWithAuth = authTokenProvider match {
+      case Some(tokenProvider) =>
+        logger.info("Configuring authentication header injection")
+
+        transportBuilder.asyncHttpRequestCustomizer(
+          (builder, method, uri, body, context) => {
+            // Fetch token asynchronously and inject Authorization header
+            Mono.fromFuture(
+              tokenProvider().asJava.toCompletableFuture
+            ).map(token => {
+              logger.debug(s"Injecting Authorization header for $method $uri")
+              builder.header("Authorization", s"Bearer $token")
+              builder
+            }).onErrorResume(error => {
+              logger.error(s"Failed to fetch auth token: ${error.getMessage}", error)
+              // Return builder without auth header on error
+              Mono.just(builder)
+            })
+          }
+        )
+      case None =>
+        logger.info("No authentication configured")
+        transportBuilder
+    }
+
+    val transport = transportWithAuth.build()
 
     // Build the async client with handlers
     mcpAsyncClient = McpClient.async(transport)

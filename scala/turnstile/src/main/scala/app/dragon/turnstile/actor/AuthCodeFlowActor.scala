@@ -154,16 +154,11 @@ class AuthCodeFlowActor(
       )
 
       // Always start with well-known lookup to get endpoints
-      //context.log.info(s"[$flowId] Starting well-known lookup from ${msg.wellKnownUrl}")
-      // TODO: Trigger well-known lookup HTTP request
       
       // pass the actor system explicitly to the ClientAuthService call (it expects an implicit ActorSystem)
       context.pipeToSelf(ClientOAuthHelper.fetchWellKnown(msg.domain)) {
         case Success(Right(discovery)) =>
             WellKnownResponse(
-              //discovery.authorization_endpoint.getOrElse(""), 
-              //discovery.token_endpoint.getOrElse(""), 
-              //discovery.registration_endpoint,
               discovery,
               msg.replyTo
             )
@@ -188,9 +183,6 @@ class AuthCodeFlowActor(
   ): Behavior[Message] = {
     context.log.info(s"[$flowId] In lookupWellknownInProcessState")
 
-    // TODO: Make HTTP request to well-known endpoint
-    // For now, this is a placeholder that waits for WellKnownResponse
-
     Behaviors.receiveMessagePartial {
       handleWellKnownResponse(data)
         .orElse(handleFlowErrorInWellKnown(data))
@@ -203,9 +195,6 @@ class AuthCodeFlowActor(
     case WellKnownResponse(discoveryResponse, replyTo) =>
       context.log.info(s"[$flowId] Received well-known response")
       val updatedData = data.copy(
-        //authorizationEndpoint = Some(authEndpoint),
-        //tokenEndpoint = Some(tokenEndpoint),
-        //registrationEndpoint = registrationEndpoint
         wellKnownResponse = Some(discoveryResponse),
       )
 
@@ -322,7 +311,9 @@ class AuthCodeFlowActor(
   /**
    * State: Authorization code request in process
    */
-  def authCodeRequestInProcess(data: FlowData): Behavior[Message] = {
+  def authCodeRequestInProcess(
+    data: FlowData
+  ): Behavior[Message] = {
     context.log.info(s"[$flowId] In authCodeRequestInProcess")
     
     Behaviors.receiveMessagePartial {
@@ -331,10 +322,11 @@ class AuthCodeFlowActor(
     }
   }
 
-  private def handleAuthCodeResponse(data: FlowData): PartialFunction[Message, Behavior[Message]] = {
+  private def handleAuthCodeResponse(
+    data: FlowData
+  ): PartialFunction[Message, Behavior[Message]] = {
     case GetToken(state, code, replyTo) =>
       context.log.info(s"[$flowId] Received authorization code")
-      //val updatedData = data.copy(authCode = Some(code))
 
       context.log.info(s"[$flowId] Auth code received, proceeding to token exchange")
       
@@ -365,7 +357,9 @@ class AuthCodeFlowActor(
       tokenRequestInProcess(data)
   }
 
-  private def handleFlowErrorInAuthCode(data: FlowData): PartialFunction[Message, Behavior[Message]] = {
+  private def handleFlowErrorInAuthCode(
+    data: FlowData
+  ): PartialFunction[Message, Behavior[Message]] = {
     case FlowError(error) =>
       context.log.error(s"[$flowId] Auth code request failed: $error")
       data.replyTo.foreach(_ ! FlowFailed(s"Auth code request failed: $error"))
@@ -375,7 +369,9 @@ class AuthCodeFlowActor(
   /**
    * State: Token request in process
    */
-  def tokenRequestInProcess(data: FlowData): Behavior[Message] = {
+  def tokenRequestInProcess(
+    data: FlowData
+  ): Behavior[Message] = {
     context.log.info(s"[$flowId] In tokenRequestInProcess")
 
     // TODO: Make HTTP POST request to token endpoint to exchange code for token
@@ -387,7 +383,9 @@ class AuthCodeFlowActor(
     }
   }
 
-  private def handleTokenResponse(data: FlowData): PartialFunction[Message, Behavior[Message]] = {
+  private def handleTokenResponse(
+    data: FlowData
+  ): PartialFunction[Message, Behavior[Message]] = {
     case tokenResp: TokenResponse =>
       context.log.info(s"[$flowId] Received token response")
       val updatedData = data.copy(token = Some(tokenResp))
@@ -396,7 +394,9 @@ class AuthCodeFlowActor(
       completeState(updatedData)
   }
 
-  private def handleFlowErrorInToken(data: FlowData): PartialFunction[Message, Behavior[Message]] = {
+  private def handleFlowErrorInToken(
+    data: FlowData
+  ): PartialFunction[Message, Behavior[Message]] = {
     case FlowError(error) =>
       context.log.error(s"[$flowId] Token exchange failed: $error")
       data.replyTo.foreach(_ ! FlowFailed(s"Token exchange failed: $error"))
@@ -406,7 +406,9 @@ class AuthCodeFlowActor(
   /**
    * Complete state: Prints token and sends response
    */
-  def completeState(data: FlowData): Behavior[Message] = {
+  def completeState(
+    data: FlowData
+  ): Behavior[Message] = {
     context.log.info(s"[$flowId] In completeState")
 
     data.token match {

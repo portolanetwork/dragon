@@ -93,7 +93,7 @@ object Guardian {
 
           // Initialize sharding and actors here
           McpServerActor.initSharding(context.system)
-          McpClientActor.initSharding(context.system)
+          McpClientActor.initSharding(context.system, db)
           McpSessionMapActor.initSharding(context.system)
 
           // Start GRPC server (hosting both GreeterService and TurnstileService)
