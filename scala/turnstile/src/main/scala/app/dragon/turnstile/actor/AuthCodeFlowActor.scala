@@ -20,6 +20,7 @@ package app.dragon.turnstile.actor
 
 import app.dragon.turnstile.auth.ClientOAuthHelper
 import app.dragon.turnstile.auth.ClientOAuthHelper.OpenIdConfigurationResponse
+import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.serializer.TurnstileSerializable
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
@@ -133,7 +134,8 @@ class AuthCodeFlowActor(
   implicit val system: ActorSystem[Nothing] = context.system
   
   //val domain: String = "https://portola-dev.us.auth0.com" // Placeholder MCP URL
-  val redirectUrl: String = "http://localhost:8080/callback" // Placeholder redirect URI
+  //val redirectUrl: String = "http://localhost:8080/callback" // Placeholder redirect URI
+  val redirectUrl = ApplicationConfig.auth.getString("client-callback.url")
   
   /**
    * Initial state: Receives StartFlow message and decides next state based on clientId availability
@@ -202,7 +204,7 @@ class AuthCodeFlowActor(
 
       // Decision: if clientId exists, go to authCodeRequest, otherwise do DCR
       updatedData.clientId match {
-        case Some(clientId) =>
+        case Some(clientId) if clientId.nonEmpty =>
           context.log.info(s"[$flowId] ClientId exists ($clientId), proceeding to auth code request")
           
           val authUrl = ClientOAuthHelper.buildAuthorizationUrl(
@@ -217,8 +219,8 @@ class AuthCodeFlowActor(
           replyTo ! FlowAuthResponse(authUrl, discoveryResponse.token_endpoint.getOrElse(""), clientId, updatedData.clientSecret)
           
           authCodeRequestInProcess(updatedData)
-
-        case None =>
+          
+        case _ => // No clientId, proceed to DCR
           discoveryResponse.registration_endpoint match {
             case Some(regEndpoint) =>
               context.log.info(s"[$flowId] No clientId, proceeding to DCR at $regEndpoint")
