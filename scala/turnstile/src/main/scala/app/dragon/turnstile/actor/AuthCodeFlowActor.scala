@@ -88,8 +88,6 @@ object AuthCodeFlowActor {
   ) extends Message
   
   private final case class DcrResponse(
-    //clientId: String,
-    //clientSecret: String,
     clientDcrResponse: ClientOAuthHelper.DcrResponse,
     replyTo: ActorRef[FlowResponse]
   ) extends Message
@@ -98,7 +96,7 @@ object AuthCodeFlowActor {
 
   // Reply messages
   sealed trait FlowResponse extends TurnstileSerializable
-  //final case class FlowLoginUrl(loginUrl: String) extends FlowResponse
+
   final case class FlowAuthResponse(loginUrl: String, 
     tokenEndpoint: String,
     clientId: String,
@@ -150,6 +148,7 @@ class AuthCodeFlowActor(
   //val redirectUrl: String = "http://localhost:8080/callback" // Placeholder redirect URI
   val redirectUrl = ApplicationConfig.auth.getString("client.callback-url")
   val audience = ApplicationConfig.auth.getString("client.audience")
+  val scope = "openid profile email offline_access"
   
   /**
    * Initial state: Receives StartFlow message and decides next state based on clientId availability
@@ -225,7 +224,7 @@ class AuthCodeFlowActor(
             audience,
             clientId,
             redirectUrl,
-            "openid profile email offline_access",
+            scope, //"openid profile email offline_access",
             flowId,
           )
           
@@ -238,16 +237,9 @@ class AuthCodeFlowActor(
           discoveryResponse.registration_endpoint match {
             case Some(regEndpoint) =>
               context.log.info(s"[$flowId] No clientId, proceeding to DCR at $regEndpoint")
-              // TODO: Trigger DCR request
               // pass actor system explicitly and fix typo (removed stray dot)
               context.pipeToSelf(ClientOAuthHelper.performDCR(regEndpoint, redirectUrl)) {
-                case Success(Right(dcrResp)) =>
-                  DcrResponse(
-                    //dcrResp.client_id.getOrElse(""), 
-                    //dcrResp.client_secret.getOrElse(""),
-                    clientDcrResponse = dcrResp,
-                    replyTo,
-                  )
+                case Success(Right(dcrResp)) => DcrResponse(dcrResp, replyTo)
                 case Success(Left(error)) => FlowError(s"DCR failed: ${error.toString}", replyTo)
                 case Failure(error) => FlowError(s"DCR failed: ${error.getMessage}", replyTo)
               }
@@ -312,7 +304,7 @@ class AuthCodeFlowActor(
         audience,
         clientDcrResponse.client_id.getOrElse(""),
         redirectUrl,
-        "openid profile email",
+        scope, //"openid profile email",
         flowId,
       )
       
@@ -365,23 +357,10 @@ class AuthCodeFlowActor(
         code,
         redirectUrl,
       )) {
-        case Success(Right(tokenResp)) =>
-          /*
-          TokenResponse(
-            accessToken = tokenResp.access_token,
-            //tokenType = tokenResp.,
-            //expiresIn = tokenResp.expires_in,
-            refreshToken = tokenResp.refresh_token,
-            //scope = tokenResp.scope,
-          )
-          
-           */
-          TokenExchangeResponse(tokenResp, replyTo)
+        case Success(Right(tokenResp)) => TokenExchangeResponse(tokenResp, replyTo)
         case Success(Left(error)) => FlowError(s"Token exchange failed: ${error.toString}", replyTo)
         case Failure(error) => FlowError(s"Token exchange failed: ${error.getMessage}", replyTo)
       }
-      
-       
       
       tokenRequestInProcess(data)
   }
