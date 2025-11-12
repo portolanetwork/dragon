@@ -177,7 +177,7 @@ object DbInterface {
    */
   def updateMcpServerAuth(
     uuid: UUID,
-    clientId: String,
+    clientId: Option[String],
     clientSecret: Option[String],
     refreshToken: Option[String],
     tokenEndpoint: Option[String] = None
@@ -187,7 +187,7 @@ object DbInterface {
     val updateAction = Tables.mcpServers
       .filter(_.uuid === uuid)
       .map(s => (s.clientId, s.clientSecret, s.refreshToken, s.tokenEndpoint, s.updatedAt))
-      .update((Some(clientId), clientSecret, refreshToken, tokenEndpoint, new java.sql.Timestamp(System.currentTimeMillis())))
+      .update((clientId, clientSecret, refreshToken, tokenEndpoint, new java.sql.Timestamp(System.currentTimeMillis())))
     db.run(updateAction).map(Right(_): Either[DbError, Int]).recover {
       case NonFatal(t) => Left(mapDbError(t))
     }

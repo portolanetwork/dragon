@@ -1,16 +1,15 @@
 package app.dragon.turnstile.auth
 
 import app.dragon.turnstile.actor.{ActorLookup, AuthCodeFlowActor}
-import app.dragon.turnstile.auth.ServerAuthService.AuthError
-import app.dragon.turnstile.db.{DbError, DbInterface, McpServerRow}
+import app.dragon.turnstile.db.DbInterface
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
 import org.apache.pekko.util.Timeout
 import slick.jdbc.JdbcBackend.Database
 
 import java.util.UUID
-import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.*
+import scala.concurrent.{ExecutionContext, Future}
 
 object ClientAuthService {
   case class AuthToken(
@@ -26,7 +25,7 @@ object ClientAuthService {
   case class MissingConfiguration(message: String) extends AuthError
   case class DatabaseError(message: String) extends AuthError
   case class ServerNotFound(message: String) extends AuthError
-  case class AuthFlowFailed(message: String) extends AuthError
+  private case class AuthFlowFailed(message: String) extends AuthError
 
   def initiateAuthCodeFlow(
     mcpServerUuid: String
@@ -58,7 +57,7 @@ object ClientAuthService {
               // Update the database with OAuth configuration
               DbInterface.updateMcpServerAuth(
                 uuid = serverUuid,
-                clientId = clientId,
+                clientId = Some(clientId),
                 clientSecret = clientSecret,
                 refreshToken = None,
                 tokenEndpoint = Some(tokenEndpoint)
@@ -100,13 +99,23 @@ object ClientAuthService {
       )
     ).flatMap {
       case AuthCodeFlowActor.FlowTokenResponse(accessToken, refreshToken) =>
-        // TODO: Store the refresh token in the database
-        // For now, just return the token
-        Future.successful(Right(AuthToken(
-          accessToken = accessToken,
-          expiresIn = None,
-          refreshToken = refreshToken
-        )))
+        // Store the refresh token in the database
+        DbInterface.updateMcpServerAuth(
+          uuid = UUID.fromString(flowId),
+          clientId = None, // Corrected to None for Option[String]
+          clientSecret = None, // Corrected to None for Option[String]
+          refreshToken = Some(refreshToken),
+          tokenEndpoint = None // Assuming tokenEndpoint is not updated here
+        ).flatMap {
+          case Right(_) =>
+            Future.successful(Right(AuthToken(
+              accessToken = accessToken,
+              expiresIn = None,
+              refreshToken = refreshToken
+            )))
+          case Left(dbError) =>
+            Future.successful(Left(DatabaseError(s"Failed to update refresh token: ${dbError.message}")))
+        }
       case AuthCodeFlowActor.FlowFailed(error) =>
         Future.successful(Left(AuthFlowFailed(s"Token exchange failed: $error")))
       case AuthCodeFlowActor.FlowAuthResponse(_, _, _, _) =>
