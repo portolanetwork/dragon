@@ -74,9 +74,6 @@ object AuthCodeFlowActor {
 
   // Internal messages
   private final case class WellKnownResponse(
-    //authorizationEndpoint: String,
-    //tokenEndpoint: String,
-    //registrationEndpoint: Option[String],
     clientDiscoveryResponse: ClientOAuthHelper.OpenIdConfigurationResponse,
     replaysTo: ActorRef[FlowResponse]
   ) extends Message
@@ -92,7 +89,12 @@ object AuthCodeFlowActor {
 
   // Reply messages
   sealed trait FlowResponse extends TurnstileSerializable
-  final case class FlowLoginUrl(loginUrl: String) extends FlowResponse
+  //final case class FlowLoginUrl(loginUrl: String) extends FlowResponse
+  final case class FlowAuthResponse(loginUrl: String, 
+    tokenEndpoint: String,
+    clientId: String,
+    clientSecret: Option[String],
+  ) extends FlowResponse
   final case class FlowComplete(token: TokenResponse) extends FlowResponse // Change this
   final case class FlowFailed(error: String) extends FlowResponse
 
@@ -154,7 +156,7 @@ class AuthCodeFlowActor(
       )
 
       // Always start with well-known lookup to get endpoints
-      
+
       // pass the actor system explicitly to the ClientAuthService call (it expects an implicit ActorSystem)
       context.pipeToSelf(ClientOAuthHelper.fetchWellKnown(msg.domain)) {
         case Success(Right(discovery)) =>
@@ -211,7 +213,8 @@ class AuthCodeFlowActor(
             flowId,
           )
           
-          replyTo ! FlowLoginUrl(authUrl)
+          //replyTo ! FlowLoginUrl(authUrl)
+          replyTo ! FlowAuthResponse(authUrl, discoveryResponse.token_endpoint.getOrElse(""), clientId, updatedData.clientSecret)
           
           authCodeRequestInProcess(updatedData)
 
@@ -278,7 +281,7 @@ class AuthCodeFlowActor(
       )
 
       context.log.info(s"[$flowId] DCR complete, proceeding to auth code request")
-      
+
       // Check to see if redirect URI is in the registered URIs
       clientDcrResponse.redirect_uris.getOrElse(List()).filter(_ == redirectUrl) match {
         case Nil => context.log.error(s"[$flowId] Registered redirect URIs do not include expected redirect URI: $redirectUrl")
@@ -292,10 +295,11 @@ class AuthCodeFlowActor(
         "openid profile email",
         flowId,
       )
-
-
-      replyTo ! FlowLoginUrl(authUrl)
       
+      //replyTo ! FlowLoginUrl(authUrl)
+      replyTo ! FlowAuthResponse(authUrl, data.wellKnownResponse.get.token_endpoint.getOrElse(""), 
+        clientDcrResponse.client_id.getOrElse(""), clientDcrResponse.client_secret)
+
       authCodeRequestInProcess(updatedData)
   }
 

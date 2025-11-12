@@ -87,7 +87,7 @@ object ClientAuthExample {
         Behaviors.receive[FlowResponse] { (context, response) =>
           logger.info(s"Received response: $response")
           response match {
-            case FlowLoginUrl(loginUrl) =>
+            case FlowAuthResponse(loginUrl, tokenEndpoint, clientId, clientSecret) =>
               logger.info(s"Login URL: $loginUrl")
               logger.info("Opening browser...")
 
