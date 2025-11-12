@@ -16,7 +16,7 @@ object ClientAuthService {
   case class AuthToken(
     accessToken: String,
     expiresIn: Option[Int],
-    refreshToken: Option[String],
+    refreshToken: String,
   )
 
   sealed trait AuthError {
@@ -68,7 +68,7 @@ object ClientAuthService {
               }
             case AuthCodeFlowActor.FlowFailed(error) =>
               Future.successful(Left(AuthFlowFailed(s"Auth flow failed: $error")))
-            case AuthCodeFlowActor.FlowComplete(_) =>
+            case AuthCodeFlowActor.FlowTokenResponse(_, _) =>
               Future.successful(Left(AuthFlowFailed("Unexpected FlowComplete response during flow initiation")))
           }
 
@@ -76,6 +76,42 @@ object ClientAuthService {
           Future.successful(Left(DatabaseError(dbError.toString)))
       }
     } yield loginUrl
+  }
+
+  def exchangeAuthCode(
+    code: String,
+    state: String
+  )(
+    implicit db: Database,
+    ec: ExecutionContext,
+    sharding: ClusterSharding,
+    system: ActorSystem[?]
+  ): Future[Either[AuthError, AuthToken]] = {
+    implicit val timeout: Timeout = Timeout(30.seconds)
+
+    // State should be the flowId
+    val flowId = state
+
+    ActorLookup.getAuthCodeFlowActor(flowId).ask[AuthCodeFlowActor.FlowResponse](replyTo =>
+      AuthCodeFlowActor.GetToken(
+        state = state,
+        code = code,
+        replyTo = replyTo
+      )
+    ).flatMap {
+      case AuthCodeFlowActor.FlowTokenResponse(accessToken, refreshToken) =>
+        // TODO: Store the refresh token in the database
+        // For now, just return the token
+        Future.successful(Right(AuthToken(
+          accessToken = accessToken,
+          expiresIn = None,
+          refreshToken = refreshToken
+        )))
+      case AuthCodeFlowActor.FlowFailed(error) =>
+        Future.successful(Left(AuthFlowFailed(s"Token exchange failed: $error")))
+      case AuthCodeFlowActor.FlowAuthResponse(_, _, _, _) =>
+        Future.successful(Left(AuthFlowFailed("Unexpected FlowAuthResponse during token exchange")))
+    }
   }
 
   def getAuthToken(
@@ -103,7 +139,7 @@ object ClientAuthService {
               ).flatMap {
                 case Left(errorMessage) =>
                   Future.successful(Left(TokenFetchFailed(s"Failed to refresh token: $errorMessage")))
-                case Right(tokenResponse) =>
+                case Right(tokenResponse: ClientOAuthHelper.TokenResponse) =>
                   Future.successful(Right(AuthToken(
                     accessToken = tokenResponse.access_token,
                     expiresIn = tokenResponse.expires_in,
@@ -118,5 +154,5 @@ object ClientAuthService {
       }
     } yield authToken
   }
-  
+
 }

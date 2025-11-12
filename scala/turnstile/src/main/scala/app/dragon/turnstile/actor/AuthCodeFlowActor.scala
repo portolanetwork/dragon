@@ -19,12 +19,13 @@
 package app.dragon.turnstile.actor
 
 import app.dragon.turnstile.auth.ClientOAuthHelper
-import app.dragon.turnstile.auth.ClientOAuthHelper.OpenIdConfigurationResponse
+import app.dragon.turnstile.auth.ClientOAuthHelper.{OpenIdConfigurationResponse, TokenResponse}
 import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.serializer.TurnstileSerializable
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityTypeKey}
+import org.apache.pekko.testkit.TestActor.NullMessage.msg
 
 import scala.util.{Failure, Success}
 
@@ -65,13 +66,15 @@ object AuthCodeFlowActor {
     replyTo: ActorRef[FlowResponse],
   ) extends Message
 
+  /*
   final case class TokenResponse(
     accessToken: String,
     //tokenType: String,
     //expiresIn: Option[Int],
     refreshToken: Option[String],
     //scope: Option[String]
-  ) extends Message
+  ) extends Message  
+   */
 
   // Internal messages
   private final case class WellKnownResponse(
@@ -79,6 +82,11 @@ object AuthCodeFlowActor {
     replaysTo: ActorRef[FlowResponse]
   ) extends Message
 
+  private final case class TokenExchangeResponse(
+    tokenResponse: ClientOAuthHelper.TokenResponse,
+    replyTo: ActorRef[FlowResponse]
+  ) extends Message
+  
   private final case class DcrResponse(
     //clientId: String,
     //clientSecret: String,
@@ -86,7 +94,7 @@ object AuthCodeFlowActor {
     replyTo: ActorRef[FlowResponse]
   ) extends Message
 
-  final case class FlowError(error: String) extends Message
+  private final case class FlowError(error: String, replyTo: ActorRef[FlowResponse]) extends Message
 
   // Reply messages
   sealed trait FlowResponse extends TurnstileSerializable
@@ -96,7 +104,12 @@ object AuthCodeFlowActor {
     clientId: String,
     clientSecret: Option[String],
   ) extends FlowResponse
-  final case class FlowComplete(token: TokenResponse) extends FlowResponse // Change this
+  
+  final case class FlowTokenResponse(
+    accessToken: String, 
+    refreshToken: String
+  ) extends FlowResponse // Change this
+  
   final case class FlowFailed(error: String) extends FlowResponse
 
   // State data
@@ -112,7 +125,7 @@ object AuthCodeFlowActor {
     token: Option[TokenResponse] = None,
     wellKnownResponse: Option[OpenIdConfigurationResponse] = None,
     
-    replyTo: Option[ActorRef[FlowResponse]] = None
+    //replyTo: Option[ActorRef[FlowResponse]] = None
   )
 
   def apply(flowId: String): Behavior[Message] =
@@ -135,7 +148,8 @@ class AuthCodeFlowActor(
   
   //val domain: String = "https://portola-dev.us.auth0.com" // Placeholder MCP URL
   //val redirectUrl: String = "http://localhost:8080/callback" // Placeholder redirect URI
-  val redirectUrl = ApplicationConfig.auth.getString("client-callback.url")
+  val redirectUrl = ApplicationConfig.auth.getString("client.callback-url")
+  val audience = ApplicationConfig.auth.getString("client.audience")
   
   /**
    * Initial state: Receives StartFlow message and decides next state based on clientId availability
@@ -149,33 +163,32 @@ class AuthCodeFlowActor(
 
   private def handleStartFlow(
   ): PartialFunction[Message, Behavior[Message]] = {
-    case msg: StartFlow =>
+    case StartFlow(domain, clientId, clientSecret, replyTo) =>
       context.log.info(s"[$flowId] Received StartFlow")
       val data = FlowData(
-        domain = msg.domain,
-        clientId = msg.clientId,
-        clientSecret = msg.clientSecret,
+        domain = domain,
+        clientId = clientId,
+        clientSecret = clientSecret,
       )
 
       // Always start with well-known lookup to get endpoints
 
       // pass the actor system explicitly to the ClientAuthService call (it expects an implicit ActorSystem)
-      context.pipeToSelf(ClientOAuthHelper.fetchWellKnown(msg.domain)) {
-        case Success(Right(discovery)) =>
-            WellKnownResponse(
-              discovery,
-              msg.replyTo
-            )
-        case Success(Left(error)) => FlowError(s"Well-known lookup failed: ${error.toString}")
-        case Failure(error) => FlowError(s"Well-known lookup failed: ${error.getMessage}")
+      context.pipeToSelf(ClientOAuthHelper.fetchWellKnown(domain)) {
+        case Success(Right(discovery)) => WellKnownResponse(discovery, replyTo)
+        case Success(Left(error)) => FlowError(s"Well-known lookup failed: ${error.toString}", replyTo)
+        case Failure(error) => FlowError(s"Well-known lookup failed: ${error.getMessage}", replyTo)
       }
       
       lookupWellknownInProcessState(data)
   }
 
   private def handleFlowErrorInInit(): PartialFunction[Message, Behavior[Message]] = {
-    case FlowError(error) =>
+    case FlowError(error, replyTo) =>
       context.log.error(s"[$flowId] Flow error in initState: $error")
+      
+      replyTo ! FlowFailed(s"Flow error in initState: $error")
+      
       Behaviors.stopped
   }
 
@@ -209,9 +222,10 @@ class AuthCodeFlowActor(
           
           val authUrl = ClientOAuthHelper.buildAuthorizationUrl(
             discoveryResponse.authorization_endpoint.getOrElse(""),  // TODO: Handle missing endpoint
-            clientId, 
+            audience,
+            clientId,
             redirectUrl,
-            "openid profile email",
+            "openid profile email offline_access",
             flowId,
           )
           
@@ -234,24 +248,27 @@ class AuthCodeFlowActor(
                     clientDcrResponse = dcrResp,
                     replyTo,
                   )
-                case Success(Left(error)) => FlowError(s"DCR failed: ${error.toString}")
-                case Failure(error) => FlowError(s"DCR failed: ${error.getMessage}")
+                case Success(Left(error)) => FlowError(s"DCR failed: ${error.toString}", replyTo)
+                case Failure(error) => FlowError(s"DCR failed: ${error.getMessage}", replyTo)
               }
               
               dcrRequestInProcessState(updatedData)
 
             case None =>
               context.log.error(s"[$flowId] No clientId and no registration endpoint available")
-              data.replyTo.foreach(_ ! FlowFailed("No clientId provided and no registration endpoint available for DCR"))
+              //data.replyTo.foreach(_ ! FlowFailed("No clientId provided and no registration endpoint available for DCR"))
+              replyTo ! FlowFailed("No clientId provided and no registration endpoint available for DCR")
               Behaviors.stopped
           }
       }
   }
 
   private def handleFlowErrorInWellKnown(data: FlowData): PartialFunction[Message, Behavior[Message]] = {
-    case FlowError(error) =>
+    case FlowError(error, replyTo) =>
       context.log.error(s"[$flowId] Well-known lookup failed: $error")
-      data.replyTo.foreach(_ ! FlowFailed(s"Well-known lookup failed: $error"))
+      //data.replyTo.foreach(_ ! FlowFailed(s"Well-known lookup failed: $error"))
+      replyTo ! FlowFailed(s"Well-known lookup failed: $error")
+      
       Behaviors.stopped
   }
 
@@ -292,6 +309,7 @@ class AuthCodeFlowActor(
 
       val authUrl = ClientOAuthHelper.buildAuthorizationUrl(
         data.wellKnownResponse.get.authorization_endpoint.getOrElse(""),  // TODO: Handle missing endpoint
+        audience,
         clientDcrResponse.client_id.getOrElse(""),
         redirectUrl,
         "openid profile email",
@@ -308,9 +326,10 @@ class AuthCodeFlowActor(
   private def handleFlowErrorInDcr(
     data: FlowData
   ): PartialFunction[Message, Behavior[Message]] = {
-    case FlowError(error) =>
+    case FlowError(error, replyTo) =>
       context.log.error(s"[$flowId] DCR failed: $error")
-      data.replyTo.foreach(_ ! FlowFailed(s"DCR failed: $error"))
+      //data.replyTo.foreach(_ ! FlowFailed(s"DCR failed: $error"))
+      replyTo ! FlowFailed(s"DCR failed: $error")
       Behaviors.stopped
   }
 
@@ -347,6 +366,7 @@ class AuthCodeFlowActor(
         redirectUrl,
       )) {
         case Success(Right(tokenResp)) =>
+          /*
           TokenResponse(
             accessToken = tokenResp.access_token,
             //tokenType = tokenResp.,
@@ -354,8 +374,11 @@ class AuthCodeFlowActor(
             refreshToken = tokenResp.refresh_token,
             //scope = tokenResp.scope,
           )
-        case Success(Left(error)) => FlowError(s"Token exchange failed: ${error.toString}")
-        case Failure(error) => FlowError(s"Token exchange failed: ${error.getMessage}")
+          
+           */
+          TokenExchangeResponse(tokenResp, replyTo)
+        case Success(Left(error)) => FlowError(s"Token exchange failed: ${error.toString}", replyTo)
+        case Failure(error) => FlowError(s"Token exchange failed: ${error.getMessage}", replyTo)
       }
       
        
@@ -366,9 +389,11 @@ class AuthCodeFlowActor(
   private def handleFlowErrorInAuthCode(
     data: FlowData
   ): PartialFunction[Message, Behavior[Message]] = {
-    case FlowError(error) =>
+    case FlowError(error, replyTo) =>
       context.log.error(s"[$flowId] Auth code request failed: $error")
-      data.replyTo.foreach(_ ! FlowFailed(s"Auth code request failed: $error"))
+      //data.replyTo.foreach(_ ! FlowFailed(s"Auth code request failed: $error"))
+      replyTo ! FlowFailed(s"Auth code request failed: $error")
+      
       Behaviors.stopped
   }
 
@@ -392,20 +417,25 @@ class AuthCodeFlowActor(
   private def handleTokenResponse(
     data: FlowData
   ): PartialFunction[Message, Behavior[Message]] = {
-    case tokenResp: TokenResponse =>
+    case TokenExchangeResponse(tokenResponse, replyTo) =>
       context.log.info(s"[$flowId] Received token response")
-      val updatedData = data.copy(token = Some(tokenResp))
+      val updatedData = data.copy(token = Some(tokenResponse))
 
       context.log.info(s"[$flowId] Token received, proceeding to complete state")
-      completeState(updatedData)
+      
+      //replyTo ! FlowComplete(tokenResponse.access_token, tokenResponse.refresh_token.getOrElse(""))
+      
+      completeState(updatedData, replyTo)
   }
 
   private def handleFlowErrorInToken(
     data: FlowData
   ): PartialFunction[Message, Behavior[Message]] = {
-    case FlowError(error) =>
+    case FlowError(error, replyTo) =>
       context.log.error(s"[$flowId] Token exchange failed: $error")
-      data.replyTo.foreach(_ ! FlowFailed(s"Token exchange failed: $error"))
+      //data.replyTo.foreach(_ ! FlowFailed(s"Token exchange failed: $error"))
+      replyTo ! FlowFailed(s"Token exchange failed: $error")
+      
       Behaviors.stopped
   }
 
@@ -413,25 +443,29 @@ class AuthCodeFlowActor(
    * Complete state: Prints token and sends response
    */
   def completeState(
-    data: FlowData
+    data: FlowData,
+    replyTo: ActorRef[FlowResponse]
   ): Behavior[Message] = {
     context.log.info(s"[$flowId] In completeState")
 
     data.token match {
-      case Some(token) =>
+      case Some(token: TokenResponse) =>
         context.log.info(s"[$flowId] ========== AUTH CODE FLOW COMPLETE ==========")
-        context.log.info(s"[$flowId] Access Token: ${token.accessToken}")
+        context.log.info(s"[$flowId] Access Token: ${token.access_token}")
         //context.log.info(s"[$flowId] Token Type: ${token.tokenType}")
         //token.expiresIn.foreach(exp => context.log.info(s"[$flowId] Expires In: $exp seconds"))
-        token.refreshToken.foreach(rt => context.log.info(s"[$flowId] Refresh Token: $rt"))
+        token.refresh_token.foreach(rt => context.log.info(s"[$flowId] Refresh Token: $rt"))
         //token.scope.foreach(sc => context.log.info(s"[$flowId] Scope: $sc"))
         context.log.info(s"[$flowId] ============================================")
 
-        data.replyTo.foreach(_ ! FlowComplete(token))
+        replyTo ! FlowTokenResponse(token.access_token, token.refresh_token)
+        
+        //data.replyTo.foreach(_ ! FlowComplete(token))
 
       case None =>
         context.log.error(s"[$flowId] Complete state reached without token!")
-        data.replyTo.foreach(_ ! FlowFailed("Complete state reached without token"))
+        //data.replyTo.foreach(_ ! FlowFailed("Complete state reached without token"))
+        replyTo ! FlowFailed("Complete state reached without token")
     }
 
     Behaviors.stopped

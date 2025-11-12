@@ -20,8 +20,7 @@ package app.dragon.turnstile.gateway
 
 import app.dragon.turnstile.actor.{ActorLookup, McpServerActor}
 import app.dragon.turnstile.auth.ServerAuthService.{AccessDenied, MissingAuthHeader}
-import app.dragon.turnstile.auth.{ClientAuthService, ClientOAuthHelper, ServerAuthService}
-import app.dragon.turnstile.db.{DbInterface, DbNotFound}
+import app.dragon.turnstile.auth.{ClientAuthService, ServerAuthService}
 import com.typesafe.config.Config
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
@@ -34,7 +33,6 @@ import org.slf4j.{Logger, LoggerFactory}
 import pdi.jwt.JwtClaim
 import slick.jdbc.JdbcBackend.Database
 
-import scala.concurrent.Future
 import scala.concurrent.duration.*
 import scala.util.{Failure, Success}
 
@@ -105,7 +103,7 @@ class TurnstileMcpGateway(
   val host: String = mcpConfig.getString("host")
   val port: Int = mcpConfig.getInt("port")
   val mcpEndpoint: String = mcpConfig.getString("mcp-endpoint")
-  val auth0Domain: String = authConfig.getString("auth0.domain")
+  val auth0Domain: String = authConfig.getString("server.domain")
 
   case class RouteLookupResult(
     mcpActorId: String,
@@ -204,25 +202,99 @@ class TurnstileMcpGateway(
   /**
    * OAuth2 / OpenID Connect redirect callback handler.
    * Example callback URL: /callback?code=...&state=...&error=...
-   * Currently this extracts common params and logs them, then returns 200 OK.
+   * Exchanges the authorization code for tokens and displays them in logs.
    */
   private def createCallbackRoute(): Route = {
     path("callback") {
       get {
         parameterMap { params =>
-          val code = params.get("code")
-          val state = params.get("state")
-          val error = params.get("error")
-          val errorDescription = params.get("error_description")
-          val redirectUri = params.get("redirect_uri")
+          val codeOpt = params.get("code")
+          val stateOpt = params.get("state")
+          val errorOpt = params.get("error")
+          val errorDescriptionOpt = params.get("error_description")
 
-          logger.info(s"OAuth callback received - code=${code.orNull}, state=${state.orNull}, error=${error.orNull}, error_description=${errorDescription.orNull}, redirect_uri=${redirectUri.orNull}")
-          logger.debug(s"Full callback params: $params")
+          logger.info(s"OAuth callback received - code=${codeOpt.orNull}, state=${stateOpt.orNull}, error=${errorOpt.orNull}, error_description=${errorDescriptionOpt.orNull}")
 
-          complete(HttpResponse(
-            status = StatusCodes.OK,
-            entity = HttpEntity(ContentTypes.`text/plain(UTF-8)`, "Callback received - check logs")
-          ))
+          // Check for errors first
+          errorOpt match {
+            case Some(error) =>
+              val description = errorDescriptionOpt.getOrElse("No description provided")
+              logger.error(s"OAuth error: $error - $description")
+              complete(HttpResponse(
+                status = StatusCodes.BadRequest,
+                entity = HttpEntity(
+                  ContentTypes.`text/html(UTF-8)`,
+                  s"""<html><body><h1>OAuth Error</h1><p>Error: $error</p><p>Description: $description</p></body></html>"""
+                )
+              ))
+
+            case None =>
+              // Proceed with token exchange
+              (codeOpt, stateOpt) match {
+                case (Some(code), Some(state)) =>
+                  val responseFuture = ClientAuthService.exchangeAuthCode(code, state).map {
+                    case Right(token) =>
+                      logger.info("================================================================================")
+                      logger.info("🎉 OAuth Token Exchange Successful!")
+                      logger.info("================================================================================")
+                      logger.info(s"Access Token: ${token.accessToken.take(50)}...")
+                      logger.info(s"Refresh Token: ${token.refreshToken.take(50)}...")
+                      token.expiresIn.foreach { exp =>
+                        logger.info(s"Expires In: $exp seconds")
+                      }
+                      logger.info("================================================================================")
+
+
+                      HttpResponse(
+                        status = StatusCodes.OK,
+                        entity = HttpEntity(
+                          ContentTypes.`text/html(UTF-8)`,
+                          s"""
+                            |<html>
+                            |<body>
+                            |  <h1>Authentication Successful!</h1>
+                            |  <p>Your MCP server has been authenticated.</p>
+                            |  <p>Access token: ${token.accessToken.take(20)}...</p>
+                            | <p>Refresh token: ${token.refreshToken.take(20)}...</p>
+                            |  <p>Check server logs for full token details.</p>
+                            |</body>
+                            |</html>
+                          """.stripMargin
+                        )
+                      )
+
+                    case Left(authError) =>
+                      logger.error(s"Token exchange failed: ${authError.message}")
+                      HttpResponse(
+                        status = StatusCodes.InternalServerError,
+                        entity = HttpEntity(
+                          ContentTypes.`text/html(UTF-8)`,
+                          s"""
+                            |<html>
+                            |<body>
+                            |  <h1>Authentication Failed</h1>
+                            |  <p>Error: ${authError.message}</p>
+                            |  <p>Check server logs for more details.</p>
+                            |</body>
+                            |</html>
+                          """.stripMargin
+                        )
+                      )
+                  }
+
+                  complete(responseFuture)
+
+                case _ =>
+                  logger.warn("OAuth callback missing required parameters (code or state)")
+                  complete(HttpResponse(
+                    status = StatusCodes.BadRequest,
+                    entity = HttpEntity(
+                      ContentTypes.`text/html(UTF-8)`,
+                      """<html><body><h1>Bad Request</h1><p>Missing required parameters: code or state</p></body></html>"""
+                    )
+                  ))
+              }
+          }
         }
       }
     }

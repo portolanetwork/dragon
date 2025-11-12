@@ -4,14 +4,13 @@ import io.circe.*
 import io.circe.generic.auto.*
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.http.scaladsl.Http
-import org.apache.pekko.http.scaladsl.model.headers.{Authorization, BasicHttpCredentials}
 import org.apache.pekko.http.scaladsl.model.*
+import org.apache.pekko.http.scaladsl.model.headers.{Authorization, BasicHttpCredentials}
 import org.slf4j.LoggerFactory
 
 import java.net.URI
 import scala.concurrent.duration.*
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
 
 object ClientOAuthHelper {
   private val logger = LoggerFactory.getLogger(getClass)
@@ -34,10 +33,11 @@ object ClientOAuthHelper {
   // Use single snake_case models that match upstream JSON directly
   case class TokenResponse(
     access_token: String,
-    token_type: String,
+    id_token: String,
+    scope: Option[String],
     expires_in: Option[Int],
-    refresh_token: Option[String],
-    scope: Option[String]
+    token_type: String,
+    refresh_token: String,
   )
 
   case class OpenIdConfigurationResponse(
@@ -72,8 +72,9 @@ object ClientOAuthHelper {
             Json.obj(
               ("client_name", Json.fromString("turnstile-client")),
               ("redirect_uris", Json.arr(Json.fromString(redirectUri))),
-              ("grant_types", Json.arr(Json.fromString("authorization_code"))),
-              ("token_endpoint_auth_method", Json.fromString("client_secret_basic"))
+              //("grant_types", Json.arr(Json.fromString("authorization_code"))),
+              ("grant_types", Json.arr(Json.fromString("authorization_code"), Json.fromString("refresh_token"))),
+              ("token_endpoint_auth_method", Json.fromString("none"))
             ).noSpaces
           )
         )
@@ -155,6 +156,7 @@ object ClientOAuthHelper {
     s"$base/.well-known/openid-configuration"
   }
 
+  /*
   private def getAuthUrl(
     clientId: String,
     discovery: OpenIdConfigurationResponse,
@@ -170,15 +172,18 @@ object ClientOAuthHelper {
         Success(buildAuthorizationUrl(authEndpoint, clientId, redirectUrl, scope, state))
     }
   }
+   */
 
   def buildAuthorizationUrl(
     authEndpoint: String,
+    audience: String,
     clientId: String,
     redirectUri: String,
     scope: String,
     state: String
   ): String = {
     val params = Map(
+      "audience" -> audience, // No refresh token without audience in Auth0
       "response_type" -> "code",
       "client_id" -> clientId,
       "redirect_uri" -> redirectUri,
@@ -203,14 +208,17 @@ object ClientOAuthHelper {
   ): Future[Either[String, TokenResponse]] = {
     // Build form fields
     val baseForm = Map(
+      //"grant_type" -> "authorization_code",
       "grant_type" -> "authorization_code",
       "code" -> code,
-      "redirect_uri" -> redirectUri
+      "redirect_uri" -> redirectUri,
+      //"scope" -> "openid profile email offline_access", // Request offline_access for refresh token
+      "client_id" -> clientId
     )
 
     val formWithClient = clientSecretOpt match {
-      case Some(_) => baseForm
-      case None => baseForm + ("client_id" -> clientId)
+      case Some(clientSecret) => baseForm + ("client_secret" -> clientSecret)
+      case None => baseForm
     }
 
     // Create request entity using Pekko FormData

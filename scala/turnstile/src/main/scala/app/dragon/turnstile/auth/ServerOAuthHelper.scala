@@ -37,8 +37,8 @@ object ServerOAuthHelper {
   // extract the header, claims and signature
   private val jwtRegex = """(.+?)\.(.+?)\.(.+?)""".r
 
-  private def domain = ApplicationConfig.auth.getString("auth0.domain")
-  private def audience = ApplicationConfig.auth.getString("auth0.audience")
+  private def domain = ApplicationConfig.auth.getString("server.domain")
+  private def audience = ApplicationConfig.auth.getString("server.audience")
   private def issuer = s"https://$domain/"
 
   // Validates a JWT and potentially returns the claims if the token was successfully parsed
@@ -70,7 +70,7 @@ object ServerOAuthHelper {
     claims: JwtClaim,
     key: String
   ): Option[String] = {
-    import play.api.libs.json._
+    import play.api.libs.json.*
     Try {
       val json = Json.parse(claims.content)
       (json \ key).asOpt[String]

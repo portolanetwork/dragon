@@ -98,10 +98,11 @@ object ClientAuthExample {
                 logger.info(s"Please open this URL in your browser: $loginUrl")
               }
 
-            case FlowComplete(token) =>
+            case FlowTokenResponse(accessToken, refreshToken) =>
               logger.info("========== FLOW COMPLETE ==========")
-              logger.info(s"Access Token: ${token.accessToken}")
-              token.refreshToken.foreach(rt => logger.info(s"Refresh Token: $rt"))
+              logger.info(s"Access Token: ${accessToken}")
+              //token.refreshToken.foreach(rt => logger.info(s"Refresh Token: $rt"))
+              logger.info(s"Refresh Token: ${refreshToken}")
               logger.info("===================================")
               responsePromise.success(response)
 
