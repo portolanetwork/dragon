@@ -47,19 +47,19 @@ object ClientAuthService {
 
           ActorLookup.getAuthCodeFlowActor(flowId).ask[AuthCodeFlowActor.FlowResponse](replyTo =>
             AuthCodeFlowActor.StartFlow(
+              mcpServerUuid = mcpServerUuid,
               domain = serverRow.url,
               clientId = serverRow.clientId,
               clientSecret = serverRow.clientSecret,
               replyTo = replyTo
             )
           ).flatMap {
-            case AuthCodeFlowActor.FlowAuthResponse(loginUrl, tokenEndpoint, clientId, clientSecret) =>
+            case AuthCodeFlowActor.FlowAuthResponse(returnedMcpServerUuid, loginUrl, tokenEndpoint, clientId, clientSecret) =>
               // Update the database with OAuth configuration
               DbInterface.updateMcpServerAuth(
                 uuid = serverUuid,
                 clientId = Some(clientId),
                 clientSecret = clientSecret,
-                refreshToken = Some("blah"),//None, // Don't update refreshToken
                 tokenEndpoint = Some(tokenEndpoint)
               ).map {
                 case Right(_) => Right(loginUrl)
@@ -67,7 +67,7 @@ object ClientAuthService {
               }
             case AuthCodeFlowActor.FlowFailed(error) =>
               Future.successful(Left(AuthFlowFailed(s"Auth flow failed: $error")))
-            case AuthCodeFlowActor.FlowTokenResponse(_, _) =>
+            case AuthCodeFlowActor.FlowTokenResponse(_, _, _) =>
               Future.successful(Left(AuthFlowFailed("Unexpected FlowComplete response during flow initiation")))
           }
 
@@ -101,11 +101,8 @@ object ClientAuthService {
       case AuthCodeFlowActor.FlowTokenResponse(mcpServerUuid, accessToken, refreshToken) =>
         // Store the refresh token in the database
         DbInterface.updateMcpServerAuth(
-          uuid = mcpServerUuid,
-          clientId = None, // Don't update clientId
-          clientSecret = None, // Don't update clientSecret
+          uuid = UUID.fromString(mcpServerUuid),
           refreshToken = Some(refreshToken),
-          tokenEndpoint = None // Don't update tokenEndpoint
         ).flatMap {
           case Right(_) =>
             Future.successful(Right(AuthToken(
@@ -118,7 +115,7 @@ object ClientAuthService {
         }
       case AuthCodeFlowActor.FlowFailed(error) =>
         Future.successful(Left(AuthFlowFailed(s"Token exchange failed: $error")))
-      case AuthCodeFlowActor.FlowAuthResponse(_, _, _, _) =>
+      case AuthCodeFlowActor.FlowAuthResponse(_, _, _, _, _) =>
         Future.successful(Left(AuthFlowFailed("Unexpected FlowAuthResponse during token exchange")))
     }
   }

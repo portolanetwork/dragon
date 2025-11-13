@@ -52,6 +52,7 @@ object AuthCodeFlowActor {
   sealed trait Message extends TurnstileSerializable
 
   final case class StartFlow(
+    mcpServerUuid: String,
     domain: String,
     clientId: Option[String],
     clientSecret: Option[String],
@@ -103,6 +104,7 @@ object AuthCodeFlowActor {
 
   // State data
   final case class FlowData(
+    mcpServerUuid: String = "",
     domain: String = "",
     clientId: Option[String] = None,
     clientSecret: Option[String] = None,
@@ -143,12 +145,15 @@ class AuthCodeFlowActor(
 
   private def handleStartFlow(
   ): PartialFunction[Message, Behavior[Message]] = {
-    case StartFlow(domain, clientId, clientSecret, replyTo) =>
+    case StartFlow(mcpServerUuid, domain, clientId, clientSecret, replyTo) =>
       context.log.info(s"[$flowId] Received StartFlow")
       val data = FlowData(
+        mcpServerUuid = mcpServerUuid,
         domain = domain,
         clientId = clientId,
         clientSecret = clientSecret,
+        token = None,
+        wellKnownResponse = None,
       )
 
       // Always start with well-known lookup to get endpoints
@@ -210,8 +215,8 @@ class AuthCodeFlowActor(
           )
           
           //replyTo ! FlowLoginUrl(authUrl)
-          replyTo ! FlowAuthResponse(mcpServerUuid, authUrl, discoveryResponse.token_endpoint.getOrElse(""), clientId, updatedData.clientSecret)
-          
+          replyTo ! FlowAuthResponse(updatedData.mcpServerUuid, authUrl, discoveryResponse.token_endpoint.getOrElse(""), clientId, updatedData.clientSecret)
+
           authCodeRequestInProcess(updatedData)
 
         case _ => // No clientId, proceed to DCR
@@ -290,7 +295,7 @@ class AuthCodeFlowActor(
       )
 
       //replyTo ! FlowLoginUrl(authUrl)
-      replyTo ! FlowAuthResponse(authUrl, data.wellKnownResponse.get.token_endpoint.getOrElse(""),
+      replyTo ! FlowAuthResponse(updatedData.mcpServerUuid, authUrl, data.wellKnownResponse.get.token_endpoint.getOrElse(""),
         clientDcrResponse.client_id.getOrElse(""), clientDcrResponse.client_secret)
 
       authCodeRequestInProcess(updatedData)
@@ -414,11 +419,11 @@ class AuthCodeFlowActor(
         context.log.info(s"[$flowId] Access Token: ${token.access_token}")
         //context.log.info(s"[$flowId] Token Type: ${token.tokenType}")
         //token.expiresIn.foreach(exp => context.log.info(s"[$flowId] Expires In: $exp seconds"))
-        token.refresh_token.foreach(rt => context.log.info(s"[$flowId] Refresh Token: $rt"))
+        context.log.info(s"[$flowId] Refresh Token: ${token.refresh_token}")
         //token.scope.foreach(sc => context.log.info(s"[$flowId] Scope: $sc"))
         context.log.info(s"[$flowId] ============================================")
 
-        replyTo ! FlowTokenResponse(token.access_token, token.refresh_token)
+        replyTo ! FlowTokenResponse(data.mcpServerUuid, token.access_token, token.refresh_token)
 
         //data.replyTo.foreach(_ ! FlowComplete(token))
 

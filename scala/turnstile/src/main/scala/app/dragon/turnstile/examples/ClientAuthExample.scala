@@ -87,7 +87,7 @@ object ClientAuthExample {
         Behaviors.receive[FlowResponse] { (context, response) =>
           logger.info(s"Received response: $response")
           response match {
-            case FlowAuthResponse(loginUrl, tokenEndpoint, clientId, clientSecret) =>
+            case FlowAuthResponse(mcpServerUuid, loginUrl, tokenEndpoint, clientId, clientSecret) =>
               logger.info(s"Login URL: $loginUrl")
               logger.info("Opening browser...")
 
@@ -98,7 +98,7 @@ object ClientAuthExample {
                 logger.info(s"Please open this URL in your browser: $loginUrl")
               }
 
-            case FlowTokenResponse(accessToken, refreshToken) =>
+            case FlowTokenResponse(mcpServerUuid, accessToken, refreshToken) =>
               logger.info("========== FLOW COMPLETE ==========")
               logger.info(s"Access Token: ${accessToken}")
               //token.refreshToken.foreach(rt => logger.info(s"Refresh Token: $rt"))
@@ -153,7 +153,8 @@ object ClientAuthExample {
       logger.info(s"Callback server started on port $callbackPort")
 
       // Start the flow
-      authFlowActor ! StartFlow(domain, clientId, clientSecret, replyToActor)
+      val mcpServerUuid = java.util.UUID.randomUUID().toString
+      authFlowActor ! StartFlow(mcpServerUuid, domain, clientId, clientSecret, replyToActor)
 
       // Wait for the flow to complete (with timeout)
       val result = Await.result(responsePromise.future, 180.seconds)

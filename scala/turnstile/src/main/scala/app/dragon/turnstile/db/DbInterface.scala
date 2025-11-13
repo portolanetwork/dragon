@@ -37,7 +37,7 @@ case object DbNotFound extends DbError { val message: String = "not found" }
 case object DbAlreadyExists extends DbError { val message: String = "already exists" }
 
 object DbInterface {
-  val logger = org.slf4j.LoggerFactory.getLogger("DbInterface")
+  val logger: org.slf4j.Logger = org.slf4j.LoggerFactory.getLogger("DbInterface")
 
 
   // Helper that inspects a throwable (and its cause chain) to determine if it's a unique-constraint error
@@ -193,6 +193,58 @@ object DbInterface {
       .filter(_.uuid === uuid)
       .map(s => (s.clientId, s.clientSecret, s.refreshToken, s.tokenEndpoint, s.updatedAt))
       .update((clientId, clientSecret, refreshToken, tokenEndpoint, new java.sql.Timestamp(System.currentTimeMillis())))
+
+    db.run(updateAction).map(Right(_): Either[DbError, Int]).recover {
+      case NonFatal(t) => Left(mapDbError(t))
+    }
+  }
+
+  /**
+   * Updates OAuth credentials (clientId, clientSecret, tokenEndpoint) for an MCP server by UUID.
+   * @param uuid The UUID of the server to update
+   * @param clientId The OAuth client ID
+   * @param clientSecret The OAuth client secret
+   * @param tokenEndpoint The OAuth token endpoint
+   * @param db The database instance
+   * @param ec ExecutionContext
+   * @return `Future[Either[DbError, Int]]` number of rows updated or DbError
+   */
+  def updateMcpServerAuth(
+    uuid: UUID,
+    clientId: Option[String],
+    clientSecret: Option[String],
+    tokenEndpoint: Option[String]
+  )(
+    implicit db: Database, ec: ExecutionContext
+  ): Future[Either[DbError, Int]] = {
+    val updateAction = Tables.mcpServers
+      .filter(_.uuid === uuid)
+      .map(s => (s.clientId, s.clientSecret, s.tokenEndpoint, s.updatedAt))
+      .update((clientId, clientSecret, tokenEndpoint, new java.sql.Timestamp(System.currentTimeMillis())))
+
+    db.run(updateAction).map(Right(_): Either[DbError, Int]).recover {
+      case NonFatal(t) => Left(mapDbError(t))
+    }
+  }
+
+  /**
+   * Updates OAuth credentials (refreshToken) for an MCP server by UUID.
+   * @param uuid The UUID of the server to update
+   * @param refreshToken The OAuth refresh token
+   * @param db The database instance
+   * @param ec ExecutionContext
+   * @return `Future[Either[DbError, Int]]` number of rows updated or DbError
+   */
+  def updateMcpServerAuth(
+    uuid: UUID,
+    refreshToken: Option[String]
+  )(
+    implicit db: Database, ec: ExecutionContext
+  ): Future[Either[DbError, Int]] = {
+    val updateAction = Tables.mcpServers
+      .filter(_.uuid === uuid)
+      .map(s => (s.refreshToken, s.updatedAt))
+      .update((refreshToken, new java.sql.Timestamp(System.currentTimeMillis())))
 
     db.run(updateAction).map(Right(_): Either[DbError, Int]).recover {
       case NonFatal(t) => Left(mapDbError(t))
