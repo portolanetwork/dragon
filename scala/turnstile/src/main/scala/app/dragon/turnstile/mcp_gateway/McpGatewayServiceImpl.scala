@@ -32,8 +32,6 @@ import org.apache.pekko.util.Timeout
 import org.slf4j.{Logger, LoggerFactory}
 import pdi.jwt.JwtClaim
 
-import scala.concurrent.duration.*
-
 /**
  * Service implementation containing HTTP routes for the MCP Gateway.
  * Separates route definitions from server lifecycle management.
