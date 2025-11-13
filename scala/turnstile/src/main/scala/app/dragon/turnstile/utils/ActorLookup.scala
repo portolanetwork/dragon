@@ -21,7 +21,7 @@ package app.dragon.turnstile.utils
 import app.dragon.turnstile.auth.AuthCodeFlowActor
 import app.dragon.turnstile.mcp_client.{McpClientActor, McpClientActorId}
 import app.dragon.turnstile.mcp_gateway.McpSessionMapActor
-import app.dragon.turnstile.mcp_server.McpServerActor
+import app.dragon.turnstile.mcp_server.{McpServerActor, McpServerActorId}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, EntityRef}
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -66,11 +66,11 @@ object ActorLookup {
    * @return EntityRef for the MCP server actor
    */
   def getMcpServerActor(
-    mcpServerActorId: String
+    mcpServerActorId: McpServerActorId
   )(
     implicit sharding: ClusterSharding
   ): EntityRef[McpServerActor.Message] =
-    sharding.entityRefFor(McpServerActor.TypeKey, mcpServerActorId)
+    sharding.entityRefFor(McpServerActor.TypeKey, mcpServerActorId.toString)
 
   /**
    * Get a reference to an MCP client actor by its entity ID.

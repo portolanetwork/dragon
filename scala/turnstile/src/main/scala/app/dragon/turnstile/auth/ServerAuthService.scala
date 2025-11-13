@@ -77,7 +77,10 @@ object ServerAuthService {
         ServerOAuthHelper.validateJwt(tokenWithoutPrefix) match {
           case Success(claims) =>
             ServerOAuthHelper.getUserIdFromClaims(claims) match {
-              case Some(userId) => Right(AuthContext(userId, "default", claims))
+              case Some(userId) =>
+                // Strip @clients suffix if present. Its an Auth0 convention for machine-to-machine tokens.
+                val cleanUserId = userId.replaceAll("@clients$", "")
+                Right(AuthContext(cleanUserId, "default", claims))
               case None => Left(AccessDenied)
             }
           case Failure(_) =>

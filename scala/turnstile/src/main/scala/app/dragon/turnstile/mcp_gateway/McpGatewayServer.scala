@@ -97,8 +97,6 @@ class McpGatewayServer(
   // Execution context for async operations
   private implicit val ec: scala.concurrent.ExecutionContext = system.executionContext
 
-  private val sessionMap: SessionMap = new SessionMap()
-
   val serverVersion: String = mcpConfig.getString("server-version")
   val host: String = mcpConfig.getString("host")
   val port: Int = mcpConfig.getInt("port")
@@ -109,7 +107,6 @@ class McpGatewayServer(
   private val serviceImpl = new McpGatewayServiceImpl(
     auth0Domain = auth0Domain,
     mcpEndpoint = mcpEndpoint,
-    sessionMap = sessionMap
   )(system, timeout, sharding, database)
 
   def start(): Unit = {

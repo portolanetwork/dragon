@@ -39,7 +39,7 @@ import scala.jdk.FutureConverters.*
  * @param mcpServerActorId The unique actor identifier for this user's MCP server
  */
 case class McpServerActorId(userId: String, mcpServerActorId: String) {
-  override def toString: String = s"$userId-$mcpServerActorId"
+  override def toString: String = s"$userId.$mcpServerActorId"
 }
 
 object McpServerActorId {

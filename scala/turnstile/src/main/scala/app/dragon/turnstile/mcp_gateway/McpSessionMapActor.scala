@@ -19,6 +19,7 @@
 package app.dragon.turnstile.mcp_gateway
 
 import app.dragon.turnstile.mcp_gateway.McpSessionMapActor
+import app.dragon.turnstile.mcp_server.McpServerActorId
 import app.dragon.turnstile.serializer.TurnstileSerializable
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
@@ -42,9 +43,9 @@ object McpSessionMapActor {
   def getEntityId(userId: String, sessionMapActorId: String): String = s"$userId-$sessionMapActorId"
 
   sealed trait Message extends TurnstileSerializable
-  final case class SessionCreate(mcpSessionId: String, mcpServerActorId: String) extends Message
+  final case class SessionCreate(mcpSessionId: String, mcpServerActorId: McpServerActorId) extends Message
   final case class SessionDelete(mcpSessionId: String) extends Message
-  final case class SessionLookup(mcpSessionId: String, replyTo: ActorRef[Either[SessionMapError, String]]) extends Message
+  final case class SessionLookup(mcpSessionId: String, replyTo: ActorRef[Either[SessionMapError, McpServerActorId]]) extends Message
 
   sealed trait SessionMapError extends TurnstileSerializable
   final case class NotFoundError(message: String) extends SessionMapError
@@ -68,7 +69,7 @@ class McpSessionMapActor(
    * All operations reply with Either[SessionMapError, ...] to match patterns used elsewhere.
    */
   def activeState(
-    sessionIdToMcpActorIdMap: Map[String, String]
+    sessionIdToMcpActorIdMap: Map[String, McpServerActorId]
   ): Behavior[Message] = {
     Behaviors.receiveMessagePartial {
       handleSessionCreate(sessionIdToMcpActorIdMap)
@@ -78,7 +79,7 @@ class McpSessionMapActor(
   }
 
   private def handleSessionCreate(
-    sessionIdToMcpActorIdMap: Map[String, String]
+    sessionIdToMcpActorIdMap: Map[String, McpServerActorId]
   ): PartialFunction[Message, Behavior[Message]] = {
     case SessionCreate(sessionId, serverActorId) =>
       context.log.info(s"SessionCreate $sessionId -> $serverActorId for user $userId")
@@ -91,7 +92,7 @@ class McpSessionMapActor(
   }
 
   private def handleSessionDelete(
-    sesionIdToMcpActorIdMap: Map[String, String]
+    sesionIdToMcpActorIdMap: Map[String, McpServerActorId]
   ): PartialFunction[Message, Behavior[Message]] = {
     case SessionDelete(sessionId) =>
       context.log.info(s"SessionDelete $sessionId for user $userId")
@@ -103,21 +104,20 @@ class McpSessionMapActor(
   }
 
   private def handleSessionLookup(
-    sessionIdToMcpActorIdMap: Map[String, String]
+    sessionIdToMcpActorIdMap: Map[String, McpServerActorId]
   ): PartialFunction[Message, Behavior[Message]] = {
     case SessionLookup(sessionId, replyTo) =>
       context.log.info(s"SessionLookup $sessionId for user $userId")
-      if (sessionIdToMcpActorIdMap.contains(sessionId)) {
-        val actorId = sessionIdToMcpActorIdMap.getOrElse(sessionId, "unknown")
-        context.log.info(s"Session $sessionId found for user $userId. ActorId: $actorId")
-        replyTo ! Right(actorId)
-        activeState(sessionIdToMcpActorIdMap)
-      } else {
-        context.log.info(s"Session $sessionId NOT found for user $userId")
-        replyTo ! Left(NotFoundError(s"Session $sessionId not found"))
-        activeState(sessionIdToMcpActorIdMap)
+      sessionIdToMcpActorIdMap.get(sessionId) match {
+        case Some(actorId) =>
+          context.log.info(s"Session $sessionId found for user $userId. ActorId: $actorId")
+          replyTo ! Right(actorId)
+          activeState(sessionIdToMcpActorIdMap)
+        case None =>
+          context.log.error(s"Session $sessionId lookup inconsistency for user $userId")
+          replyTo ! Left(NotFoundError(s"Session $sessionId not found"))
+          activeState(sessionIdToMcpActorIdMap)
       }
-
   }
 }
 

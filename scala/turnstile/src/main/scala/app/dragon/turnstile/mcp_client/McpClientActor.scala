@@ -43,7 +43,7 @@ case class McpClientActorId(
   userId: String, 
   mcpServerUuid: String
 ) {
-  override def toString: String = s"$userId-$mcpServerUuid"
+  override def toString: String = s"$userId.$mcpServerUuid"
 }
 
 object McpClientActorId {

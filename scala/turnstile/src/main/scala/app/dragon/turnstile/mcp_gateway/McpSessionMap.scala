@@ -19,8 +19,8 @@
 package app.dragon.turnstile.mcp_gateway
 
 import McpSessionMapActor.SessionMapError
+import app.dragon.turnstile.mcp_server.{McpServerActor, McpServerActorId}
 import app.dragon.turnstile.utils.{ActorLookup, Random}
-
 import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse, StatusCodes}
 import org.apache.pekko.http.scaladsl.model.HttpEntity
 import org.apache.pekko.http.scaladsl.model.ContentTypes
@@ -39,14 +39,14 @@ import org.apache.pekko.util.Timeout
  * Looks up the handler ID directly from the specified header value.
  * If not found, optionally falls back to the default handler.
  */
-class SessionMap()(
+class McpSessionMap()(
   implicit ec: ExecutionContext,
   system: ActorSystem[?],
   sharding: ClusterSharding, timeout: Timeout
 ) {
-  private val logger: Logger = LoggerFactory.getLogger(classOf[SessionMap])
+  private val logger: Logger = LoggerFactory.getLogger(classOf[McpSessionMap])
 
-  case class ActiveSessionResult(mcpActorId: String, sessionIdOpt: Option[String])
+  case class ActiveSessionResult(mcpServerActorId: McpServerActorId, sessionIdOpt: Option[String])
 
   final val mcpSessionHeader = "mcp-session-id"
   final val authHeader = "authorization"
@@ -58,6 +58,7 @@ class SessionMap()(
    * @return Future[Either[HttpResponse, (String, HttpHandler)]]
    */
   def lookup(
+    userId: String,
     pekkoRequest: HttpRequest
   ): Future[ActiveSessionResult] = {
     // Extract mcp-session-id header value
@@ -72,34 +73,23 @@ class SessionMap()(
       case Some(mcpSessionId) =>
         logger.debug(s"Received request with $mcpSessionHeader: $mcpSessionId")
         // ask returns a Future; return that directly
-        ActorLookup.getMcpSessionMapActor("changeThisToUserId").ask[Either[SessionMapError, String]](
+        ActorLookup.getMcpSessionMapActor(userId).ask[Either[SessionMapError, McpServerActorId]](
           replyTo => McpSessionMapActor.SessionLookup(mcpSessionId, replyTo)
         ).map {
-          case Right(actorId) =>
-            ActiveSessionResult(
-              mcpActorId = actorId,
-              sessionIdOpt = Some(mcpSessionId)
-            )
+          case Right(mcpServerActor) =>
+            ActiveSessionResult(mcpServerActor, Some(mcpSessionId))
           case Left(error) =>
             logger.error(s"Session lookup error for $mcpSessionId: ${error}, generating new actor Id")
-            val actorId = generateActorId("changeThisToUserId")
+            val mcpServerActorId = generateMcpServerActorId(userId)
 
-            ActiveSessionResult(
-              mcpActorId = actorId,
-              sessionIdOpt = Some(mcpSessionId)
-            )
+            ActiveSessionResult(mcpServerActorId, Some(mcpSessionId))
         }
 
       case None =>
         logger.debug(s"$mcpSessionHeader header NOT found in request. Generating new actor ID.")
-        val actorId = "changeThisToUserId-" + Random.generateUuid()
+        val mcpServerActorId = generateMcpServerActorId(userId)
 
-        Future.successful(
-          ActiveSessionResult(
-            mcpActorId = "changeThisToUserId-" + Random.generateUuid(),
-            sessionIdOpt = None
-          )
-        )
+        Future.successful(ActiveSessionResult(mcpServerActorId, None))
     }
   }
 
@@ -107,23 +97,24 @@ class SessionMap()(
    * Update the session-to-actor mapping if a new mcp-session-id is observed in a response.
    */
   def updateSessionMapping(
-    sessionId: String, 
-    actorId: String
+    sessionId: String,
+    mcpServerActorId: McpServerActorId,
   ): Unit = {
-    if (!sessionId.isEmpty && !actorId.isEmpty) {
-      ActorLookup.getMcpSessionMapActor("changeThisToUserId") !
-        McpSessionMapActor.SessionCreate(sessionId, actorId)
+    if (!sessionId.isEmpty) {
+      ActorLookup.getMcpSessionMapActor(mcpServerActorId.userId) !
+        McpSessionMapActor.SessionCreate(sessionId, mcpServerActorId)
 
-      logger.debug(s"Updated session mapping: $sessionId -> $actorId")
+      logger.debug(s"Updated session mapping: $sessionId -> $mcpServerActorId")
     }
   }
 
-  private def generateActorId(userId: String): String = {
-    userId + "-" + Random.generateUuid()
+  private def generateMcpServerActorId(userId: String): McpServerActorId = {
+    McpServerActorId(userId, Random.generateUuid())
+    //userId + "-" + Random.generateUuid()
   }
 }
 
-object SessionMap {
+object McpSessionMap {
   /**
    * Create a HeaderBasedRouter with handler factory and optional fallback to default handler.
    *
@@ -135,5 +126,5 @@ object SessionMap {
       ec: ExecutionContext,
       system: ActorSystem[?],
       sharding: ClusterSharding,
-      timeout: Timeout): SessionMap = new SessionMap()
+      timeout: Timeout): McpSessionMap = new McpSessionMap()
 }

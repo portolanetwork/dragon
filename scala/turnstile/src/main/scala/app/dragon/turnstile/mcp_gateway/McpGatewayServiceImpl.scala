@@ -41,7 +41,6 @@ import scala.concurrent.duration.*
 class McpGatewayServiceImpl(
   auth0Domain: String,
   mcpEndpoint: String,
-  sessionMap: SessionMap
 )(
   implicit system: ActorSystem[?],
   timeout: Timeout,
@@ -51,11 +50,13 @@ class McpGatewayServiceImpl(
   private val logger: Logger = LoggerFactory.getLogger(classOf[McpGatewayServiceImpl])
   private implicit val ec: scala.concurrent.ExecutionContext = system.executionContext
 
+  private val sessionMap: McpSessionMap = new McpSessionMap()
+  
   /**
    * Creates the complete route by combining all sub-routes.
    */
   def createRoutes(): Route = {
-    createWellKnownRoute() ~ createCallbackRoute() ~ createLoginRoute() ~ createMcpRoute()
+    wellKnownRoute() ~ callbackRoute() ~ loginRoute() ~ mcpRoute()
   }
 
   /**
@@ -64,7 +65,7 @@ class McpGatewayServiceImpl(
    * - /.well-known/openid-configuration
    * - /.well-known/jwks.json
    */
-  private def createWellKnownRoute(): Route = {
+  private def wellKnownRoute(): Route = {
     pathPrefix(".well-known") {
       extractUnmatchedPath { remainingPath =>
         extractRequest { _ =>
@@ -106,7 +107,7 @@ class McpGatewayServiceImpl(
    * Example callback URL: /callback?code=...&state=...&error=...
    * Exchanges the authorization code for tokens and displays them in logs.
    */
-  private def createCallbackRoute(): Route = {
+  private def callbackRoute(): Route = {
     path("callback") {
       get {
         parameterMap { params =>
@@ -209,7 +210,7 @@ class McpGatewayServiceImpl(
    *
    * Example: GET /login?uuid=550e8400-e29b-41d4-a716-446655440000
    */
-  private def createLoginRoute(): Route = {
+  private def loginRoute(): Route = {
     path("login") {
       get {
         parameter("uuid") { uuidStr =>
@@ -287,7 +288,7 @@ class McpGatewayServiceImpl(
    * Create the main MCP route that handles GET, POST, and DELETE requests.
    * Requests are authenticated before being forwarded to MCP actors.
    */
-  private def createMcpRoute(): Route = {
+  private def mcpRoute(): Route = {
     path(mcpEndpoint.stripPrefix("/")) {
       extractRequest { pekkoRequest =>
         // Validate authentication first
@@ -314,9 +315,9 @@ class McpGatewayServiceImpl(
             logger.debug(s"Request authenticated for user: ${authContext.userId}")
             // Chain the lookup and the actor ask using flatMap/map so we can use map on Futures
             val responseFuture = for {
-              routeResult <- sessionMap.lookup(pekkoRequest)
+              routeResult <- sessionMap.lookup(authContext.userId, pekkoRequest)
               // derived values can be bound inside the for comprehension
-              mcpActorId = routeResult.mcpActorId
+              mcpActorId = routeResult.mcpServerActorId
 
               askResult <- pekkoRequest.method.value match {
                 case "GET" =>

@@ -113,8 +113,9 @@ class MgmtServiceImpl()(
     for {
       authContext <- ServerAuthService.authenticate(metadata)
       _ = logger.info(s"Received ListMcpServers request for userId: ${request.userId} from authenticated userId: ${authContext.userId}")
+      _ <- validateEquals(request.userId, authContext.userId, "User ID mismatch")
       _ <- validateNotEmpty(request.userId, "userId")
-      listResult <- DbInterface.listMcpServers(tenant = authContext.tenant, userId = request.userId)
+      listResult <- DbInterface.listMcpServers(tenant = authContext.tenant, userId = authContext.userId)
     } yield {
       listResult match {
         case Left(DbAlreadyExists) =>

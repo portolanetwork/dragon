@@ -18,13 +18,9 @@
 
 package app.dragon.turnstile.utils
 
-import app.dragon.turnstile.auth.ServerOAuthHelper
 import io.grpc.Status
-import org.apache.pekko.grpc.scaladsl.Metadata
-import pdi.jwt.JwtClaim
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success}
 
 object ServiceValidationUtil {
 
@@ -62,6 +58,23 @@ object ServiceValidationUtil {
           .asRuntimeException())
     } else {
       Future.successful(value)
+    }
+  }
+
+  def validateEquals(
+    value1: String,
+    value2: String,
+    message: String,
+  )(
+    implicit ec: ExecutionContext
+  ): Future[Unit] = {
+    if (value1 != value2) {
+      Future.failed(
+        Status.INVALID_ARGUMENT
+          .withDescription(message+ ": '" + value1 + "' != '" + value2 + "'")
+          .asRuntimeException())
+    } else {
+      Future.successful(())
     }
   }
 
