@@ -86,6 +86,7 @@ object AuthCodeFlowActor {
   sealed trait FlowResponse extends TurnstileSerializable
 
   final case class FlowAuthResponse(
+    mcpServerUuid: String,
     loginUrl: String,
     tokenEndpoint: String,
     clientId: String,
@@ -93,6 +94,7 @@ object AuthCodeFlowActor {
   ) extends FlowResponse
 
   final case class FlowTokenResponse(
+    mcpServerUuid: String,
     accessToken: String,
     refreshToken: String
   ) extends FlowResponse // Change this
@@ -208,7 +210,7 @@ class AuthCodeFlowActor(
           )
           
           //replyTo ! FlowLoginUrl(authUrl)
-          replyTo ! FlowAuthResponse(authUrl, discoveryResponse.token_endpoint.getOrElse(""), clientId, updatedData.clientSecret)
+          replyTo ! FlowAuthResponse(mcpServerUuid, authUrl, discoveryResponse.token_endpoint.getOrElse(""), clientId, updatedData.clientSecret)
           
           authCodeRequestInProcess(updatedData)
 

@@ -59,7 +59,7 @@ object ClientAuthService {
                 uuid = serverUuid,
                 clientId = Some(clientId),
                 clientSecret = clientSecret,
-                refreshToken = None, // Don't update refreshToken
+                refreshToken = Some("blah"),//None, // Don't update refreshToken
                 tokenEndpoint = Some(tokenEndpoint)
               ).map {
                 case Right(_) => Right(loginUrl)
@@ -98,10 +98,10 @@ object ClientAuthService {
         replyTo = replyTo
       )
     ).flatMap {
-      case AuthCodeFlowActor.FlowTokenResponse(accessToken, refreshToken) =>
+      case AuthCodeFlowActor.FlowTokenResponse(mcpServerUuid, accessToken, refreshToken) =>
         // Store the refresh token in the database
         DbInterface.updateMcpServerAuth(
-          uuid = UUID.fromString(flowId),
+          uuid = mcpServerUuid,
           clientId = None, // Don't update clientId
           clientSecret = None, // Don't update clientSecret
           refreshToken = Some(refreshToken),
