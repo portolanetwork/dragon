@@ -19,7 +19,7 @@
 package app.dragon.turnstile.actor
 
 import app.dragon.turnstile.auth.ClientAuthService
-import app.dragon.turnstile.client.TurnstileStreamingHttpAsyncMcpClient
+import app.dragon.turnstile.mcp_client.McpStreamingHttpAsyncClient
 import app.dragon.turnstile.serializer.TurnstileSerializable
 import io.modelcontextprotocol.spec.McpSchema
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
@@ -241,7 +241,7 @@ class McpClientActor(
   }
 
   def initializingState(
-    mcpClient: TurnstileStreamingHttpAsyncMcpClient
+    mcpClient: McpStreamingHttpAsyncClient
   ): Behavior[Message] = {
     Behaviors.receiveMessagePartial(
       handleInitializeStatus(mcpClient)
@@ -251,7 +251,7 @@ class McpClientActor(
    * Active state - handles all MCP client operations.
    */
   def activeState(
-    mcpClient: TurnstileStreamingHttpAsyncMcpClient
+    mcpClient: McpStreamingHttpAsyncClient
   ): Behavior[Message] = {
     Behaviors.receiveMessagePartial {
       handleToolCallRequest(mcpClient)
@@ -277,7 +277,7 @@ class McpClientActor(
       val authInfo = if (authTokenProvider.isDefined) "with authentication" else "without authentication"
       context.log.info(s"Initializing MCP client actor $mcpClientActorId with server URL $mcpServerUrl $authInfo")
 
-      val mcpClient = TurnstileStreamingHttpAsyncMcpClient(
+      val mcpClient = McpStreamingHttpAsyncClient(
         serverUrl = mcpServerUrl,
         authTokenProvider = authTokenProvider
       )
@@ -298,7 +298,7 @@ class McpClientActor(
    * Handles the initialization of the MCP client and pipes the result to self.
    */
   def handleInitializeStatus(
-    mcpClient: TurnstileStreamingHttpAsyncMcpClient
+    mcpClient: McpStreamingHttpAsyncClient
   ): PartialFunction[Message, Behavior[Message]] = {
     case InitializeStatus(status) =>
       context.log.info(s"MCP client actor $mcpClientActorId initialized successfully")
@@ -313,7 +313,7 @@ class McpClientActor(
    * Handle ping messages - used as a liveness check.
    */
   def handlePing(
-    mcpClient: TurnstileStreamingHttpAsyncMcpClient
+    mcpClient: McpStreamingHttpAsyncClient
   ): PartialFunction[Message, Behavior[Message]] = {
     case McpPing(replyTo) =>
       // reply with Unit to indicate liveness
@@ -334,7 +334,7 @@ class McpClientActor(
    * Handle ping responses produced by the internal ping pipeToSelf.
    */
   def handlePingResponse(
-    mcpClient: TurnstileStreamingHttpAsyncMcpClient
+    mcpClient: McpStreamingHttpAsyncClient
   ): PartialFunction[Message, Behavior[Message]] = {
     case PingResponse(result, replyTo) =>
       result match {
@@ -354,7 +354,7 @@ class McpClientActor(
    * Handle tool call requests.
    */
   def handleToolCallRequest(
-    mcpClient: TurnstileStreamingHttpAsyncMcpClient
+    mcpClient: McpStreamingHttpAsyncClient
   ): PartialFunction[Message, Behavior[Message]] = {
     case McpToolCallRequest(request, replyTo) =>
       context.log.info(s"MCP Client Actor $mcpClientActorId calling tool: ${request.name()}")
@@ -371,7 +371,7 @@ class McpClientActor(
    * Handle list tools requests.
    */
   def handleListTools(
-    mcpClient: TurnstileStreamingHttpAsyncMcpClient
+    mcpClient: McpStreamingHttpAsyncClient
   ): PartialFunction[Message, Behavior[Message]] = {
     case McpListTools(replyTo) =>
       context.log.info(s"MCP Client Actor $mcpClientActorId listing tools")
@@ -389,7 +389,7 @@ class McpClientActor(
    * These are received through the client's notification consumers.
    */
   def handleNotification(
-    mcpClient: TurnstileStreamingHttpAsyncMcpClient
+    mcpClient: McpStreamingHttpAsyncClient
   ): PartialFunction[Message, Behavior[Message]] = {
     case McpNotification(notificationType, payload) =>
       notificationType match {
@@ -416,7 +416,7 @@ class McpClientActor(
    * Handle wrapped tool call responses.
    */
   def handleToolCallResponse(
-    mcpClient: TurnstileStreamingHttpAsyncMcpClient
+    mcpClient: McpStreamingHttpAsyncClient
   ): PartialFunction[Message, Behavior[Message]] = {
     case ToolCallResponse(result, replyTo) =>
       result match {
@@ -436,7 +436,7 @@ class McpClientActor(
    * Handle wrapped list tools responses.
    */
   def handleListToolsResponse(
-    mcpClient: TurnstileStreamingHttpAsyncMcpClient
+    mcpClient: McpStreamingHttpAsyncClient
   ): PartialFunction[Message, Behavior[Message]] = {
     case ListToolsResponse(result, replyTo) =>
       result match {

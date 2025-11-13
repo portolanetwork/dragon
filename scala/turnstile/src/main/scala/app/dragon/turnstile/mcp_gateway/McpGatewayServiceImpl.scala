@@ -16,12 +16,11 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-package app.dragon.turnstile.gateway
+package app.dragon.turnstile.mcp_gateway
 
 import app.dragon.turnstile.actor.{ActorLookup, McpServerActor}
 import app.dragon.turnstile.auth.ServerAuthService.{AccessDenied, MissingAuthHeader}
 import app.dragon.turnstile.auth.{ClientAuthService, ServerAuthService}
-import com.typesafe.config.Config
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
 import org.apache.pekko.http.scaladsl.Http
@@ -31,129 +30,31 @@ import org.apache.pekko.http.scaladsl.server.Route
 import org.apache.pekko.util.Timeout
 import org.slf4j.{Logger, LoggerFactory}
 import pdi.jwt.JwtClaim
-import slick.jdbc.JdbcBackend.Database
 
 import scala.concurrent.duration.*
-import scala.util.{Failure, Success}
 
 /**
- * Decoupled Embedded MCP Server using header-based routing to multiple WebFlux handlers.
- *
- * This example demonstrates a decoupled architecture where:
- * 1. Pekko HTTP server receives requests
- * 2. HeaderBasedRouter examines headers (like mcp-session-id)
- * 3. WebFluxHandlerRegistry provides the appropriate handler
- * 4. Request is forwarded to the selected WebFlux MCP transport
- *
- * Architecture:
- * {{{
- * Client Request
- *      ↓
- * Pekko HTTP Server
- *      ↓
- * HeaderBasedRouter (examines mcp-session-id)
- *      ↓
- * WebFluxHandlerRegistry
- *      ↓
- * Selected WebFlux HttpHandler
- *      ↓
- * PekkoToSpringRequestAdapter
- *      ↓
- * MCP Transport (Spring WebFlux)
- *      ↓
- * SpringToPekkoResponseAdapter
- *      ↓
- * Client Response
- * }}}
- *
- * Benefits:
- * - **Multi-tenancy**: Route different sessions to different MCP server instances
- * - **Load balancing**: Distribute load across multiple handlers
- * - **A/B testing**: Route to experimental vs stable implementations
- * - **Session affinity**: Maintain sticky sessions to specific handlers
- * - **Dynamic scaling**: Add/remove handlers at runtime
- *
- * Usage:
- * {{{
- * scala> sbt "runMain app.dragon.turnstile.example.EmbeddedMcpServer"
- * }}}
+ * Service implementation containing HTTP routes for the MCP Gateway.
+ * Separates route definitions from server lifecycle management.
  */
-
-
-class TurnstileMcpGateway(
-  mcpConfig: Config,
-  authConfig: Config,
-  db: Database
+class McpGatewayServiceImpl(
+  auth0Domain: String,
+  mcpEndpoint: String,
+  sessionMap: SessionMap
 )(
-  implicit system: ActorSystem[?]
+  implicit system: ActorSystem[?],
+  timeout: Timeout,
+  sharding: ClusterSharding,
+  db: slick.jdbc.JdbcBackend.Database
 ) {
-  implicit val timeout: Timeout = Timeout(10.seconds)
-  implicit val sharding: ClusterSharding = ClusterSharding(system)
-  implicit val database: Database = db
-
-
-  private val logger: Logger = LoggerFactory.getLogger(classOf[TurnstileMcpGateway])
-
-  // Execution context for async operations
+  private val logger: Logger = LoggerFactory.getLogger(classOf[McpGatewayServiceImpl])
   private implicit val ec: scala.concurrent.ExecutionContext = system.executionContext
 
-  private val sessionMap: SessionMap = new SessionMap()
-
-  val serverVersion: String = mcpConfig.getString("server-version")
-  val host: String = mcpConfig.getString("host")
-  val port: Int = mcpConfig.getInt("port")
-  val mcpEndpoint: String = mcpConfig.getString("mcp-endpoint")
-  val auth0Domain: String = authConfig.getString("server.domain")
-
-  case class RouteLookupResult(
-    mcpActorId: String,
-    sessionIdOpt: Option[String]
-  )
-
-  def start(): Unit = {
-    // Create actor system for Pekko HTTP
-    try {
-      logger.info(s"✓ Configured header-based router (dynamic handler creation)")
-      logger.info(s"  Routing header: mcp-session-id")
-      logger.info(s"  Fallback enabled: true")
-
-      // 4. Create Pekko HTTP route with the router
-      val route =
-        createWellKnownRoute() ~ createCallbackRoute() ~ createLoginRoute() ~ createMcpRoute(mcpEndpoint)
-
-      // 5. Start the Pekko HTTP server
-      logger.info(s"Starting Pekko HTTP server on http://${host}:${port}${mcpEndpoint}")
-      val bindingFuture = Http().newServerAt(host, port).bind(route)
-
-      bindingFuture.onComplete {
-        case Success(binding) =>
-          logger.info(s"✓ Decoupled MCP Server started successfully at http://${host}:${port}${mcpEndpoint}")
-          logger.info(s"✓ HTTP Server: Apache Pekko HTTP")
-          logger.info(s"✓ MCP Transport: Spring WebFlux (multiple instances)")
-          logger.info(s"✓ Routing Strategy: Header-based with session affinity")
-
-          logger.info("")
-          logger.info("Protocol endpoints:")
-          logger.info(s"  POST http://${host}:${port}${mcpEndpoint} - Initialize session, send requests")
-          logger.info(s"  GET  http://${host}:${port}${mcpEndpoint} - Establish SSE stream")
-          logger.info(s"  DELETE http://${host}:${port}${mcpEndpoint} - Close session")
-          logger.info("")
-          logger.info("Routing behavior:")
-          logger.info("  - Requests without mcp-session-id → 'default' handler")
-          logger.info("  - New sessions → routed to 'default' handler initially")
-          logger.info("  - Sessions can be dynamically routed to different handlers")
-          logger.info("")
-
-        case Failure(ex) =>
-          logger.error(s"✗ Failed to start MCP server: ${ex.getMessage}", ex)
-          system.terminate()
-      }
-    } catch {
-      case ex: Exception =>
-        logger.error("Failed to start decoupled embedded MCP server", ex)
-        system.terminate()
-        System.exit(1)
-    }
+  /**
+   * Creates the complete route by combining all sub-routes.
+   */
+  def createRoutes(): Route = {
+    createWellKnownRoute() ~ createCallbackRoute() ~ createLoginRoute() ~ createMcpRoute()
   }
 
   /**
@@ -382,12 +283,10 @@ class TurnstileMcpGateway(
   }
 
   /**
-   * Create a Pekko HTTP route that uses HeaderBasedRouter to route to different handlers.
+   * Create the main MCP route that handles GET, POST, and DELETE requests.
    * Requests are authenticated before being forwarded to MCP actors.
    */
-  private def createMcpRoute(
-    mcpEndpoint: String
-  ): Route = {
+  private def createMcpRoute(): Route = {
     path(mcpEndpoint.stripPrefix("/")) {
       extractRequest { pekkoRequest =>
         // Validate authentication first
@@ -466,18 +365,4 @@ class TurnstileMcpGateway(
       }
     }
   }
-
-
-}
-
-object TurnstileMcpGateway {
-  private val logger: Logger = LoggerFactory.getLogger(classOf[TurnstileMcpGateway])
-
-  def apply(
-    mcpStreamingConfig: Config,
-    authConfig: Config,
-    db: Database
-  )(
-    implicit system: ActorSystem[?]
-  ): TurnstileMcpGateway = new TurnstileMcpGateway(mcpStreamingConfig, authConfig, db)
 }

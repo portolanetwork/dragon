@@ -16,7 +16,7 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-package app.dragon.turnstile.gateway
+package app.dragon.turnstile.mcp_gateway
 
 import app.dragon.turnstile.actor.McpSessionMapActor.SessionMapError
 import app.dragon.turnstile.actor.{ActorLookup, McpSessionMapActor}

@@ -19,7 +19,7 @@
 package app.dragon.turnstile.actor
 
 import app.dragon.turnstile.serializer.TurnstileSerializable
-import app.dragon.turnstile.server.{PekkoToSpringRequestAdapter, SpringToPekkoResponseAdapter, TurnstileStreamingHttpMcpServer}
+import app.dragon.turnstile.mcp_server.{PekkoToSpringRequestAdapter, SpringToPekkoResponseAdapter, McpStreamingHttpServer}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityTypeKey}
@@ -152,7 +152,7 @@ object McpServerActor {
         context.log.info(s"Starting MCP server for user $userId, actor $mcpServerActorId")
 
         // Start the MCP server asynchronously
-        val mcpSserver = TurnstileStreamingHttpMcpServer(userId).start()
+        val mcpSserver = McpStreamingHttpServer(userId).start()
 
         new McpServerActor(context, buffer, userId, mcpServerActorId).initState(mcpSserver)
       }
@@ -177,7 +177,7 @@ class McpServerActor(
    * Stashes incoming requests until the server is ready.
    */
   def initState(
-    turnstileMcpServer: TurnstileStreamingHttpMcpServer
+    turnstileMcpServer: McpStreamingHttpServer
   ): Behavior[Message] = {
     // Pipe the result to self
     context.pipeToSelf(turnstileMcpServer.refreshDownstreamTools()) {
@@ -189,7 +189,7 @@ class McpServerActor(
   }
 
   def activeState(
-    turnstileMcpServer: TurnstileStreamingHttpMcpServer
+    turnstileMcpServer: McpStreamingHttpServer
   ): Behavior[Message] = {
     Behaviors.receiveMessagePartial {
       handleMcpGetRequest(turnstileMcpServer)
@@ -205,7 +205,7 @@ class McpServerActor(
   }
 
   def handleDownstreamRefresh(
-    turnstileMcpServer: TurnstileStreamingHttpMcpServer
+    turnstileMcpServer: McpStreamingHttpServer
   ): PartialFunction[Message, Behavior[Message]] = {
     case DownstreamRefreshStatus(Right(_)) =>
       context.log.info(s"MCP server for actor $mcpServerActorId downstream refresh succeeded, transitioning to active state")
@@ -222,7 +222,7 @@ class McpServerActor(
   }
 
   def handleMcpGetRequest(
-    turnstileMcpServer: TurnstileStreamingHttpMcpServer
+    turnstileMcpServer: McpStreamingHttpServer
   ): PartialFunction[Message, Behavior[Message]] = {
     case McpGetRequest(request, replyTo) =>
       context.log.info(s"MCP Actor $mcpServerActorId handling GET request")
@@ -234,7 +234,7 @@ class McpServerActor(
   }
 
   def handleMcpPostRequest(
-    turnstileMcpServer: TurnstileStreamingHttpMcpServer
+    turnstileMcpServer: McpStreamingHttpServer
   ): PartialFunction[Message, Behavior[Message]] = {
     case McpPostRequest(request, replyTo) =>
       context.log.info(s"Handling MCP POST request for user $userId, actor $mcpServerActorId")
@@ -247,7 +247,7 @@ class McpServerActor(
   }
 
   def handleMcpDeleteRequest(
-    turnstileMcpServer: TurnstileStreamingHttpMcpServer
+    turnstileMcpServer: McpStreamingHttpServer
   ): PartialFunction[Message, Behavior[Message]] = {
     case McpDeleteRequest(request, replyTo) =>
       context.log.info(s"Handling MCP DELETE request: ${request.uri}")
@@ -271,7 +271,7 @@ class McpServerActor(
 
   private def handlePekkoRequest(
     request: HttpRequest,
-    turnstileMcpServer: TurnstileStreamingHttpMcpServer
+    turnstileMcpServer: McpStreamingHttpServer
   ): Future[HttpResponse] = {
     val springRequest = PekkoToSpringRequestAdapter(request)
     val springResponse = SpringToPekkoResponseAdapter()

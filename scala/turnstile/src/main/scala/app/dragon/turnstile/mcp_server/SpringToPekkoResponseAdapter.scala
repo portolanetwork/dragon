@@ -16,7 +16,7 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-package app.dragon.turnstile.server
+package app.dragon.turnstile.mcp_server
 
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.http.scaladsl.model.*

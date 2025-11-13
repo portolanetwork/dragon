@@ -19,9 +19,9 @@
 package app.dragon.turnstile
 
 import app.dragon.turnstile.actor.{McpClientActor, McpServerActor, McpSessionMapActor}
-import app.dragon.turnstile.client.TurnstileStreamingHttpAsyncMcpClient
+import app.dragon.turnstile.mcp_client.McpStreamingHttpAsyncClient
 import app.dragon.turnstile.config.ApplicationConfig
-import app.dragon.turnstile.gateway.TurnstileMcpGateway
+import app.dragon.turnstile.mcp_gateway.McpGatewayServer
 import com.typesafe.config.ConfigFactory
 import io.modelcontextprotocol.spec.McpSchema
 import org.apache.pekko.actor.testkit.typed.scaladsl.ActorTestKit
@@ -102,8 +102,8 @@ class TurnstileServerIntegrationSpec
   private implicit val system: ActorSystem[?] = testKit.system
   private implicit val ec: ExecutionContext = system.executionContext
 
-  private var mcpGateway: TurnstileMcpGateway = null.asInstanceOf[TurnstileMcpGateway]
-  private var client: TurnstileStreamingHttpAsyncMcpClient = null.asInstanceOf[TurnstileStreamingHttpAsyncMcpClient]
+  private var mcpGateway: McpGatewayServer = null.asInstanceOf[McpGatewayServer]
+  private var client: McpStreamingHttpAsyncClient = null.asInstanceOf[McpStreamingHttpAsyncClient]
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -136,7 +136,7 @@ class TurnstileServerIntegrationSpec
     Thread.sleep(3000)
 
     // Create client
-    client = TurnstileStreamingHttpAsyncMcpClient(serverUrl, mcpEndpoint)
+    client = McpStreamingHttpAsyncClient(serverUrl, mcpEndpoint)
   }
 
   override def afterAll(): Unit = {
@@ -409,7 +409,7 @@ class TurnstileServerIntegrationSpec
       Thread.sleep(1000)
 
       // Recreate client for remaining tests
-      client = TurnstileStreamingHttpAsyncMcpClient(serverUrl, mcpEndpoint)
+      client = McpStreamingHttpAsyncClient(serverUrl, mcpEndpoint)
 
       succeed
     }

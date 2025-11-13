@@ -187,13 +187,13 @@ You should receive a response with `client_id` and `client_secret`.
 
 ### .well-known Proxy Implementation
 
-The `TurnstileMcpGateway` class includes a `createWellKnown` function that:
+The `TurnstileMcpGatewayServer` class includes a `createWellKnown` function that:
 - Intercepts requests to `/.well-known/*`
 - Proxies them to `https://{AUTH0_DOMAIN}/.well-known/*`
 - Returns Auth0's responses transparently
 - Handles errors with proper HTTP status codes
 
-**Location**: `src/main/scala/app/dragon/dragon/gateway/TurnstileMcpGateway.scala:167-195`
+**Location**: `src/main/scala/app/dragon/turnstile/gateway/TurnstileMcpGatewayServiceImpl.scala`
 
 ### Security Considerations
 

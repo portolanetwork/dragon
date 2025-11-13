@@ -18,7 +18,7 @@
 
 package app.dragon.turnstile.examples
 
-import app.dragon.turnstile.client.TurnstileStreamingHttpAsyncMcpClient
+import app.dragon.turnstile.mcp_client.McpStreamingHttpAsyncClient
 import io.modelcontextprotocol.spec.McpSchema
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -81,7 +81,7 @@ object TurnstileClientExample {
     logger.info("")
 
     // Create the client using TurnstileStreamingHttpAsyncMcpClient
-    val client = TurnstileStreamingHttpAsyncMcpClient(serverUrl, endpoint)
+    val client = McpStreamingHttpAsyncClient(serverUrl, endpoint)
 
     // Execute the workflow
     val workflow: Future[Unit] = for {
@@ -272,7 +272,7 @@ object TurnstileClientExample {
    * Demonstrates streaming with streaming_demo_tool which sends progress notifications.
    */
   private def callToolIfAvailable(
-      client: TurnstileStreamingHttpAsyncMcpClient,
+      client: McpStreamingHttpAsyncClient,
       tools: List[McpSchema.Tool]
   ): Future[Unit] = {
     if (tools.isEmpty) {

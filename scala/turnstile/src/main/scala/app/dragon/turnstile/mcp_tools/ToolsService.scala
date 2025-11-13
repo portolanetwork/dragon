@@ -159,7 +159,7 @@ class ToolsService(
    * @param timeout The timeout for the actor query (implicit, default 30 seconds)
    * @return A Future containing either an error or a list of namespaced tools
    */
-  private[service] def getDownstreamTools(
+  private[mcp_tools] def getDownstreamTools(
     mcpServerUuid: String,
     mcpServerName: String,
     serverUrl: String,

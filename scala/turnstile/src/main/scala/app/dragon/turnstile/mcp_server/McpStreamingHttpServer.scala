@@ -16,7 +16,7 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-package app.dragon.turnstile.server
+package app.dragon.turnstile.mcp_server
 
 import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.service.ToolsService
@@ -37,8 +37,8 @@ import scala.concurrent.{ExecutionContext, Future}
 /**
  * Factory for creating user-scoped MCP server instances.
  */
-object TurnstileStreamingHttpMcpServer {
-  val logger: org.slf4j.Logger = LoggerFactory.getLogger(classOf[TurnstileStreamingHttpMcpServer])
+object McpStreamingHttpServer {
+  val logger: org.slf4j.Logger = LoggerFactory.getLogger(classOf[McpStreamingHttpServer])
 
   val serverName: String = ApplicationConfig.mcpStreaming.getString("server-name")
   val serverVersion: String = ApplicationConfig.mcpStreaming.getString("server-version")
@@ -50,8 +50,8 @@ object TurnstileStreamingHttpMcpServer {
    * @param system The actor system
    * @return A new TurnstileStreamingHttpMcpServer instance
    */
-  def apply(userId: String)(implicit system: ActorSystem[?]): TurnstileStreamingHttpMcpServer =
-    new TurnstileStreamingHttpMcpServer(serverName, serverVersion, userId)
+  def apply(userId: String)(implicit system: ActorSystem[?]): McpStreamingHttpServer =
+    new McpStreamingHttpServer(serverName, serverVersion, userId)
 }
 
 /**
@@ -99,14 +99,14 @@ object TurnstileStreamingHttpMcpServer {
  * @param userId The user identifier for tool scoping
  * @param system The actor system (implicit)
  */
-class TurnstileStreamingHttpMcpServer(
+class McpStreamingHttpServer(
   val serverName: String,
   val serverVersion: String,
   val userId: String,
 )(
   implicit val system: ActorSystem[?]
 ) {
-  private val logger: org.slf4j.Logger = LoggerFactory.getLogger(classOf[TurnstileStreamingHttpMcpServer])
+  private val logger: org.slf4j.Logger = LoggerFactory.getLogger(classOf[McpStreamingHttpServer])
   // Execution context derived from the provided actor system
   private implicit val ec: ExecutionContext = system.executionContext
   private implicit val timeout: Timeout = 30.seconds
@@ -126,7 +126,7 @@ class TurnstileStreamingHttpMcpServer(
    * @return Future[TurnstileStreamingHttpMcpServer] - completes when all tools are registered
    */
   def start(
-  ): TurnstileStreamingHttpMcpServer = {
+  ): McpStreamingHttpServer = {
     if (started) {
       logger.warn(s"MCP server: $serverName v$serverVersion already started; ignoring duplicate start.")
       return this

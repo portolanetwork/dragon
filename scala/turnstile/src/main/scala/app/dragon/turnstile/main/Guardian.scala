@@ -21,8 +21,8 @@ package app.dragon.turnstile.main
 import app.dragon.turnstile.actor.{AuthCodeFlowActor, McpClientActor, McpServerActor, McpSessionMapActor}
 import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.db.DatabaseMigration
-import app.dragon.turnstile.gateway.TurnstileMcpGateway
-import app.dragon.turnstile.server.TurnstileGrpcServer
+import app.dragon.turnstile.mcp_gateway.McpGatewayServer
+import app.dragon.turnstile.mgmt.MgmtGrpcServer
 import com.typesafe.config.Config
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorSystem, Behavior}
@@ -98,13 +98,13 @@ object Guardian {
           AuthCodeFlowActor.initSharding(context.system)
 
           // Start GRPC server (hosting both GreeterService and TurnstileService)
-          TurnstileGrpcServer.start(grpcHost, grpcPort, context.system)
+          MgmtGrpcServer.start(grpcHost, grpcPort, context.system)
 
           // Start MCP Streaming HTTP server if enabled
           if (mcpStreamingConfig.getBoolean("enabled")) {
             try {
               //val mcpStreamingServer = StreamingHttpMcpServer(mcpStreamingConfig)
-              val mcpStreamingServer = TurnstileMcpGateway(mcpStreamingConfig, authConfig, db)
+              val mcpStreamingServer = McpGatewayServer(mcpStreamingConfig, authConfig, db)
 
               mcpStreamingServer.start()
               context.log.info("MCP Streaming HTTP Server started successfully")

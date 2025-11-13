@@ -16,7 +16,7 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-package app.dragon.turnstile.client
+package app.dragon.turnstile.mcp_client
 
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer
@@ -32,8 +32,8 @@ import scala.jdk.FutureConverters.*
 /**
  * Factory for creating MCP client instances.
  */
-object TurnstileStreamingHttpAsyncMcpClient {
-  private val logger = LoggerFactory.getLogger(classOf[TurnstileStreamingHttpAsyncMcpClient])
+object McpStreamingHttpAsyncClient {
+  private val logger = LoggerFactory.getLogger(classOf[McpStreamingHttpAsyncClient])
 
   val clientName: String = "Streaming client"
   val clientVersion: String = "0.1.0"
@@ -51,8 +51,8 @@ object TurnstileStreamingHttpAsyncMcpClient {
     serverUrl: String,
     endpoint: String = "/mcp",
     authTokenProvider: Option[() => Future[String]] = None
-  )(implicit ec: ExecutionContext): TurnstileStreamingHttpAsyncMcpClient =
-    new TurnstileStreamingHttpAsyncMcpClient(clientName, clientVersion, serverUrl, endpoint, authTokenProvider).start()
+  )(implicit ec: ExecutionContext): McpStreamingHttpAsyncClient =
+    new McpStreamingHttpAsyncClient(clientName, clientVersion, serverUrl, endpoint, authTokenProvider).start()
 }
 
 /**
@@ -126,14 +126,14 @@ object TurnstileStreamingHttpAsyncMcpClient {
  * @param authTokenProvider Optional function to get access token for authentication
  * @param ec Execution context for async operations
  */
-class TurnstileStreamingHttpAsyncMcpClient(
+class McpStreamingHttpAsyncClient(
   val clientName: String,
   val clientVersion: String,
   val serverUrl: String,
   val endpoint: String,
   val authTokenProvider: Option[() => Future[String]]
 )(implicit ec: ExecutionContext) {
-  private val logger = LoggerFactory.getLogger(classOf[TurnstileStreamingHttpAsyncMcpClient])
+  private val logger = LoggerFactory.getLogger(classOf[McpStreamingHttpAsyncClient])
 
   // Set in start()
   private var mcpAsyncClient: McpAsyncClient = null
@@ -157,7 +157,7 @@ class TurnstileStreamingHttpAsyncMcpClient(
    *
    * @return this instance for chaining
    */
-  private def start(): TurnstileStreamingHttpAsyncMcpClient = {
+  private def start(): McpStreamingHttpAsyncClient = {
     logger.info(s"Creating MCP async client: $clientName v$clientVersion")
     logger.info(s"Target server: $serverUrl$endpoint")
 

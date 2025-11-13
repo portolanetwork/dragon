@@ -16,10 +16,10 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-package app.dragon.turnstile.server
+package app.dragon.turnstile.mgmt
 
 import app.dragon.turnstile.config.ApplicationConfig
-import app.dragon.turnstile.service.TurnstileServiceImpl
+import app.dragon.turnstile.mgmt.MgmtServiceImpl
 import dragon.turnstile.api.v1.{TurnstileService, TurnstileServiceHandler, TurnstileServicePowerApiHandler}
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.grpc.scaladsl.{ServerReflection, ServiceHandler}
@@ -37,19 +37,19 @@ import scala.util.{Failure, Success}
  * This server binds multiple gRPC services to a single port and provides
  * server reflection for both services.
  */
-object TurnstileGrpcServer {
-  val logger: Logger = LoggerFactory.getLogger(classOf[TurnstileGrpcServer])
+object MgmtGrpcServer {
+  val logger: Logger = LoggerFactory.getLogger(classOf[MgmtGrpcServer])
 
   def start(host: String, port: Int, system: ActorSystem[Nothing]): Future[Http.ServerBinding] = {
     logger.info("Starting TurnstileServer...")
-    new TurnstileGrpcServer(system).run(host, port)
+    new MgmtGrpcServer(system).run(host, port)
   }
 }
 
-class TurnstileGrpcServer private(
+class MgmtGrpcServer private(
   system: ActorSystem[Nothing]
 ) {
-  import TurnstileGrpcServer.logger
+  import MgmtGrpcServer.logger
 
   def run(host: String, port: Int): Future[Http.ServerBinding] = {
     implicit val sys = system
@@ -59,7 +59,7 @@ class TurnstileGrpcServer private(
     implicit val db: Database = Database.forConfig("", ApplicationConfig.db)
 
     // Create service handlers
-    val turnstileServiceHandler = TurnstileServicePowerApiHandler.partial(TurnstileServiceImpl())
+    val turnstileServiceHandler = TurnstileServicePowerApiHandler.partial(MgmtServiceImpl())
 
     // Create server reflection for both services
     val reflection = ServerReflection.partial(List(TurnstileService))

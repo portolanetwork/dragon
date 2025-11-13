@@ -16,7 +16,7 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-package app.dragon.turnstile.service
+package app.dragon.turnstile.mgmt
 
 import app.dragon.turnstile.auth.ServerAuthService
 import app.dragon.turnstile.db.*
@@ -36,10 +36,10 @@ import scala.concurrent.{ExecutionContext, Future}
 /**
  * Companion object for TurnstileServiceImpl.
  */
-object TurnstileServiceImpl {
+object MgmtServiceImpl {
   // Placeholder for future companion object utilities
-  def apply()(implicit db: Database): TurnstileServiceImpl =
-    new TurnstileServiceImpl()
+  def apply()(implicit db: Database): MgmtServiceImpl =
+    new MgmtServiceImpl()
 }
 
 /**
@@ -47,10 +47,10 @@ object TurnstileServiceImpl {
  *
  * This service provides MCP server registration functionality through gRPC.
  */
-class TurnstileServiceImpl()(
+class MgmtServiceImpl()(
   implicit db: Database
 ) extends TurnstileServicePowerApi {
-  private val logger: Logger = LoggerFactory.getLogger(classOf[TurnstileServiceImpl])
+  private val logger: Logger = LoggerFactory.getLogger(classOf[MgmtServiceImpl])
   
   implicit private val ec: ExecutionContext = ExecutionContext.global
 
