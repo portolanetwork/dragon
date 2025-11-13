@@ -37,6 +37,9 @@ case object DbNotFound extends DbError { val message: String = "not found" }
 case object DbAlreadyExists extends DbError { val message: String = "already exists" }
 
 object DbInterface {
+  val logger = org.slf4j.LoggerFactory.getLogger("DbInterface")
+
+
   // Helper that inspects a throwable (and its cause chain) to determine if it's a unique-constraint error
   private def mapDbError(t: Throwable): DbError = {
     // iterate through causes to find SQLExceptions with SQLState 23505 (unique violation) or messages containing "duplicate"
@@ -184,10 +187,13 @@ object DbInterface {
   )(
     implicit db: Database, ec: ExecutionContext
   ): Future[Either[DbError, Int]] = {
+    //logger.info(s"Updating MCP server auth for UUID: $uuid with clientId: $clientId, refreshTOken: $refreshToken, tokenEndpoint: $tokenEndpoint")
+
     val updateAction = Tables.mcpServers
       .filter(_.uuid === uuid)
       .map(s => (s.clientId, s.clientSecret, s.refreshToken, s.tokenEndpoint, s.updatedAt))
       .update((clientId, clientSecret, refreshToken, tokenEndpoint, new java.sql.Timestamp(System.currentTimeMillis())))
+
     db.run(updateAction).map(Right(_): Either[DbError, Int]).recover {
       case NonFatal(t) => Left(mapDbError(t))
     }
