@@ -59,7 +59,7 @@ object ClientAuthService {
                 uuid = serverUuid,
                 clientId = Some(clientId),
                 clientSecret = clientSecret,
-                refreshToken = None,
+                refreshToken = None, // Don't update refreshToken
                 tokenEndpoint = Some(tokenEndpoint)
               ).map {
                 case Right(_) => Right(loginUrl)
@@ -102,10 +102,10 @@ object ClientAuthService {
         // Store the refresh token in the database
         DbInterface.updateMcpServerAuth(
           uuid = UUID.fromString(flowId),
-          clientId = None, // Corrected to None for Option[String]
-          clientSecret = None, // Corrected to None for Option[String]
+          clientId = None, // Don't update clientId
+          clientSecret = None, // Don't update clientSecret
           refreshToken = Some(refreshToken),
-          tokenEndpoint = None // Assuming tokenEndpoint is not updated here
+          tokenEndpoint = None // Don't update tokenEndpoint
         ).flatMap {
           case Right(_) =>
             Future.successful(Right(AuthToken(
