@@ -72,8 +72,8 @@ object ClientOAuthHelper {
             Json.obj(
               ("client_name", Json.fromString("turnstile-client")),
               ("redirect_uris", Json.arr(Json.fromString(redirectUri))),
-              //("grant_types", Json.arr(Json.fromString("authorization_code"))),
-              ("grant_types", Json.arr(Json.fromString("authorization_code"), Json.fromString("refresh_token"))),
+              ("response_types", Json.arr(Json.fromString("code"))),
+              ("grant_types", Json.arr(Json.fromString("authorization_code"))),
               ("token_endpoint_auth_method", Json.fromString("none"))
             ).noSpaces
           )
@@ -85,13 +85,14 @@ object ClientOAuthHelper {
         }
       }
       .map {
-        case (status, body) =>
-          if (status >= 200 && status < 300) {
+        case (status, body) if (status >= 200 && status < 300) =>
             io.circe.parser.decode[DcrResponse](body) match {
-              case Right(d) => Right(d)
+              case Right(dcrResponse) => Right(dcrResponse)
               case Left(err) => Left(s"Failed to parse DCR response: ${err.getMessage}")
             }
-          } else Left(s"HTTP $status")
+        case (status, body) =>
+          logger.error(s"DCR failed with HTTP $status: $body")
+          Left(s"HTTP $status")
       }
       .recover { case t => Left(t.getMessage) }
   }
