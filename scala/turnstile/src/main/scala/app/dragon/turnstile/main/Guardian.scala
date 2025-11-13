@@ -18,10 +18,12 @@
 
 package app.dragon.turnstile.main
 
-import app.dragon.turnstile.actor.{AuthCodeFlowActor, McpClientActor, McpServerActor, McpSessionMapActor}
+import app.dragon.turnstile.auth.AuthCodeFlowActor
 import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.db.DatabaseMigration
-import app.dragon.turnstile.mcp_gateway.McpGatewayServer
+import app.dragon.turnstile.mcp_client.McpClientActor
+import app.dragon.turnstile.mcp_gateway.{McpGatewayServer, McpSessionMapActor}
+import app.dragon.turnstile.mcp_server.McpServerActor
 import app.dragon.turnstile.mgmt.MgmtGrpcServer
 import com.typesafe.config.Config
 import org.apache.pekko.actor.typed.scaladsl.Behaviors

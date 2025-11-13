@@ -16,8 +16,9 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-package app.dragon.turnstile.actor
+package app.dragon.turnstile.auth
 
+import app.dragon.turnstile.auth.AuthCodeFlowActor
 import app.dragon.turnstile.auth.ClientOAuthHelper
 import app.dragon.turnstile.auth.ClientOAuthHelper.{OpenIdConfigurationResponse, TokenResponse}
 import app.dragon.turnstile.config.ApplicationConfig

@@ -16,7 +16,7 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-package app.dragon.turnstile.service
+package app.dragon.turnstile.mcp_tools
 
 import io.modelcontextprotocol.spec.McpSchema
 

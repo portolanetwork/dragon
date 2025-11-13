@@ -18,9 +18,8 @@
 
 package app.dragon.turnstile.mcp_gateway
 
-import app.dragon.turnstile.actor.McpSessionMapActor.SessionMapError
-import app.dragon.turnstile.actor.{ActorLookup, McpSessionMapActor}
-import app.dragon.turnstile.utils.Random
+import McpSessionMapActor.SessionMapError
+import app.dragon.turnstile.utils.{ActorLookup, Random}
 
 import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse, StatusCodes}
 import org.apache.pekko.http.scaladsl.model.HttpEntity

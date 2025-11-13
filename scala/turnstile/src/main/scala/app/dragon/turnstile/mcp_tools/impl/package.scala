@@ -16,7 +16,7 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-package app.dragon.turnstile.service
+package app.dragon.turnstile.mcp_tools
 
 /**
  * MCP Tools Package
@@ -49,10 +49,10 @@ package app.dragon.turnstile.service
  *
  * Example:
  * {{{
- * package app.dragon.turnstile.service.tools
+ * package app.dragon.turnstile.mcp_tools.impl
  *
- * import app.dragon.turnstile.service.{AsyncToolHandler, McpTool}
- * import app.dragon.turnstile.service.McpUtils.*
+ * import app.dragon.turnstile.mcp_tools.McpTool
+ * import app.dragon.turnstile.mcp_tools.McpUtils.*
  * import io.modelcontextprotocol.spec.McpSchema
  * import reactor.core.publisher.Mono
  *
@@ -98,7 +98,7 @@ package app.dragon.turnstile.service
  * - `getIntArg()`: Extract integer argument from request
  * - `getBooleanArg()`: Extract boolean argument from request
  *
- * Import them with: `import app.dragon.turnstile.service.McpUtils.*`
+ * Import them with: `import app.dragon.turnstile.mcp_tools.McpUtils.*`
  *
  * ## Testing
  *
@@ -115,7 +115,7 @@ package app.dragon.turnstile.service
  * }
  * }}}
  */
-package object tools {
+package object impl {
   // This package object provides documentation and can be extended with
   // package-level utilities if needed in the future
 }

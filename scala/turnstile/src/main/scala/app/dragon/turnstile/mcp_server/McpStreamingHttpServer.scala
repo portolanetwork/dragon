@@ -19,7 +19,7 @@
 package app.dragon.turnstile.mcp_server
 
 import app.dragon.turnstile.config.ApplicationConfig
-import app.dragon.turnstile.service.ToolsService
+import app.dragon.turnstile.mcp_tools.ToolsService
 import io.modelcontextprotocol.json.McpJsonMapper
 import io.modelcontextprotocol.server.transport.WebFluxStreamableServerTransportProvider
 import io.modelcontextprotocol.server.{McpAsyncServer, McpServer}

@@ -18,9 +18,10 @@
 
 package app.dragon.turnstile.mcp_gateway
 
-import app.dragon.turnstile.actor.{ActorLookup, McpServerActor}
 import app.dragon.turnstile.auth.ServerAuthService.{AccessDenied, MissingAuthHeader}
 import app.dragon.turnstile.auth.{ClientAuthService, ServerAuthService}
+import app.dragon.turnstile.mcp_server.McpServerActor
+import app.dragon.turnstile.utils.ActorLookup
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
 import org.apache.pekko.http.scaladsl.Http

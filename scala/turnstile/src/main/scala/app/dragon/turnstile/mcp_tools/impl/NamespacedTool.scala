@@ -16,10 +16,11 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-package app.dragon.turnstile.service.tools
+package app.dragon.turnstile.mcp_tools.impl
 
-import app.dragon.turnstile.actor.{ActorLookup, McpClientActor}
-import app.dragon.turnstile.service.{AsyncToolHandler, McpTool, McpUtils}
+import app.dragon.turnstile.mcp_client.McpClientActor
+import app.dragon.turnstile.mcp_tools.{AsyncToolHandler, McpTool, McpUtils}
+import app.dragon.turnstile.utils.ActorLookup
 import io.modelcontextprotocol.spec.McpSchema
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding

@@ -16,10 +16,10 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-package app.dragon.turnstile.actor
+package app.dragon.turnstile.mcp_server
 
+import app.dragon.turnstile.mcp_server.{McpStreamingHttpServer, PekkoToSpringRequestAdapter, SpringToPekkoResponseAdapter}
 import app.dragon.turnstile.serializer.TurnstileSerializable
-import app.dragon.turnstile.mcp_server.{PekkoToSpringRequestAdapter, SpringToPekkoResponseAdapter, McpStreamingHttpServer}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityTypeKey}

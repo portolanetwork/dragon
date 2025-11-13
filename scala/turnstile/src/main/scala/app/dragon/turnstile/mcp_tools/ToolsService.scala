@@ -16,11 +16,12 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-package app.dragon.turnstile.service
+package app.dragon.turnstile.mcp_tools
 
-import app.dragon.turnstile.actor.{ActorLookup, McpClientActor}
 import app.dragon.turnstile.db.DbInterface
-import app.dragon.turnstile.service.tools.{EchoTool, NamespacedTool, StreamingDemoTool, SystemInfoTool}
+import app.dragon.turnstile.mcp_client.McpClientActor
+import app.dragon.turnstile.mcp_tools.impl.{EchoTool, NamespacedTool, StreamingDemoTool, SystemInfoTool}
+import app.dragon.turnstile.utils.ActorLookup
 import io.modelcontextprotocol.common.McpTransportContext
 import io.modelcontextprotocol.server.{McpAsyncServerExchange, McpServerFeatures}
 import io.modelcontextprotocol.spec.McpSchema

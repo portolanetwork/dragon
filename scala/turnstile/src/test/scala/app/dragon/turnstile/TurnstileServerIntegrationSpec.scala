@@ -18,10 +18,10 @@
 
 package app.dragon.turnstile
 
-import app.dragon.turnstile.actor.{McpClientActor, McpServerActor, McpSessionMapActor}
-import app.dragon.turnstile.mcp_client.McpStreamingHttpAsyncClient
+import app.dragon.turnstile.mcp_client.{McpClientActor, McpStreamingHttpAsyncClient}
 import app.dragon.turnstile.config.ApplicationConfig
-import app.dragon.turnstile.mcp_gateway.McpGatewayServer
+import app.dragon.turnstile.mcp_gateway.{McpGatewayServer, McpSessionMapActor}
+import app.dragon.turnstile.mcp_server.McpServerActor
 import com.typesafe.config.ConfigFactory
 import io.modelcontextprotocol.spec.McpSchema
 import org.apache.pekko.actor.testkit.typed.scaladsl.ActorTestKit

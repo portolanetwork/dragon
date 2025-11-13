@@ -16,8 +16,9 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-package app.dragon.turnstile.actor
+package app.dragon.turnstile.mcp_gateway
 
+import app.dragon.turnstile.mcp_gateway.McpSessionMapActor
 import app.dragon.turnstile.serializer.TurnstileSerializable
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}

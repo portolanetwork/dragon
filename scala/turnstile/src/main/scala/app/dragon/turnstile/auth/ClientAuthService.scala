@@ -1,7 +1,7 @@
 package app.dragon.turnstile.auth
 
-import app.dragon.turnstile.actor.{ActorLookup, AuthCodeFlowActor}
 import app.dragon.turnstile.db.DbInterface
+import app.dragon.turnstile.utils.ActorLookup
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
 import org.apache.pekko.util.Timeout

@@ -16,9 +16,8 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-package app.dragon.turnstile.service
+package app.dragon.turnstile.mcp_tools
 
-import app.dragon.turnstile.service.{AsyncToolHandler, SyncToolHandler}
 import io.modelcontextprotocol.spec.McpSchema
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -37,7 +36,7 @@ import scala.jdk.CollectionConverters.*
  *
  * Example:
  * {{{
- * import app.dragon.turnstile.service.McpUtils.*
+ * import app.dragon.turnstile.mcp_tools.McpUtils.*
  *
  * object MyCustomTool extends McpTool {
  *   override def getSchema(): McpSchema.Tool = {

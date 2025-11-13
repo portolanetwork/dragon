@@ -18,8 +18,8 @@
 
 package app.dragon.turnstile.examples
 
-import app.dragon.turnstile.actor.AuthCodeFlowActor
-import app.dragon.turnstile.actor.AuthCodeFlowActor.*
+import app.dragon.turnstile.auth.AuthCodeFlowActor.*
+import app.dragon.turnstile.auth.AuthCodeFlowActor
 import com.sun.net.httpserver.{HttpExchange, HttpServer}
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.actor.typed.scaladsl.Behaviors

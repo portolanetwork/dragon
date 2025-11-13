@@ -16,10 +16,10 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-package app.dragon.turnstile.actor
+package app.dragon.turnstile.mcp_client
 
 import app.dragon.turnstile.auth.ClientAuthService
-import app.dragon.turnstile.mcp_client.McpStreamingHttpAsyncClient
+import app.dragon.turnstile.mcp_client.{McpClientActor, McpClientActorId, McpStreamingHttpAsyncClient}
 import app.dragon.turnstile.serializer.TurnstileSerializable
 import io.modelcontextprotocol.spec.McpSchema
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}

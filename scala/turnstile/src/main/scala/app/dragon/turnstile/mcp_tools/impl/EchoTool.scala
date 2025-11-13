@@ -16,12 +16,9 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-package app.dragon.turnstile.service.tools
+package app.dragon.turnstile.mcp_tools.impl
 
-import app.dragon.turnstile.actor.ActorLookup
-import app.dragon.turnstile.actor.McpClientActor.McpListTools
-import app.dragon.turnstile.service.{AsyncToolHandler, McpTool, SyncToolHandler}
-import app.dragon.turnstile.service.McpUtils
+import app.dragon.turnstile.mcp_tools.{AsyncToolHandler, McpTool, McpUtils}
 import io.modelcontextprotocol.server.McpAsyncServerExchange
 import io.modelcontextprotocol.spec.McpSchema
 import reactor.core.publisher.Mono
