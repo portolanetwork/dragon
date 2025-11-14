@@ -442,7 +442,9 @@ class McpClientActor(
     mcpServerUuid: String
   ): Option[() => Future[String]] = {
     Some(() => {
-      ClientAuthService.getAuthToken(mcpServerUuid).map {
+      //context.log.info(s"Setting up access token provider for MCP server UUID $mcpServerUuid")
+
+      ClientAuthService.getAuthTokenCached(mcpServerUuid).map {
         case Left(error) =>
           // Log error and throw exception
           // The asyncHttpRequestCustomizer will catch this and log it

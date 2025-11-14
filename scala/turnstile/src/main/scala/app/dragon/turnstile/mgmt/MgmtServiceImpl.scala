@@ -84,6 +84,8 @@ class MgmtServiceImpl()(
         userId = authContext.userId,
         name = in.name,
         url = in.url,
+        authType = if (in.authType.isEmpty) "none" else in.authType,
+        staticToken = if (in.staticToken.isEmpty) None else Some(in.staticToken),
         createdAt = now,
         updatedAt = now
       ))
@@ -100,7 +102,13 @@ class MgmtServiceImpl()(
 
           // TODO: ToolServer must pick up new server registration at runtime and start using it
 
-          McpServer(uuid = row.uuid.toString, name = row.name, url = row.url)
+          McpServer(
+            uuid = row.uuid.toString,
+            name = row.name,
+            url = row.url,
+            authType = row.authType,
+            hasStaticToken = row.staticToken.isDefined
+          )
       }
     }
   }
@@ -137,7 +145,9 @@ class MgmtServiceImpl()(
           val servers = rows.map(row => McpServer(
             uuid = row.uuid.toString,
             name = row.name,
-            url = row.url
+            url = row.url,
+            authType = row.authType,
+            hasStaticToken = row.staticToken.isDefined
           ))
           logger.info(s"Returning ${servers.size} MCP servers for userId: ${in.userId}")
           McpServerList(mcpServer = servers)

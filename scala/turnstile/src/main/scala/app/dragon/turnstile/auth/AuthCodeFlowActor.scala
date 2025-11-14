@@ -98,7 +98,7 @@ object AuthCodeFlowActor {
   final case class FlowTokenResponse(
     mcpServerUuid: String,
     accessToken: String,
-    refreshToken: String
+    refreshToken: Option[String]
   ) extends FlowResponse // Change this
 
   final case class FlowFailed(error: String) extends FlowResponse

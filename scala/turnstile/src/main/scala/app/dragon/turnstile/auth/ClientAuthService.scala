@@ -7,29 +7,30 @@ import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
 import org.apache.pekko.util.Timeout
 import slick.jdbc.JdbcBackend.Database
 
-import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 import java.time.Instant
+import java.util.UUID
+import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration.*
 import scala.concurrent.{ExecutionContext, Future}
-import scala.jdk.CollectionConverters.*
 
 object ClientAuthService {
+  val logger: org.slf4j.Logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
+
   case class AuthToken(
     accessToken: String,
     expiresIn: Option[Int],
-    refreshToken: String,
+    refreshToken: Option[String],
   )
 
   private case class CachedToken(
     accessToken: String,
-    refreshToken: String,
+    refreshToken: Option[String],
     expiresAt: Instant
   )
 
   // Thread-safe cache for access tokens
-  private val tokenCache: ConcurrentHashMap[String, CachedToken] =
-    new ConcurrentHashMap[String, CachedToken]()
+  private val tokenCache: TrieMap[String, CachedToken] =
+    TrieMap.empty[String, CachedToken]
 
   sealed trait AuthError {
     def message: String
@@ -115,7 +116,7 @@ object ClientAuthService {
         // Store the refresh token in the database
         DbInterface.updateMcpServerAuth(
           uuid = UUID.fromString(mcpServerUuid),
-          refreshToken = Some(refreshToken),
+          refreshToken = refreshToken,
         ).flatMap {
           case Right(_) =>
             Future.successful(Right(AuthToken(
@@ -133,7 +134,8 @@ object ClientAuthService {
     }
   }
 
-  def getAuthToken(
+  // Its a shared cache per node. Consider passing cache as parameter
+  def getAuthTokenCached(
     mcpServerUuid: String
   )(
     implicit db: Database,
@@ -143,8 +145,10 @@ object ClientAuthService {
     val now = Instant.now()
 
     // Check cache first
-    Option(tokenCache.get(mcpServerUuid)) match {
+    tokenCache.get(mcpServerUuid) match {
       case Some(cached) if cached.expiresAt.isAfter(now) =>
+        logger.debug(s"+++++ ClientAuthService: Cache hit for MCP server $mcpServerUuid")
+
         // Cache hit with valid token
         Future.successful(Right(AuthToken(
           accessToken = cached.accessToken,
@@ -153,62 +157,91 @@ object ClientAuthService {
         )))
 
       case _ =>
+        logger.debug(s"------------- ClientAuthService: Cache miss for MCP server $mcpServerUuid")
+
         // Cache miss or expired token - fetch new token
-        for {
-          mcpServerRowEither <- DbInterface.findMcpServerByUuid(UUID.fromString(mcpServerUuid))
-          authToken <- mcpServerRowEither match {
-            case Right(serverRow) =>
-              serverRow.refreshToken match {
-                case Some(refreshToken) =>
-                  val tokenEndpoint = serverRow.tokenEndpoint.getOrElse("")
-                  val clientId = serverRow.clientId.getOrElse("")
-                  val clientSecret = serverRow.clientSecret
+        getAuthToken(mcpServerUuid).map {
+          case Right(tokenResponse) =>
+            // Calculate expiry time with 60 second buffer for safety
+            val expiresInSeconds = tokenResponse.expires_in.getOrElse(3600)
+            val expiresAt = now.plusSeconds(expiresInSeconds - 60)
 
-                  ClientOAuthHelper.refreshToken(
-                    tokenUrl = tokenEndpoint,
-                    clientId = clientId,
-                    clientSecretOpt = clientSecret,
-                    refreshToken = refreshToken
-                  ).flatMap {
-                    case Left(errorMessage) =>
-                      Future.successful(Left(TokenFetchFailed(s"Failed to refresh token: $errorMessage")))
-                    case Right(tokenResponse: ClientOAuthHelper.TokenResponse) =>
-                      // Calculate expiry time with 60 second buffer for safety
-                      val expiresInSeconds = tokenResponse.expires_in.getOrElse(3600)
-                      val expiresAt = now.plusSeconds(expiresInSeconds - 60)
+            // Update cache
+            tokenCache.put(mcpServerUuid, CachedToken(
+              accessToken = tokenResponse.access_token,
+              refreshToken = tokenResponse.refresh_token,
+              expiresAt = expiresAt
+            ))
 
-                      // Update cache
-                      tokenCache.put(mcpServerUuid, CachedToken(
-                        accessToken = tokenResponse.access_token,
-                        refreshToken = tokenResponse.refresh_token,
-                        expiresAt = expiresAt
-                      ))
+            Right(AuthToken(
+              accessToken = tokenResponse.access_token,
+              expiresIn = tokenResponse.expires_in,
+              refreshToken = tokenResponse.refresh_token
+            ))
+          case Left(authError) =>
+            Left(authError)
+        }
 
-                      // Write refresh token back to database
-                      DbInterface.updateMcpServerAuth(
-                        uuid = UUID.fromString(mcpServerUuid),
-                        refreshToken = Some(tokenResponse.refresh_token)
-                      ).map {
-                        case Right(_) =>
-                          Right(AuthToken(
-                            accessToken = tokenResponse.access_token,
-                            expiresIn = tokenResponse.expires_in,
-                            refreshToken = tokenResponse.refresh_token
-                          ))
-                        case Left(dbError) =>
-                          // Still return the token even if DB update fails, but log the error
-                          // This ensures the caller can proceed even if DB write fails
-                          Left(DatabaseError(s"Failed to update refresh token in database: ${dbError.message}"))
-                      }
-                  }
-                case None =>
-                  Future.successful(Left(MissingConfiguration("No refresh token available for MCP server")))
-              }
-            case Left(dbError) =>
-              Future.successful(Left(DatabaseError(dbError.toString)))
-          }
-        } yield authToken
+
     }
   }
+
+  private def getAuthToken(
+    mcpServerUuid: String
+  )(
+    implicit db: Database,
+    ec: ExecutionContext,
+    system: ActorSystem[?]
+  ): Future[Either[AuthError, ClientOAuthHelper.TokenResponse]] = {
+    val now = Instant.now()
+
+    for {
+      mcpServerRowEither <- DbInterface.findMcpServerByUuid(UUID.fromString(mcpServerUuid))
+      authToken <- mcpServerRowEither match {
+        case Right(serverRow) =>
+          serverRow.refreshToken match {
+            case Some(refreshToken) =>
+              val tokenEndpoint = serverRow.tokenEndpoint.getOrElse("")
+              val clientId = serverRow.clientId.getOrElse("")
+              val clientSecret = serverRow.clientSecret
+
+              ClientOAuthHelper.refreshToken(
+                tokenUrl = tokenEndpoint,
+                clientId = clientId,
+                clientSecretOpt = clientSecret,
+                refreshToken = refreshToken
+              ).flatMap {
+                case Left(errorMessage) =>
+                  Future.successful(Left(TokenFetchFailed(s"Failed to refresh token: $errorMessage")))
+                case Right(tokenResponse) if tokenResponse.refresh_token.isDefined =>
+                  logger.info(s"Refreshed access + refresh token for MCP server $mcpServerUuid")
+
+                  // Write refresh token back to database
+                  DbInterface.updateMcpServerAuth(
+                    uuid = UUID.fromString(mcpServerUuid),
+                    refreshToken = tokenResponse.refresh_token
+                  ).map {
+                    case Right(_) =>
+                      Right(tokenResponse)
+                    case Left(dbError) =>
+                      // Still return the token even if DB update fails, but log the error
+                      // This ensures the caller can proceed even if DB write fails
+                      //Left(DatabaseError(s"Failed to update refresh token in database: ${dbError.message}"))
+                      Left(DatabaseError(s"Failed to update refresh token in database: ${dbError.message}"))
+                  }
+                case Right(tokenResponse) =>
+                  logger.info(s"Refreshed access token for MCP server $mcpServerUuid")
+
+                  Future.successful(Right(tokenResponse))
+              }
+            case None =>
+              Future.successful(Left(MissingConfiguration("No refresh token available for MCP server")))
+          }
+        case Left(dbError) =>
+          Future.successful(Left(DatabaseError(dbError.toString)))
+      }
+    } yield authToken
+  }
+
 
 }

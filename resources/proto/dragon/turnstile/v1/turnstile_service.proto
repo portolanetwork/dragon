@@ -29,6 +29,8 @@ service TurnstileService {
 message CreateMcpServerRequest {
     string name = 1;
     string url = 2;
+    string auth_type = 3; // Authentication type: none, discover, or static_auth_header
+    string static_token = 4; // Static authentication token (optional, used with static_auth_header)
 }
 
 message ListMcpServersRequest {
@@ -49,6 +51,8 @@ message McpServer {
     string uuid = 1;
     string name = 2;
     string url = 3;
+    string auth_type = 4; // Authentication type: none, discover, or static_auth_header
+    bool has_static_token = 5; // Indicates if a static token is configured (token value not returned for security)
 }
 
 

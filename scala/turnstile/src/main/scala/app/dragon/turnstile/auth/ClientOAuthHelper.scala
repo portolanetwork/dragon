@@ -37,7 +37,7 @@ object ClientOAuthHelper {
     scope: Option[String],
     expires_in: Option[Int],
     token_type: String,
-    refresh_token: String,
+    refresh_token: Option[String],
   )
 
   case class OpenIdConfigurationResponse(
@@ -156,25 +156,7 @@ object ClientOAuthHelper {
 
     s"$base/.well-known/openid-configuration"
   }
-
-  /*
-  private def getAuthUrl(
-    clientId: String,
-    discovery: OpenIdConfigurationResponse,
-    redirectUrl: String,
-    scope: String
-  ): Try[String] = {
-    val state = java.util.UUID.randomUUID().toString
-
-    discovery.authorization_endpoint match {
-      case None =>
-        Failure(new Exception("well-known document did not contain authorization_endpoint"))
-      case Some(authEndpoint) =>
-        Success(buildAuthorizationUrl(authEndpoint, clientId, redirectUrl, scope, state))
-    }
-  }
-   */
-
+  
   def buildAuthorizationUrl(
     authEndpoint: String,
     audience: String,
@@ -209,11 +191,9 @@ object ClientOAuthHelper {
   ): Future[Either[String, TokenResponse]] = {
     // Build form fields
     val baseForm = Map(
-      //"grant_type" -> "authorization_code",
       "grant_type" -> "authorization_code",
       "code" -> code,
       "redirect_uri" -> redirectUri,
-      //"scope" -> "openid profile email offline_access", // Request offline_access for refresh token
       "client_id" -> clientId
     )
 
@@ -222,20 +202,11 @@ object ClientOAuthHelper {
       case None => baseForm
     }
 
-    // Create request entity using Pekko FormData
-    val entity = FormData(formWithClient).toEntity
-
-    // Build headers (use basic auth when secret provided)
-    val headers = clientSecretOpt match {
-      case Some(secret) => List(Authorization(BasicHttpCredentials(clientId, secret)))
-      case None => Nil
-    }
-
     val request = HttpRequest(
       method = HttpMethods.POST,
       uri = tokenUrl,
-      entity = entity
-    ).withHeaders(headers)
+      entity = FormData(formWithClient).toEntity
+    )
 
     Http().singleRequest(request)
       .flatMap { res =>
@@ -274,29 +245,23 @@ object ClientOAuthHelper {
   ): Future[Either[String, TokenResponse]] = {
     // Build form fields
     val baseForm = Map(
+      "client_id" -> clientId,
       "grant_type" -> "refresh_token",
       "refresh_token" -> refreshToken
     )
 
     val formWithClient = clientSecretOpt match {
-      case Some(_) => baseForm
-      case None => baseForm + ("client_id" -> clientId)
-    }
-
-    // Create request entity using Pekko FormData
-    val entity = FormData(formWithClient).toEntity
-
-    // Build headers (use basic auth when secret provided)
-    val headers = clientSecretOpt match {
-      case Some(secret) => List(Authorization(BasicHttpCredentials(clientId, secret)))
-      case None => Nil
+      case Some(clientSecret) => baseForm + ("client_secret" -> clientSecret)
+      case None => baseForm
     }
 
     val request = HttpRequest(
       method = HttpMethods.POST,
       uri = tokenUrl,
-      entity = entity
-    ).withHeaders(headers)
+      entity = FormData(formWithClient).toEntity
+    )
+
+    // The Content-Type header is implicitly set by FormData to application/x-www-form-urlencoded.
 
     Http().singleRequest(request)
       .flatMap { res =>
