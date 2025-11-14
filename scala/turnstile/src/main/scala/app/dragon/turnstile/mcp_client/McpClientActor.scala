@@ -19,7 +19,7 @@
 package app.dragon.turnstile.mcp_client
 
 import app.dragon.turnstile.auth.ClientAuthService
-import app.dragon.turnstile.mcp_client.{McpClientActor, McpClientActorId, McpStreamingHttpAsyncClient}
+import app.dragon.turnstile.mcp_client.McpStreamingHttpAsyncClient
 import app.dragon.turnstile.serializer.TurnstileSerializable
 import io.modelcontextprotocol.spec.McpSchema
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
@@ -56,22 +56,10 @@ object McpClientActorId {
   def fromString(
     entityId: String
   ): McpClientActorId = {
-    val Array(userId, mcpServerUuid) = entityId.split("-", 2)
+    val Array(userId, mcpServerUuid) = entityId.split("\\.", 2)
+
     McpClientActorId(userId, mcpServerUuid)
   }
-
-  /**
-   * Construct an entity ID string from components.
-   *
-   * @param userId The user identifier
-   * @param mcpServerUuid The client identifier
-   * @return Entity ID string
-   */
-  def getEntityId(
-    userId: String,
-    mcpServerUuid: String
-  ): String =
-    s"$userId-$mcpServerUuid"
 }
 
 /**
@@ -131,9 +119,9 @@ object McpClientActor {
     db: Database
   ): Unit =
     ClusterSharding(system).init(Entity(TypeKey) { entityContext =>
-      val id = McpClientActorId.fromString(entityContext.entityId)
+      val mcpClientActorId = McpClientActorId.fromString(entityContext.entityId)
 
-      McpClientActor(id.userId, id.mcpServerUuid, db)
+      McpClientActor(mcpClientActorId, db)
     })
 
   sealed trait Message extends TurnstileSerializable
@@ -198,8 +186,7 @@ object McpClientActor {
   final case class NotInitializedError(message: String) extends McpClientError
 
   def apply(
-    userId: String,
-    mcpClientActorId: String,
+    mcpClientActorId: McpClientActorId,
     db: Database
   ): Behavior[Message] = {
     Behaviors.withStash(100) { buffer =>
@@ -207,9 +194,9 @@ object McpClientActor {
         implicit val system: ActorSystem[Nothing] = context.system
         implicit val ec: scala.concurrent.ExecutionContext = context.executionContext
 
-        context.log.info(s"Creating MCP client actor for user $userId, client $mcpClientActorId")
+        context.log.info(s"Creating MCP client actor for user ${mcpClientActorId.userId} connecting to server UUID ${mcpClientActorId.mcpServerUuid}")
 
-        new McpClientActor(context, buffer, userId, mcpClientActorId, db).initWaitState()
+        new McpClientActor(context, buffer, mcpClientActorId, db).initWaitState()
       }
     }
   }
@@ -218,8 +205,7 @@ object McpClientActor {
 class McpClientActor(
   context: ActorContext[McpClientActor.Message],
   buffer: StashBuffer[McpClientActor.Message],
-  userId: String,
-  mcpClientActorId: String,
+  mcpClientActorId: McpClientActorId,
   db: Database
 ) {
 

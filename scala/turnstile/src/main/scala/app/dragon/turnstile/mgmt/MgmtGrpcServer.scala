@@ -22,6 +22,7 @@ import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.mgmt.MgmtServiceImpl
 import dragon.turnstile.api.v1.{TurnstileService, TurnstileServiceHandler, TurnstileServicePowerApiHandler}
 import org.apache.pekko.actor.typed.ActorSystem
+import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
 import org.apache.pekko.grpc.scaladsl.{ServerReflection, ServiceHandler}
 import org.apache.pekko.http.scaladsl.Http
 import org.slf4j.{Logger, LoggerFactory}
@@ -57,6 +58,9 @@ class MgmtGrpcServer private(
 
     // Create database instance
     implicit val db: Database = Database.forConfig("", ApplicationConfig.db)
+
+    // Initialize cluster sharding
+    implicit val sharding: ClusterSharding = ClusterSharding(system)
 
     // Create service handlers
     val turnstileServiceHandler = TurnstileServicePowerApiHandler.partial(MgmtServiceImpl())

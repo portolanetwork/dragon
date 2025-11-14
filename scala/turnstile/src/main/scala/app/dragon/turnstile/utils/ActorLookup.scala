@@ -102,7 +102,7 @@ object ActorLookup {
   )(
     implicit sharding: ClusterSharding
   ): EntityRef[McpClientActor.Message] =
-    getMcpClientActor(McpClientActorId.getEntityId(userId, mcpServerUuid))
+    getMcpClientActor(McpClientActorId(userId, mcpServerUuid).toString)
 
   /**
    * Get a reference to an MCP session map actor by user ID.

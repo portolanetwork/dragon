@@ -52,7 +52,7 @@ object McpServerActorId {
   def fromString(
     entityId: String
   ): McpServerActorId = {
-    val Array(userId, mcpServerActorId) = entityId.split("-", 2)
+    val Array(userId, mcpServerActorId) = entityId.split("\\.", 2)
     McpServerActorId(userId, mcpServerActorId)
   }
 }
@@ -104,16 +104,10 @@ object McpServerActor {
     system: ActorSystem[?]
   ): Unit =
     ClusterSharding(system).init(Entity(TypeKey) { entityContext =>
-      val id = McpServerActorId.fromString(entityContext.entityId)
+      val mcpServerActorId = McpServerActorId.fromString(entityContext.entityId)
 
-      McpServerActor(id.userId, id.mcpServerActorId)
+      McpServerActor(mcpServerActorId)
     })
-
-  def getEntityId(
-    userId: String, 
-    chatId: String
-  ): String =
-    s"$userId-$chatId"
 
   sealed trait Message extends TurnstileSerializable
 
@@ -143,18 +137,18 @@ object McpServerActor {
   // Internal message for server initialization
   private final case class DownstreamRefreshStatus(status: Either[McpActorError, Unit]) extends Message
 
-  def apply(userId: String, mcpServerActorId: String): Behavior[Message] = {
+  def apply(mcpServerActorId: McpServerActorId): Behavior[Message] = {
     Behaviors.withStash(100) { buffer =>
       Behaviors.setup { context =>
         implicit val system: ActorSystem[Nothing] = context.system
         implicit val ec: scala.concurrent.ExecutionContext = context.executionContext
 
-        context.log.info(s"Starting MCP server for user $userId, actor $mcpServerActorId")
+        context.log.info(s"Starting MCP server for user ${mcpServerActorId.userId}, actor ${mcpServerActorId.mcpServerActorId}")
 
         // Start the MCP server asynchronously
-        val mcpSserver = McpStreamingHttpServer(userId).start()
+        val mcpServer = McpStreamingHttpServer(mcpServerActorId.userId).start()
 
-        new McpServerActor(context, buffer, userId, mcpServerActorId).initState(mcpSserver)
+        new McpServerActor(context, buffer, mcpServerActorId).initState(mcpServer)
       }
     }
   }
@@ -163,8 +157,9 @@ object McpServerActor {
 class McpServerActor(
   context: ActorContext[McpServerActor.Message],
   buffer: StashBuffer[McpServerActor.Message],
-  userId: String,
-  mcpServerActorId: String,
+  //userId: String,
+  //mcpServerActorId: String,
+  mcpServerActorId: McpServerActorId
 ) {
   import McpServerActor.*
 
@@ -237,7 +232,7 @@ class McpServerActor(
     turnstileMcpServer: McpStreamingHttpServer
   ): PartialFunction[Message, Behavior[Message]] = {
     case McpPostRequest(request, replyTo) =>
-      context.log.info(s"Handling MCP POST request for user $userId, actor $mcpServerActorId")
+      context.log.info(s"Handling MCP POST request for user ${mcpServerActorId.userId}, actor ${mcpServerActorId.mcpServerActorId}: ${request.uri}")
 
       context.pipeToSelf(handlePekkoRequest(request, turnstileMcpServer)) {
         case scala.util.Success(response) => WrappedHttpResponse(scala.util.Success(response), replyTo)

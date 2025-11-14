@@ -336,7 +336,6 @@ class AuthCodeFlowActor(
       
       // TODO: Verify state matches
       
-      
       context.pipeToSelf(ClientOAuthHelper.exchangeAuthorizationCode(
         data.wellKnownResponse.get.token_endpoint.get,  // TODO: Handle missing token endpoint
         data.clientId.get,  // TODO: Handle missing clientId

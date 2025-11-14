@@ -18,7 +18,7 @@
 
 package app.dragon.turnstile.mgmt
 
-import app.dragon.turnstile.auth.ServerAuthService
+import app.dragon.turnstile.auth.{ClientAuthService, ServerAuthService}
 import app.dragon.turnstile.db.*
 import app.dragon.turnstile.utils.ServiceValidationUtil.*
 import com.google.protobuf.empty.Empty
@@ -38,7 +38,11 @@ import scala.concurrent.{ExecutionContext, Future}
  */
 object MgmtServiceImpl {
   // Placeholder for future companion object utilities
-  def apply()(implicit db: Database): MgmtServiceImpl =
+  def apply()(
+    implicit db: Database,
+    system: org.apache.pekko.actor.typed.ActorSystem[?],
+    sharding: org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
+  ): MgmtServiceImpl =
     new MgmtServiceImpl()
 }
 
@@ -48,20 +52,22 @@ object MgmtServiceImpl {
  * This service provides MCP server registration functionality through gRPC.
  */
 class MgmtServiceImpl()(
-  implicit db: Database
+  implicit db: Database,
+  system: org.apache.pekko.actor.typed.ActorSystem[?],
+  sharding: org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
 ) extends TurnstileServicePowerApi {
   private val logger: Logger = LoggerFactory.getLogger(classOf[MgmtServiceImpl])
-  
+
   implicit private val ec: ExecutionContext = ExecutionContext.global
 
   /**
    * Create a new MCP server registration.
    *
-   * @param request CreateMcpServerRequest containing name and url
+   * @param in CreateMcpServerRequest containing name and url
    * @return Future[McpServer] containing the created MCP server info
    */
   override def createMcpServer(
-    request: CreateMcpServerRequest,
+    in: CreateMcpServerRequest,
     metadata: Metadata,
   ): Future[McpServer] = {
     val now = Timestamp(System.currentTimeMillis())
@@ -70,14 +76,14 @@ class MgmtServiceImpl()(
     for {
       authContext <- ServerAuthService.authenticate(metadata)
       //_ = logger.info(s"Received CreateMcpServer request for name: ${request.name}, url: ${request.url} from userId: ${authContext.userId}")
-      _ <- validateNotEmpty(request.name, "name")
-      _ <- validateHasNoSpaces(request.name, "name")
-      _ <- validateNotEmpty(request.url, "url")
+      _ <- validateNotEmpty(in.name, "name")
+      _ <- validateHasNoSpaces(in.name, "name")
+      _ <- validateNotEmpty(in.url, "url")
       insertResult <- DbInterface.insertMcpServer(McpServerRow(
         tenant = authContext.tenant,
         userId = authContext.userId,
-        name = request.name,
-        url = request.url,
+        name = in.name,
+        url = in.url,
         createdAt = now,
         updatedAt = now
       ))
@@ -102,27 +108,27 @@ class MgmtServiceImpl()(
   /**
    * List all MCP servers for a user.
    *
-   * @param request ListMcpServersRequest containing the userId
+   * @param in ListMcpServersRequest containing the userId
    * @return Future[McpServerList] containing list of registered MCP servers
    */
   override def listMcpServers(
-    request: ListMcpServersRequest,
+    in: ListMcpServersRequest,
     metadata: Metadata,
   ): Future[McpServerList] = {
     // Validate request and list servers
     for {
       authContext <- ServerAuthService.authenticate(metadata)
-      _ = logger.info(s"Received ListMcpServers request for userId: ${request.userId} from authenticated userId: ${authContext.userId}")
-      _ <- validateEquals(request.userId, authContext.userId, "User ID mismatch")
-      _ <- validateNotEmpty(request.userId, "userId")
+      _ = logger.info(s"Received ListMcpServers request for userId: ${in.userId} from authenticated userId: ${authContext.userId}")
+      _ <- validateEquals(in.userId, authContext.userId, "User ID mismatch")
+      _ <- validateNotEmpty(in.userId, "userId")
       listResult <- DbInterface.listMcpServers(tenant = authContext.tenant, userId = authContext.userId)
     } yield {
       listResult match {
         case Left(DbAlreadyExists) =>
-          logger.warn(s"DB reported already-exists when listing for userId: ${request.userId}")
+          logger.warn(s"DB reported already-exists when listing for userId: ${in.userId}")
           throw new GrpcServiceException(Status.ALREADY_EXISTS, MetadataBuilder().addText("ALREADY_EXISTS", "Resource already exists").build())
         case Left(DbNotFound) =>
-          logger.warn(s"No MCP servers found for userId: ${request.userId}")
+          logger.warn(s"No MCP servers found for userId: ${in.userId}")
           throw new GrpcServiceException(Status.NOT_FOUND, MetadataBuilder().addText("NOT_FOUND", "No resources").build())
         case Left(dbError: DbFailure) =>
           logger.error(s"Failed to list MCP servers from DB: ${dbError.message}")
@@ -133,7 +139,7 @@ class MgmtServiceImpl()(
             name = row.name,
             url = row.url
           ))
-          logger.info(s"Returning ${servers.size} MCP servers for userId: ${request.userId}")
+          logger.info(s"Returning ${servers.size} MCP servers for userId: ${in.userId}")
           McpServerList(mcpServer = servers)
       }
     }
@@ -142,41 +148,83 @@ class MgmtServiceImpl()(
   /**
    * Delete an MCP server by UUID.
    *
-   * @param request DeleteMcpServerRequest containing the uuid
+   * @param in DeleteMcpServerRequest containing the uuid
    * @return Future[Empty] on successful deletion
    */
   override def deleteMcpServer(
-    request: DeleteMcpServerRequest,
+    in: DeleteMcpServerRequest,
     metadata: Metadata,
   ): Future[Empty] = {
     // Validate request and delete server
     for {
       authContext <- ServerAuthService.authenticate(metadata)
-      _ = logger.info(s"Received DeleteMcpServer request for uuid: ${request.uuid} from userId: ${authContext.userId}")
-      _ <- validateNotEmpty(request.uuid, "uuid")
-      uuid <- Future.fromTry(scala.util.Try(UUID.fromString(request.uuid)))
+      _ = logger.info(s"Received DeleteMcpServer request for uuid: ${in.uuid} from userId: ${authContext.userId}")
+      _ <- validateNotEmpty(in.uuid, "uuid")
+      uuid <- Future.fromTry(scala.util.Try(UUID.fromString(in.uuid)))
         .recoverWith(_ => Future.failed(new GrpcServiceException(Status.INVALID_ARGUMENT,
-          MetadataBuilder().addText("INVALID_UUID", s"Invalid UUID format: ${request.uuid}").build())))
+          MetadataBuilder().addText("INVALID_UUID", s"Invalid UUID format: ${in.uuid}").build())))
       deleteResult <- DbInterface.deleteMcpServerByUuid(uuid)
     } yield {
       deleteResult match {
         case Left(DbAlreadyExists) =>
-          logger.warn(s"DB reported already-exists when deleting uuid: ${request.uuid}")
+          logger.warn(s"DB reported already-exists when deleting uuid: ${in.uuid}")
           throw new GrpcServiceException(Status.ALREADY_EXISTS, MetadataBuilder().addText("ALREADY_EXISTS", "Resource already exists").build())
         case Left(DbNotFound) =>
-          logger.warn(s"No MCP server found to delete with UUID: ${request.uuid}")
-          throw new GrpcServiceException(Status.NOT_FOUND, MetadataBuilder().addText("NOT_FOUND", s"No resource with uuid ${request.uuid}").build())
+          logger.warn(s"No MCP server found to delete with UUID: ${in.uuid}")
+          throw new GrpcServiceException(Status.NOT_FOUND, MetadataBuilder().addText("NOT_FOUND", s"No resource with uuid ${in.uuid}").build())
         case Left(dbError: DbFailure) =>
           logger.error(s"Failed to delete MCP server from DB: ${dbError.message}")
           throw new GrpcServiceException(Status.UNKNOWN, MetadataBuilder().addText("UNHANDLED_ERROR", dbError.message).build())
         case Right(rowsDeleted) =>
           if (rowsDeleted == 0) {
-            logger.warn(s"No MCP server found with UUID: ${request.uuid}")
-            throw new GrpcServiceException(Status.NOT_FOUND, MetadataBuilder().addText("NOT_FOUND", s"MCP server not found: ${request.uuid}").build())
+            logger.warn(s"No MCP server found with UUID: ${in.uuid}")
+            throw new GrpcServiceException(Status.NOT_FOUND, MetadataBuilder().addText("NOT_FOUND", s"MCP server not found: ${in.uuid}").build())
           } else {
-            logger.info(s"Successfully deleted MCP server with UUID: ${request.uuid}")
+            logger.info(s"Successfully deleted MCP server with UUID: ${in.uuid}")
             Empty()
           }
+      }
+    }
+  }
+  
+  /**
+   * Initiate OAuth login flow for an MCP server.
+   *
+   * @param in LoginMcpServerRequest containing the uuid
+   * @param metadata Request metadata containing authentication info
+   * @return Future[McpServerLoginUrl] containing the login URL to redirect to
+   */
+  override def loginToMcpServer(
+    in: LoginMcpServerRequest,
+    metadata: Metadata
+  ): Future[McpServerLoginUrl] = {
+    // Validate request and initiate auth flow
+    for {
+      authContext <- ServerAuthService.authenticate(metadata)
+      _ = logger.info(s"Received LoginToMcpServer request for uuid: ${in.uuid} from userId: ${authContext.userId}")
+      _ <- validateNotEmpty(in.uuid, "uuid")
+      loginUrlResult <- ClientAuthService.initiateAuthCodeFlow(in.uuid)
+    } yield {
+      loginUrlResult match {
+        case Right(loginUrl) =>
+          logger.info(s"Successfully initiated OAuth flow for MCP server UUID: ${in.uuid}, login URL: $loginUrl")
+          McpServerLoginUrl(loginUrl = loginUrl)
+        case Left(ClientAuthService.ServerNotFound(msg)) =>
+          logger.warn(s"MCP server not found: $msg")
+          throw new GrpcServiceException(Status.NOT_FOUND,
+            MetadataBuilder().addText("NOT_FOUND", msg).build())
+        case Left(ClientAuthService.DatabaseError(msg)) =>
+          logger.error(s"Database error during OAuth flow initiation: $msg")
+          throw new GrpcServiceException(Status.INTERNAL,
+            MetadataBuilder().addText("DATABASE_ERROR", msg).build())
+        case Left(ClientAuthService.MissingConfiguration(msg)) =>
+          logger.error(s"Missing configuration for OAuth flow: $msg")
+          throw new GrpcServiceException(Status.FAILED_PRECONDITION,
+            MetadataBuilder().addText("MISSING_CONFIGURATION", msg).build())
+        case Left(authError) =>
+          logger.error(s"Failed to initiate OAuth flow: ${authError.message}")
+          throw new GrpcServiceException(Status.INTERNAL,
+            MetadataBuilder().addText("AUTH_FLOW_FAILED", authError.message).build())
       }
     }
   }

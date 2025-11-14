@@ -33,7 +33,7 @@ object ClientOAuthHelper {
   // Use single snake_case models that match upstream JSON directly
   case class TokenResponse(
     access_token: String,
-    id_token: String,
+    id_token: Option[String],
     scope: Option[String],
     expires_in: Option[Int],
     token_type: String,

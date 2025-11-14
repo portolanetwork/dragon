@@ -20,6 +20,9 @@ service TurnstileService {
     rpc ListMcpServers (ListMcpServersRequest)  returns (McpServerList) {}
     rpc CreateMcpServer (CreateMcpServerRequest) returns (McpServer) {}
     rpc DeleteMcpServer (DeleteMcpServerRequest) returns (google.protobuf.Empty) {}
+
+    //rpc GetLoginStatusForMcpServer (GetLoginStatusForMcpServerRequest) returns (McpServerLoginStatus) {}
+    rpc LoginToMcpServer (LoginMcpServerRequest) returns (McpServerLoginUrl) {}
 }
 
 // MCP Servers
@@ -42,10 +45,18 @@ message McpServerList {
     repeated McpServer mcp_server = 1;
 }
 
-
 message McpServer {
     string uuid = 1;
     string name = 2;
     string url = 3;
 }
 
+
+
+message LoginMcpServerRequest {
+    string uuid = 1;
+}
+
+message McpServerLoginUrl {
+    string login_url = 1;
+}
