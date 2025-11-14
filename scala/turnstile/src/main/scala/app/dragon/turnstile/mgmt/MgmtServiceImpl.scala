@@ -282,4 +282,35 @@ class MgmtServiceImpl()(
       }
     }
   }
+
+  override def getLoginStatusForMcpServer(
+    in: GetLoginStatusForMcpServerRequest,
+    metadata: Metadata
+  ): Future[McpServerLoginStatus] = {
+    // Validate request and get login status
+    for {
+      authContext <- ServerAuthService.authenticate(metadata)
+      _ = logger.info(s"Received GetLoginStatusForMcpServer request for uuid: ${in.uuid} from userId: ${authContext.userId}")
+      _ <- validateNotEmpty(in.uuid, "uuid")
+      loginStatusResult <- ClientAuthService.getMcpServerLoginStatus(in.uuid)
+    } yield {
+      loginStatusResult match {
+        case Right(isLoggedIn) =>
+          logger.info(s"Retrieved login status for MCP server UUID: ${in.uuid}, isLoggedIn: $isLoggedIn")
+          McpServerLoginStatus(isLoggedIn = isLoggedIn)
+        case Left(ClientAuthService.ServerNotFound(msg)) =>
+          logger.warn(s"MCP server not found: $msg")
+          throw new GrpcServiceException(Status.NOT_FOUND,
+            MetadataBuilder().addText("NOT_FOUND", msg).build())
+        case Left(ClientAuthService.DatabaseError(msg)) =>
+          logger.error(s"Database error while retrieving login status: $msg")
+          throw new GrpcServiceException(Status.INTERNAL,
+            MetadataBuilder().addText("DATABASE_ERROR", msg).build())
+        case Left(authError) =>
+          logger.error(s"Failed to retrieve login status: ${authError.message}")
+          throw new GrpcServiceException(Status.INTERNAL,
+            MetadataBuilder().addText("AUTH_STATUS_FAILED", authError.message).build())
+      }
+    }
+  }
 }
