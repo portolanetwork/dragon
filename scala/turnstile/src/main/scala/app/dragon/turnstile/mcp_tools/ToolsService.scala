@@ -18,7 +18,7 @@
 
 package app.dragon.turnstile.mcp_tools
 
-import app.dragon.turnstile.db.DbInterface
+import app.dragon.turnstile.db.{DbInterface, McpServerRow}
 import app.dragon.turnstile.mcp_client.McpClientActor
 import app.dragon.turnstile.mcp_tools.impl.{EchoTool, NamespacedTool, StreamingDemoTool, SystemInfoTool}
 import app.dragon.turnstile.utils.ActorLookup
@@ -130,8 +130,9 @@ class ToolsService(
         logger.info(s"Found ${servers.size} MCP servers for user=$userId, fetching tools from each")
 
         // Sequence per-server futures and collect successful tool specs
-        val toolsFutures: Seq[Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]]] =
-          servers.map(server => getDownstreamToolsSpec(server.uuid.toString, server.name, server.url))
+        val toolsFutures: Seq[Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]]] = {
+          servers.map(server => getDownstreamToolsSpec(server))
+        }
 
         Future.sequence(toolsFutures).map { results =>
           val allTools = results.collect { case Right(tools) => tools }.flatten.toList
@@ -161,63 +162,66 @@ class ToolsService(
    * @return A Future containing either an error or a list of namespaced tools
    */
   private[mcp_tools] def getDownstreamTools(
-    mcpServerUuid: String,
-    mcpServerName: String,
-    mcpServerUrl: String,
+    //mcpServerUuid: String,
+    //mcpServerName: String,
+    //mcpServerUrl: String,
+    mcpServerRow: McpServerRow
   )(implicit
     system: ActorSystem[?],
     timeout: Timeout = 30.seconds
   ): Future[Either[McpClientActor.McpClientError, List[McpTool]]] = {
-    require(mcpServerUuid.nonEmpty, "mcpServerUuid cannot be empty")
+    //require(mcpServerUuid.nonEmpty, "mcpServerUuid cannot be empty")
 
     implicit val sharding: ClusterSharding = ClusterSharding(system)
     
-    logger.info(s"Fetching namespaced tools from MCP client actor: $mcpServerUuid for user=$userId")
+    //logger.info(s"Fetching namespaced tools from MCP client actor: $mcpServerRowUuid for user=$userId")
+    logger.info(s"Fetching namespaced tools from MCP client actor: ${mcpServerRow.uuid} (${mcpServerRow.name}) for user=$userId")
 
-    ActorLookup.getMcpClientActor(userId, mcpServerUuid) ! McpClientActor.Initialize(mcpServerUuid, mcpServerUrl)
+    ActorLookup.getMcpClientActor(userId, mcpServerRow.uuid.toString) ! McpClientActor.Initialize(mcpServerRow)
 
     // Query the actor for its tools
-    ActorLookup.getMcpClientActor(userId, mcpServerUuid)
+    ActorLookup.getMcpClientActor(userId, mcpServerRow.uuid.toString)
       .ask[Either[McpClientActor.McpClientError, McpSchema.ListToolsResult]](
       replyTo => McpClientActor.McpListTools(replyTo)
     ).map {
       case Right(listResult) =>
         val tools = listResult.tools().asScala.toList
 
-        logger.info(s"Received ${tools.size} tools from MCP client actor $mcpServerUuid for user=$userId")
+        logger.info(s"Received ${tools.size} tools from MCP client actor ${mcpServerRow.uuid.toString} for user=$userId")
 
         // Convert each tool schema to a NamespacedTool
         val downstreamTools = tools.map { downstreamToolSchema =>
           val turnstileToolSchema = McpSchema.Tool.builder()
-            .name(s"${mcpServerName}.${downstreamToolSchema.name()}")
+            .name(s"${mcpServerRow.name}.${downstreamToolSchema.name()}")
             .description(downstreamToolSchema.description())
             .inputSchema(downstreamToolSchema.inputSchema())
             .outputSchema(downstreamToolSchema.outputSchema())
             .annotations(downstreamToolSchema.annotations())
             .build()
 
-          NamespacedTool(turnstileToolSchema, downstreamToolSchema, userId, mcpServerUuid)
+          NamespacedTool(turnstileToolSchema, downstreamToolSchema, userId, mcpServerRow.uuid.toString)
         }
 
         Right(downstreamTools)
 
       case Left(error) =>
-        logger.error(s"Failed to fetch tools from MCP client actor $mcpServerUuid for user=$userId: $error")
+        logger.error(s"Failed to fetch tools from MCP client actor ${mcpServerRow.uuid.toString} for user=$userId: $error")
         Left(error)
     }
   }
 
   private def getDownstreamToolsSpec(
-    mcpServerUuid: String,
-    mcpServerName: String,
-    serverUrl: String,
+    //mcpServerUuid: String,
+    //mcpServerName: String,
+    //serverUrl: String,
+    mcpServerRow: McpServerRow
   )(implicit
     system: ActorSystem[?],
     timeout: Timeout = 30.seconds
   ): Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]] = {
-    require(mcpServerUuid.nonEmpty, "mcpClientActorId cannot be empty")
+    //require(mcpServerUuid.nonEmpty, "mcpClientActorId cannot be empty")
 
-    getDownstreamTools(mcpServerUuid, mcpServerName, serverUrl).map {
+    getDownstreamTools(mcpServerRow).map {
       case Right(tools) =>
         val toolSpecs = convertToAsyncToolSpec(tools)
         Right(toolSpecs)

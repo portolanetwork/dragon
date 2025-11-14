@@ -19,6 +19,7 @@
 package app.dragon.turnstile.mcp_client
 
 import app.dragon.turnstile.auth.ClientAuthService
+import app.dragon.turnstile.db.McpServerRow
 import app.dragon.turnstile.mcp_client.McpStreamingHttpAsyncClient
 import app.dragon.turnstile.serializer.TurnstileSerializable
 import io.modelcontextprotocol.spec.McpSchema
@@ -127,8 +128,9 @@ object McpClientActor {
   sealed trait Message extends TurnstileSerializable
 
   final case class Initialize(
-    mcpServerUuid: String,
-    mcpServerUrl: String
+    //mcpServerUuid: String,
+    //mcpServerUrl: String
+    mcpServerRow: McpServerRow
   ) extends Message
 
   final case class McpToolCallRequest(
@@ -257,16 +259,23 @@ class McpClientActor(
 
   def handleInitialize(
   ): PartialFunction[Message, Behavior[Message]] = {
-    case Initialize(mcpServerUuid, mcpServerUrl) =>
-      val authTokenProvider: Option[() => Future[String]] = getAccessToken(mcpServerUuid)
+    case Initialize(mcpServerRow) =>
+      //val authTokenProvider: Option[() => Future[String]] = getAccessToken(mcpServerUuid)
+      
+      val authTokenProvider: Option[() => Future[String]] = mcpServerRow.authType match {
+        case "none" => None
+        case "discover" => getAccessToken(mcpServerRow.uuid.toString)
+        case "static_auth_header" => None // TODO: implement static auth header support
+        case other => None
+      }
 
-      context.log.info(s"Received Initialize message for MCP client actor $mcpClientActorId mcpServerUuid=$mcpServerUuid")
+      context.log.info(s"Received Initialize message for MCP client actor $mcpClientActorId mcpServerUuid=$mcpServerRow.uuid")
 
       val authInfo = if (authTokenProvider.isDefined) "with authentication" else "without authentication"
-      context.log.info(s"Initializing MCP client actor $mcpClientActorId with server URL $mcpServerUrl $authInfo")
+      context.log.info(s"Initializing MCP client actor $mcpClientActorId with server URL $mcpServerRow.url $authInfo")
 
       val mcpClient = McpStreamingHttpAsyncClient(
-        serverUrl = mcpServerUrl,
+        serverUrl = mcpServerRow.url,
         authTokenProvider = authTokenProvider
       )
 

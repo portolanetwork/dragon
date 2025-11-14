@@ -61,6 +61,62 @@ class MgmtServiceImpl()(
   implicit private val ec: ExecutionContext = ExecutionContext.global
 
   /**
+   * Converts a database authType string to proto AuthType enum.
+   */
+  private def stringToAuthType(authType: String): AuthType = authType.toLowerCase match {
+    case "none" => AuthType.AUTH_TYPE_NONE
+    case "discover" => AuthType.AUTH_TYPE_DISCOVER
+    case "static_auth_header" => AuthType.AUTH_TYPE_STATIC_HEADER
+    case _ => AuthType.AUTH_TYPE_UNSPECIFIED
+  }
+
+  /**
+   * Converts a proto AuthType enum to database authType string.
+   */
+  private def authTypeToString(authType: AuthType): String = authType match {
+    case AuthType.AUTH_TYPE_NONE => "none"
+    case AuthType.AUTH_TYPE_DISCOVER => "discover"
+    case AuthType.AUTH_TYPE_STATIC_HEADER => "static_auth_header"
+    case AuthType.AUTH_TYPE_UNSPECIFIED | AuthType.Unrecognized(_) => "none"
+  }
+
+  /**
+   * Converts a database row to a McpServer proto message.
+   */
+  private def rowToMcpServer(row: McpServerRow): McpServer = {
+    val authType = stringToAuthType(row.authType)
+
+    // Build OAuth config if auth type is DISCOVER and OAuth fields are present
+    val oauthConfig = if (authType == AuthType.AUTH_TYPE_DISCOVER) {
+      Some(OAuthConfig(
+        clientId = row.clientId.getOrElse(""),
+        tokenEndpoint = row.tokenEndpoint.getOrElse(""),
+        hasClientSecret = row.clientSecret.isDefined,
+        hasRefreshToken = row.refreshToken.isDefined
+      ))
+    } else {
+      None
+    }
+
+    McpServer(
+      uuid = row.uuid.toString,
+      name = row.name,
+      url = row.url,
+      authType = authType,
+      hasStaticToken = row.staticToken.isDefined,
+      oauthConfig = oauthConfig,
+      createdAt = Some(com.google.protobuf.timestamp.Timestamp(
+        seconds = row.createdAt.getTime / 1000,
+        nanos = ((row.createdAt.getTime % 1000) * 1000000).toInt
+      )),
+      updatedAt = Some(com.google.protobuf.timestamp.Timestamp(
+        seconds = row.updatedAt.getTime / 1000,
+        nanos = ((row.updatedAt.getTime % 1000) * 1000000).toInt
+      ))
+    )
+  }
+
+  /**
    * Create a new MCP server registration.
    *
    * @param in CreateMcpServerRequest containing name and url
@@ -84,7 +140,7 @@ class MgmtServiceImpl()(
         userId = authContext.userId,
         name = in.name,
         url = in.url,
-        authType = if (in.authType.isEmpty) "none" else in.authType,
+        authType = authTypeToString(in.authType),
         staticToken = if (in.staticToken.isEmpty) None else Some(in.staticToken),
         createdAt = now,
         updatedAt = now
@@ -102,13 +158,7 @@ class MgmtServiceImpl()(
 
           // TODO: ToolServer must pick up new server registration at runtime and start using it
 
-          McpServer(
-            uuid = row.uuid.toString,
-            name = row.name,
-            url = row.url,
-            authType = row.authType,
-            hasStaticToken = row.staticToken.isDefined
-          )
+          rowToMcpServer(row)
       }
     }
   }
@@ -142,13 +192,7 @@ class MgmtServiceImpl()(
           logger.error(s"Failed to list MCP servers from DB: ${dbError.message}")
           throw new GrpcServiceException(Status.UNKNOWN, MetadataBuilder().addText("UNHANDLED_ERROR", dbError.message).build())
         case Right(rows) =>
-          val servers = rows.map(row => McpServer(
-            uuid = row.uuid.toString,
-            name = row.name,
-            url = row.url,
-            authType = row.authType,
-            hasStaticToken = row.staticToken.isDefined
-          ))
+          val servers = rows.map(rowToMcpServer)
           logger.info(s"Returning ${servers.size} MCP servers for userId: ${in.userId}")
           McpServerList(mcpServer = servers)
       }
