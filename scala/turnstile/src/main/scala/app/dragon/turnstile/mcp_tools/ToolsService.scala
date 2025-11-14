@@ -163,7 +163,7 @@ class ToolsService(
   private[mcp_tools] def getDownstreamTools(
     mcpServerUuid: String,
     mcpServerName: String,
-    serverUrl: String,
+    mcpServerUrl: String,
   )(implicit
     system: ActorSystem[?],
     timeout: Timeout = 30.seconds
@@ -174,7 +174,7 @@ class ToolsService(
     
     logger.info(s"Fetching namespaced tools from MCP client actor: $mcpServerUuid for user=$userId")
 
-    ActorLookup.getMcpClientActor(userId, mcpServerUuid) ! McpClientActor.Initialize(mcpServerUuid, serverUrl)
+    ActorLookup.getMcpClientActor(userId, mcpServerUuid) ! McpClientActor.Initialize(mcpServerUuid, mcpServerUrl)
 
     // Query the actor for its tools
     ActorLookup.getMcpClientActor(userId, mcpServerUuid)

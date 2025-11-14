@@ -259,7 +259,9 @@ class McpClientActor(
   ): PartialFunction[Message, Behavior[Message]] = {
     case Initialize(mcpServerUuid, mcpServerUrl) =>
       val authTokenProvider: Option[() => Future[String]] = getAccessToken(mcpServerUuid)
-      
+
+      context.log.info(s"Received Initialize message for MCP client actor $mcpClientActorId mcpServerUuid=$mcpServerUuid")
+
       val authInfo = if (authTokenProvider.isDefined) "with authentication" else "without authentication"
       context.log.info(s"Initializing MCP client actor $mcpClientActorId with server URL $mcpServerUrl $authInfo")
 

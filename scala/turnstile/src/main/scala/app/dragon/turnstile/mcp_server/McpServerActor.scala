@@ -157,8 +157,6 @@ object McpServerActor {
 class McpServerActor(
   context: ActorContext[McpServerActor.Message],
   buffer: StashBuffer[McpServerActor.Message],
-  //userId: String,
-  //mcpServerActorId: String,
   mcpServerActorId: McpServerActorId
 ) {
   import McpServerActor.*
