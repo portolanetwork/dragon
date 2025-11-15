@@ -51,8 +51,8 @@ object ClientAuthExample {
 
     // Test configuration from ClientAuthService.main
     val domain = "https://portola-dev.us.auth0.com"
-    val clientId = None//Some("8ZaIuLcpf3fvBh7qH7sLuRjEe1Gy1Yax")
-    val clientSecret = None//Some("muG1iXaizOloSaOhi9uWqdufW19rk_meHzi2B7k1S74aJuWIPGE3Daaf0S5ivvVB")
+    val clientId = None
+    val clientSecret = None
     val scope = "openid profile email"
     val callbackPort = 8080
 
