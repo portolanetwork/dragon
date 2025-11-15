@@ -146,7 +146,13 @@ object ClientAuthService {
     }
   }
 
-  // Its a shared cache per node. Consider passing cache as parameter
+  /**
+   * Retrieves an authentication token for an MCP server, using a shared cache to minimize token refreshes.
+   * The cache is node-local and shared across all requests on this node.
+   *
+   * @param mcpServerUuid The UUID of the MCP server
+   * @return Either[AuthError, AuthToken] containing the cached or newly fetched token
+   */
   def getAuthTokenCached(
     mcpServerUuid: String
   )(
@@ -236,9 +242,6 @@ object ClientAuthService {
                     case Right(_) =>
                       Right(tokenResponse)
                     case Left(dbError) =>
-                      // Still return the token even if DB update fails, but log the error
-                      // This ensures the caller can proceed even if DB write fails
-                      //Left(DatabaseError(s"Failed to update refresh token in database: ${dbError.message}"))
                       Left(DatabaseError(s"Failed to update refresh token in database: ${dbError.message}"))
                   }
                 case Right(tokenResponse) =>

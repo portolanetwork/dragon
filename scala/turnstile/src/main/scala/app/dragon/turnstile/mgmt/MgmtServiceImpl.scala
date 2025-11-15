@@ -136,7 +136,7 @@ class MgmtServiceImpl()(
         case Right(row) =>
           logger.info(s"Successfully created MCP server with UUID: ${row.uuid}")
 
-          // TODO: ToolServer must pick up new server registration at runtime and start using it
+          // Note: Tool servers will need to be notified of new server registrations at runtime
 
           rowToMcpServer(row)
       }

@@ -105,7 +105,6 @@ object Guardian {
           // Start MCP Streaming HTTP server if enabled
           if (mcpStreamingConfig.getBoolean("enabled")) {
             try {
-              //val mcpStreamingServer = StreamingHttpMcpServer(mcpStreamingConfig)
               val mcpStreamingServer = McpGatewayServer(mcpStreamingConfig, authConfig, db)
 
               mcpStreamingServer.start()

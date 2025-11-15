@@ -67,8 +67,6 @@ class McpSessionMap()(
       .find(_.lowercaseName() == mcpSessionHeader)
       .map(_.value())
 
-    // TODO: Introduce user identification from auth header or other means
-    
     sessionIdOpt match {
       case Some(mcpSessionId) =>
         logger.debug(s"Received request with $mcpSessionHeader: $mcpSessionId")
@@ -110,7 +108,6 @@ class McpSessionMap()(
 
   private def generateMcpServerActorId(userId: String): McpServerActorId = {
     McpServerActorId(userId, Random.generateUuid())
-    //userId + "-" + Random.generateUuid()
   }
 }
 

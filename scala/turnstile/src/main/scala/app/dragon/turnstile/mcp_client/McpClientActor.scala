@@ -260,12 +260,10 @@ class McpClientActor(
   def handleInitialize(
   ): PartialFunction[Message, Behavior[Message]] = {
     case Initialize(mcpServerRow) =>
-      //val authTokenProvider: Option[() => Future[String]] = getAccessToken(mcpServerUuid)
-      
       val authTokenProvider: Option[() => Future[String]] = mcpServerRow.authType match {
         case "none" => None
         case "discover" => getAccessToken(mcpServerRow.uuid.toString)
-        case "static_auth_header" => None // TODO: implement static auth header support
+        case "static_auth_header" => None // Note: static auth header support not yet implemented
         case other => None
       }
 

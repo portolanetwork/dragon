@@ -228,29 +228,9 @@ class McpGatewayServiceImpl(
                   )
                 ))
               case Right(uuid) =>
-                // Validate authentication
-                //ServerAuthService.authenticate(pekkoRequest.headers) match {
+                // For now, bypass authentication for login endpoint
+                // In production, this should validate the user's session/token
                 Right(ServerAuthService.AuthContext("", "", JwtClaim())) match {
-                  /*
-                  case Left(MissingAuthHeader) =>
-                    logger.warn("Login request rejected: missing authorization header")
-                    complete(HttpResponse(
-                      status = StatusCodes.Unauthorized,
-                      entity = HttpEntity(
-                        ContentTypes.`application/json`,
-                        """{"error": "unauthorized", "message": "Missing authorization header"}"""
-                      )
-                    ))
-                  case Left(AccessDenied) =>
-                    logger.warn("Login request rejected: invalid or expired token")
-                    complete(HttpResponse(
-                      status = StatusCodes.Forbidden,
-                      entity = HttpEntity(
-                        ContentTypes.`application/json`,
-                        """{"error": "forbidden", "message": "Invalid or expired token"}"""
-                      )
-                    ))
-                   */
                   case Right(authContext) =>
                     logger.info(s"Login request for UUID: $uuid from user: ${authContext.userId}")
 
