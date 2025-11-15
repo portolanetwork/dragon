@@ -228,7 +228,7 @@ class MgmtServiceImpl()(
    * @param metadata Request metadata containing authentication info
    * @return Future[McpServerLoginUrl] containing the login URL to redirect to
    */
-  override def loginToMcpServer(
+  override def loginMcpServer(
     in: LoginMcpServerRequest,
     metadata: Metadata
   ): Future[McpServerLoginUrl] = {
@@ -276,19 +276,12 @@ class MgmtServiceImpl()(
     } yield {
       loginStatusResult match {
         case Right(statusInfo: ClientAuthService.LoginStatusInfo) =>
-          logger.info(s"Retrieved login status for MCP server UUID: ${in.uuid}, status: ${statusInfo.isAuthenticated}")
-
+          logger.info(s"Retrieved login status for MCP server UUID: ${in.uuid}")
+          
           McpServerLoginStatus(
             uuid = statusInfo.uuid,
-            status = determineLoginStatus(statusInfo.authType, statusInfo.hasRefreshToken, statusInfo.isAuthenticated),
-            authType = stringToAuthType(statusInfo.authType),
-            hasRefreshToken = statusInfo.hasRefreshToken,
-            tokenExpiresAt = statusInfo.tokenExpiresAt.map { instant =>
-              com.google.protobuf.timestamp.Timestamp(
-                seconds = instant.getEpochSecond,
-                nanos = instant.getNano
-              )
-            }
+            status = determineLoginStatus(statusInfo.loginStatusEnum),
+            authType = stringToAuthType(statusInfo.authType)
           )
         case Left(ClientAuthService.ServerNotFound(msg)) =>
           logger.warn(s"MCP server not found: $msg")
@@ -307,19 +300,51 @@ class MgmtServiceImpl()(
   }
 
   /**
+   * Logout from an MCP server by clearing cached tokens and removing refresh token.
+   *
+   * @param in       LogoutMcpServerRequest containing the uuid
+   * @param metadata Request metadata containing authentication info
+   * @return Future[Empty] on successful logout
+   */
+  override def logoutMcpServer(
+    in: LogoutMcpServerRequest,
+    metadata: Metadata
+  ): Future[Empty] = {
+    // Validate request and logout
+    for {
+      authContext <- ServerAuthService.authenticate(metadata)
+      _ = logger.info(s"Received LogoutFromMcpServer request for uuid: ${in.uuid} from userId: ${authContext.userId}")
+      _ <- validateNotEmpty(in.uuid, "uuid")
+      logoutResult <- ClientAuthService.logoutFromMcpServer(in.uuid)(db, ec)
+    } yield {
+      logoutResult match {
+        case Right(_) =>
+          logger.info(s"Successfully logged out from MCP server UUID: ${in.uuid}")
+          Empty()
+        case Left(ClientAuthService.DatabaseError(msg)) =>
+          logger.error(s"Database error during logout: $msg")
+          throw new GrpcServiceException(Status.INTERNAL,
+            MetadataBuilder().addText("DATABASE_ERROR", msg).build())
+        case Left(authError) =>
+          logger.error(s"Failed to logout: ${authError.message}")
+          throw new GrpcServiceException(Status.INTERNAL,
+            MetadataBuilder().addText("LOGOUT_FAILED", authError.message).build())
+      }
+    }
+  }
+
+  /**
    * Determines the LoginStatus enum value based on auth type and authentication state.
    */
   private def determineLoginStatus(
-    authType: String,
-    hasRefreshToken: Boolean,
-    isAuthenticated: Boolean
+    loginStatusEnum: ClientAuthService.LoginStatusEnum
   ): LoginStatus = {
-    authType.toLowerCase match {
-      case "none" | "static_auth_header" => LoginStatus.LOGIN_STATUS_NOT_APPLICABLE
-      case "discover" if isAuthenticated => LoginStatus.LOGIN_STATUS_AUTHENTICATED
-      case "discover" if !isAuthenticated && hasRefreshToken => LoginStatus.LOGIN_STATUS_EXPIRED
-      case "discover" => LoginStatus.LOGIN_STATUS_NOT_AUTHENTICATED
-      case _ => LoginStatus.LOGIN_STATUS_UNSPECIFIED
+    loginStatusEnum match {
+      case ClientAuthService.LoginStatusEnum.AUTHENTICATED => LoginStatus.LOGIN_STATUS_AUTHENTICATED
+      case ClientAuthService.LoginStatusEnum.EXPIRED => LoginStatus.LOGIN_STATUS_EXPIRED
+      case ClientAuthService.LoginStatusEnum.NOT_APPLICABLE => LoginStatus.LOGIN_STATUS_NOT_APPLICABLE
+      case ClientAuthService.LoginStatusEnum.NOT_AUTHENTICATED => LoginStatus.LOGIN_STATUS_NOT_AUTHENTICATED
+      case ClientAuthService.LoginStatusEnum.UNSPECIFIED => LoginStatus.LOGIN_STATUS_UNSPECIFIED
     }
   }
 

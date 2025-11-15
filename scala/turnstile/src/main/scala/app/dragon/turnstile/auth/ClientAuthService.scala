@@ -22,12 +22,15 @@ object ClientAuthService {
     refreshToken: Option[String],
   )
 
+  // New enum representing login status categories
+  enum LoginStatusEnum {
+    case AUTHENTICATED, EXPIRED, NOT_APPLICABLE, NOT_AUTHENTICATED, UNSPECIFIED
+  }
+
   case class LoginStatusInfo(
     uuid: String,
     authType: String,
-    hasRefreshToken: Boolean,
-    isAuthenticated: Boolean,
-    tokenExpiresAt: Option[Instant]
+    loginStatusEnum: LoginStatusEnum,
   )
 
 
@@ -274,41 +277,57 @@ object ClientAuthService {
         case Right(serverRow) =>
           val authType = serverRow.authType.toLowerCase
 
-          // For non-OAuth auth types, login status is not applicable
-          if (authType == "none" || authType == "static_auth_header") {
-            Future.successful(Right(LoginStatusInfo(
-              uuid = serverRow.uuid.toString,
-              authType = serverRow.authType,
-              hasRefreshToken = false,
-              isAuthenticated = false,
-              tokenExpiresAt = None
-            )))
-          } else {
-            // For OAuth (discover) auth type, check authentication status
-            val hasRefreshToken = serverRow.refreshToken.isDefined
+          // For now treat presence of a refresh token as authenticated (this can be refined later)
+          val isAuth = serverRow.refreshToken.isDefined
 
-            // Check cached token status
-            val (isAuthenticated, tokenExpiresAt) = tokenCache.get(mcpServerUuid) match {
-              case Some(cached) if cached.expiresAt.isAfter(now) =>
-                (true, Some(cached.expiresAt))
-              case Some(cached) =>
-                (hasRefreshToken, Some(cached.expiresAt))
-              case None =>
-                (hasRefreshToken, None)
-            }
-
-            Future.successful(Right(LoginStatusInfo(
-              uuid = serverRow.uuid.toString,
-              authType = serverRow.authType,
-              hasRefreshToken = hasRefreshToken,
-              isAuthenticated = isAuthenticated,
-              tokenExpiresAt = tokenExpiresAt
-            )))
+          val statusEnum = authType match {
+            case "none" | "static_auth_header" => LoginStatusEnum.NOT_APPLICABLE
+            case "discover" if isAuth => LoginStatusEnum.AUTHENTICATED
+            case "discover" => LoginStatusEnum.NOT_AUTHENTICATED
+            case _ => LoginStatusEnum.UNSPECIFIED
           }
+
+          Future.successful(Right(LoginStatusInfo(
+            uuid = serverRow.uuid.toString,
+            authType = serverRow.authType,
+            loginStatusEnum = statusEnum
+          )))
         case Left(dbError) =>
           Future.successful(Left(DatabaseError(dbError.toString)))
       }
     } yield statusInfo
+  }
+
+  /**
+   * Logout from an MCP server by clearing cached tokens and removing refresh token from database.
+   *
+   * @param mcpServerUuid The UUID of the MCP server to logout from
+   * @return Either[AuthError, Unit] indicating success or failure
+   */
+  def logoutFromMcpServer(
+    mcpServerUuid: String
+  )(
+    implicit db: Database,
+    ec: ExecutionContext
+  ): Future[Either[AuthError, Unit]] = {
+    val serverUuid = UUID.fromString(mcpServerUuid)
+
+    // Remove from cache
+    tokenCache.remove(mcpServerUuid)
+    logger.info(s"Cleared cached token for MCP server $mcpServerUuid")
+
+    // Remove refresh token from database
+    DbInterface.updateMcpServerAuth(
+      uuid = serverUuid,
+      refreshToken = None
+    ).map {
+      case Right(_) =>
+        logger.info(s"Successfully logged out from MCP server $mcpServerUuid")
+        Right(())
+      case Left(dbError) =>
+        logger.error(s"Failed to clear refresh token from database: ${dbError.message}")
+        Left(DatabaseError(s"Failed to clear refresh token: ${dbError.message}"))
+    }
   }
 
 }

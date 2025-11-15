@@ -25,7 +25,7 @@ enum AuthType {
 // Login status for OAuth-enabled MCP servers
 enum LoginStatus {
     LOGIN_STATUS_UNSPECIFIED = 0;
-    LOGIN_STATUS_NOT_AUTHENTICATED = 1;  // User has not authenticated yet
+    LOGIN_STATUS_NOT_AUTHENTICATED = 1;   // User has not authenticated yet
     LOGIN_STATUS_AUTHENTICATED = 2;       // User is authenticated with valid tokens
     LOGIN_STATUS_EXPIRED = 3;             // Authentication has expired
     LOGIN_STATUS_NOT_APPLICABLE = 4;      // Server does not require OAuth (AUTH_TYPE_NONE or AUTH_TYPE_STATIC_HEADER)
@@ -37,8 +37,8 @@ service TurnstileService {
     rpc DeleteMcpServer (DeleteMcpServerRequest) returns (google.protobuf.Empty) {}
 
     rpc GetLoginStatusForMcpServer (GetLoginStatusForMcpServerRequest) returns (McpServerLoginStatus) {}
-    rpc LoginToMcpServer (LoginMcpServerRequest) returns (McpServerLoginUrl) {}
-    
+    rpc LoginMcpServer (LoginMcpServerRequest) returns (McpServerLoginUrl) {}
+    rpc LogoutMcpServer (LogoutMcpServerRequest) returns (google.protobuf.Empty) {}
 }
 
 // MCP Servers
@@ -92,8 +92,6 @@ message McpServerLoginStatus {
     string uuid = 1;                              // UUID of the MCP server
     LoginStatus status = 2;                       // Current login status
     AuthType auth_type = 3;                       // Authentication type of the server
-    bool has_refresh_token = 4;                   // Indicates if a refresh token is stored
-    google.protobuf.Timestamp token_expires_at = 5; // When the current access token expires (if applicable)
 }
 
 message LoginMcpServerRequest {
@@ -102,4 +100,8 @@ message LoginMcpServerRequest {
 
 message McpServerLoginUrl {
     string login_url = 1;
+}
+
+message LogoutMcpServerRequest {
+    string uuid = 1;
 }
