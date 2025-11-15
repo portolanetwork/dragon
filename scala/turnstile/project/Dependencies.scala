@@ -97,8 +97,6 @@ object Dependencies {
     "com.github.jwt-scala" %% "jwt-play" % jwtScalaVersion,
     "com.auth0" % "jwks-rsa" % auth0JwksRsaVersion,
     "com.google.protobuf" % "protobuf-java-util" % protobufJavaUtilVersion,
-    //"org.polyvariant" %% "sttp-oauth2" % "0.20.0",
-    //"org.polyvariant" %% "sttp-oauth2-circe" % "0.20.0", // Or other, see JSON support
     // MCP (Model Context Protocol)
     "io.modelcontextprotocol.sdk" % "mcp" % mcpSdkVersion,
     "io.modelcontextprotocol.sdk" % "mcp-core" % mcpSdkVersion,
