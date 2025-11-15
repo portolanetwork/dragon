@@ -22,35 +22,47 @@ object ServerAuthService {
   case object AccessDenied extends AuthError
 
   def authenticate(
-    httpHeader: Seq[HttpHeader]
+    httpHeader: Seq[HttpHeader],
+    authEnabled: Boolean
   )(
     implicit ec: ExecutionContext
   ): Either[AuthError, AuthContext] = {
-    httpHeader.find(_.name.toLowerCase == "authorization").map(_.value) match {
-      case Some(authHeader) => validateToken(Some(authHeader))
-      case None => Left(MissingAuthHeader)
+    if (!authEnabled) {
+      // When auth is disabled, return a bypass context
+      Right(AuthContext(userId = "bypass", tenant = "default", claims = JwtClaim()))
+    } else {
+      httpHeader.find(_.name.toLowerCase == "authorization").map(_.value) match {
+        case Some(authHeader) => validateToken(Some(authHeader))
+        case None => Left(MissingAuthHeader)
+      }
     }
   }
 
   def authenticate(
-    metadata: Metadata
+    metadata: Metadata,
+    authEnabled: Boolean
   )(
     implicit ec: ExecutionContext
   ): Future[AuthContext] = {
-    validateAuth(metadata) match {
-      case Right(authContext) => Future.successful(authContext)
-      case Left(MissingAuthHeader) =>
-        Future
-          .failed(Status.UNAUTHENTICATED
-            .withDescription("Missing authorization header")
-            .asRuntimeException()
+    if (!authEnabled) {
+      // When auth is disabled, return a bypass context
+      Future.successful(AuthContext(userId = "bypass", tenant = "default", claims = JwtClaim()))
+    } else {
+      validateAuth(metadata) match {
+        case Right(authContext) => Future.successful(authContext)
+        case Left(MissingAuthHeader) =>
+          Future
+            .failed(Status.UNAUTHENTICATED
+              .withDescription("Missing authorization header")
+              .asRuntimeException()
+            )
+        case Left(AccessDenied) =>
+          Future.failed(
+            Status.PERMISSION_DENIED
+              .withDescription("Access denied: invalid or expired token")
+              .asRuntimeException()
           )
-      case Left(AccessDenied) =>
-        Future.failed(
-          Status.PERMISSION_DENIED
-            .withDescription("Access denied: invalid or expired token")
-            .asRuntimeException()
-        )
+      }
     }
   }
 

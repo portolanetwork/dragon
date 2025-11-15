@@ -63,7 +63,9 @@ class MgmtGrpcServer private(
     implicit val sharding: ClusterSharding = ClusterSharding(system)
 
     // Create service handlers
-    val turnstileServiceHandler = TurnstileServicePowerApiHandler.partial(MgmtServiceImpl())
+    val turnstileServiceHandler = TurnstileServicePowerApiHandler.partial(
+      MgmtServiceImpl(ApplicationConfig.serverAuthEnabled)
+    )
 
     // Create server reflection for both services
     val reflection = ServerReflection.partial(List(TurnstileService))

@@ -39,6 +39,7 @@ import pdi.jwt.JwtClaim
 class McpGatewayServiceImpl(
   auth0Domain: String,
   mcpEndpoint: String,
+  authEnabled: Boolean
 )(
   implicit system: ActorSystem[?],
   timeout: Timeout,
@@ -201,7 +202,7 @@ class McpGatewayServiceImpl(
     }
   }
 
-  /**
+  /** TODO: Remove this. Use GRPC mgmt API to initiate auth flow instead.
    * Login route to initiate OAuth flow for an MCP server.
    * Accepts a UUID parameter to lookup the MCP server in the database.
    * Initiates OAuth flow and stores the resulting tokens.
@@ -270,7 +271,7 @@ class McpGatewayServiceImpl(
     path(mcpEndpoint.stripPrefix("/")) {
       extractRequest { pekkoRequest =>
         // Validate authentication first
-        ServerAuthService.authenticate(pekkoRequest.headers) match {
+        ServerAuthService.authenticate(pekkoRequest.headers, authEnabled) match {
           case Left(MissingAuthHeader) =>
             logger.warn("Request rejected: missing authorization header")
             complete(HttpResponse(

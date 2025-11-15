@@ -38,12 +38,12 @@ import scala.concurrent.{ExecutionContext, Future}
  */
 object MgmtServiceImpl {
   // Placeholder for future companion object utilities
-  def apply()(
+  def apply(authEnabled: Boolean)(
     implicit db: Database,
     system: org.apache.pekko.actor.typed.ActorSystem[?],
     sharding: org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
   ): MgmtServiceImpl =
-    new MgmtServiceImpl()
+    new MgmtServiceImpl(authEnabled)
 }
 
 /**
@@ -51,7 +51,7 @@ object MgmtServiceImpl {
  *
  * This service provides MCP server registration functionality through gRPC.
  */
-class MgmtServiceImpl()(
+class MgmtServiceImpl(authEnabled: Boolean)(
   implicit db: Database,
   system: org.apache.pekko.actor.typed.ActorSystem[?],
   sharding: org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
@@ -110,7 +110,7 @@ class MgmtServiceImpl()(
 
     // Validate request using generic utility
     for {
-      authContext <- ServerAuthService.authenticate(metadata)
+      authContext <- ServerAuthService.authenticate(metadata, authEnabled)
       //_ = logger.info(s"Received CreateMcpServer request for name: ${request.name}, url: ${request.url} from userId: ${authContext.userId}")
       _ <- validateNotEmpty(in.name, "name")
       _ <- validateHasNoSpaces(in.name, "name")
@@ -155,7 +155,7 @@ class MgmtServiceImpl()(
   ): Future[McpServerList] = {
     // Validate request and list servers
     for {
-      authContext <- ServerAuthService.authenticate(metadata)
+      authContext <- ServerAuthService.authenticate(metadata, authEnabled)
       _ = logger.info(s"Received ListMcpServers request for userId: ${in.userId} from authenticated userId: ${authContext.userId}")
       _ <- validateEquals(in.userId, authContext.userId, "User ID mismatch")
       _ <- validateNotEmpty(in.userId, "userId")
@@ -191,7 +191,7 @@ class MgmtServiceImpl()(
   ): Future[Empty] = {
     // Validate request and delete server
     for {
-      authContext <- ServerAuthService.authenticate(metadata)
+      authContext <- ServerAuthService.authenticate(metadata, authEnabled)
       _ = logger.info(s"Received DeleteMcpServer request for uuid: ${in.uuid} from userId: ${authContext.userId}")
       _ <- validateNotEmpty(in.uuid, "uuid")
       uuid <- Future.fromTry(scala.util.Try(UUID.fromString(in.uuid)))
@@ -234,7 +234,7 @@ class MgmtServiceImpl()(
   ): Future[McpServerLoginUrl] = {
     // Validate request and initiate auth flow
     for {
-      authContext <- ServerAuthService.authenticate(metadata)
+      authContext <- ServerAuthService.authenticate(metadata, authEnabled)
       _ = logger.info(s"Received LoginToMcpServer request for uuid: ${in.uuid} from userId: ${authContext.userId}")
       _ <- validateNotEmpty(in.uuid, "uuid")
       loginUrlResult <- ClientAuthService.initiateAuthCodeFlow(in.uuid)
@@ -269,7 +269,7 @@ class MgmtServiceImpl()(
   ): Future[McpServerLoginStatus] = {
     // Validate request and get login status
     for {
-      authContext <- ServerAuthService.authenticate(metadata)
+      authContext <- ServerAuthService.authenticate(metadata, authEnabled)
       _ = logger.info(s"Received GetLoginStatusForMcpServer request for uuid: ${in.uuid} from userId: ${authContext.userId}")
       _ <- validateNotEmpty(in.uuid, "uuid")
       loginStatusResult <- ClientAuthService.getMcpServerLoginStatus(in.uuid)(db, ec, system)
@@ -312,7 +312,7 @@ class MgmtServiceImpl()(
   ): Future[Empty] = {
     // Validate request and logout
     for {
-      authContext <- ServerAuthService.authenticate(metadata)
+      authContext <- ServerAuthService.authenticate(metadata, authEnabled)
       _ = logger.info(s"Received LogoutFromMcpServer request for uuid: ${in.uuid} from userId: ${authContext.userId}")
       _ <- validateNotEmpty(in.uuid, "uuid")
       logoutResult <- ClientAuthService.logoutFromMcpServer(in.uuid)(db, ec)

@@ -89,9 +89,12 @@ object ApplicationConfig {
 
   /** Root configuration object loaded from the selected file */
   val rootConfig: Config = ConfigFactory.load(configFile)
-  
+
   /** Authentication configuration */
   val auth: Config = rootConfig.getConfig("turnstile.auth")
+
+  /** Server authentication enabled flag */
+  val serverAuthEnabled: Boolean = auth.getBoolean("server.enabled")
 
   /** gRPC server configuration (host, port) */
   val grpcConfig: Config = rootConfig.getConfig("turnstile.grpc")

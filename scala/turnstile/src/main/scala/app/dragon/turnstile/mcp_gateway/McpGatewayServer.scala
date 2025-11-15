@@ -20,6 +20,7 @@ package app.dragon.turnstile.mcp_gateway
 
 import app.dragon.turnstile.auth.ServerAuthService.{AccessDenied, MissingAuthHeader}
 import app.dragon.turnstile.auth.{ClientAuthService, ServerAuthService}
+import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.mcp_server.McpServerActor
 import app.dragon.turnstile.utils.ActorLookup
 import com.typesafe.config.Config
@@ -102,11 +103,13 @@ class McpGatewayServer(
   val port: Int = mcpConfig.getInt("port")
   val mcpEndpoint: String = mcpConfig.getString("mcp-endpoint")
   val auth0Domain: String = authConfig.getString("server.domain")
+  val authEnabled: Boolean = ApplicationConfig.serverAuthEnabled
 
   // Create the service implementation
   private val serviceImpl = new McpGatewayServiceImpl(
     auth0Domain = auth0Domain,
     mcpEndpoint = mcpEndpoint,
+    authEnabled = authEnabled
   )(system, timeout, sharding, database)
 
   def start(): Unit = {
