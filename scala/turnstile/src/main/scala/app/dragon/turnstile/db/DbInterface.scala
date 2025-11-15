@@ -187,7 +187,6 @@ object DbInterface {
   )(
     implicit db: Database, ec: ExecutionContext
   ): Future[Either[DbError, Int]] = {
-    //logger.info(s"Updating MCP server auth for UUID: $uuid with clientId: $clientId, refreshTOken: $refreshToken, tokenEndpoint: $tokenEndpoint")
 
     val updateAction = Tables.mcpServers
       .filter(_.uuid === uuid)
