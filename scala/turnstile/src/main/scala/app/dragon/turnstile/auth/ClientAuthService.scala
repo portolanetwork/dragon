@@ -22,6 +22,15 @@ object ClientAuthService {
     refreshToken: Option[String],
   )
 
+  case class LoginStatusInfo(
+    uuid: String,
+    authType: String,
+    hasRefreshToken: Boolean,
+    isAuthenticated: Boolean,
+    tokenExpiresAt: Option[Instant]
+  )
+
+
   private case class CachedToken(
     accessToken: String,
     refreshToken: Option[String],
@@ -242,6 +251,64 @@ object ClientAuthService {
       }
     } yield authToken
   }
+  
+  /**
+   * Get the login status for an MCP server.
+   *
+   * @param mcpServerUuid The UUID of the MCP server
+   * @return Either[AuthError, LoginStatusInfo] containing the login status information
+   */
+  def getMcpServerLoginStatus(
+    mcpServerUuid: String
+  )(
+    implicit db: Database,
+    ec: ExecutionContext,
+    system: ActorSystem[?]
+  ): Future[Either[AuthError, LoginStatusInfo]] = {
+    val now = Instant.now()
+    val serverUuid = UUID.fromString(mcpServerUuid)
 
+    for {
+      mcpServerRowEither <- DbInterface.findMcpServerByUuid(serverUuid)
+      statusInfo <- mcpServerRowEither match {
+        case Right(serverRow) =>
+          val authType = serverRow.authType.toLowerCase
+
+          // For non-OAuth auth types, login status is not applicable
+          if (authType == "none" || authType == "static_auth_header") {
+            Future.successful(Right(LoginStatusInfo(
+              uuid = serverRow.uuid.toString,
+              authType = serverRow.authType,
+              hasRefreshToken = false,
+              isAuthenticated = false,
+              tokenExpiresAt = None
+            )))
+          } else {
+            // For OAuth (discover) auth type, check authentication status
+            val hasRefreshToken = serverRow.refreshToken.isDefined
+
+            // Check cached token status
+            val (isAuthenticated, tokenExpiresAt) = tokenCache.get(mcpServerUuid) match {
+              case Some(cached) if cached.expiresAt.isAfter(now) =>
+                (true, Some(cached.expiresAt))
+              case Some(cached) =>
+                (hasRefreshToken, Some(cached.expiresAt))
+              case None =>
+                (hasRefreshToken, None)
+            }
+
+            Future.successful(Right(LoginStatusInfo(
+              uuid = serverRow.uuid.toString,
+              authType = serverRow.authType,
+              hasRefreshToken = hasRefreshToken,
+              isAuthenticated = isAuthenticated,
+              tokenExpiresAt = tokenExpiresAt
+            )))
+          }
+        case Left(dbError) =>
+          Future.successful(Left(DatabaseError(dbError.toString)))
+      }
+    } yield statusInfo
+  }
 
 }

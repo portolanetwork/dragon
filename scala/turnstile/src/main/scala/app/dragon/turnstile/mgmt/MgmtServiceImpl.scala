@@ -61,26 +61,6 @@ class MgmtServiceImpl()(
   implicit private val ec: ExecutionContext = ExecutionContext.global
 
   /**
-   * Converts a database authType string to proto AuthType enum.
-   */
-  private def stringToAuthType(authType: String): AuthType = authType.toLowerCase match {
-    case "none" => AuthType.AUTH_TYPE_NONE
-    case "discover" => AuthType.AUTH_TYPE_DISCOVER
-    case "static_auth_header" => AuthType.AUTH_TYPE_STATIC_HEADER
-    case _ => AuthType.AUTH_TYPE_UNSPECIFIED
-  }
-
-  /**
-   * Converts a proto AuthType enum to database authType string.
-   */
-  private def authTypeToString(authType: AuthType): String = authType match {
-    case AuthType.AUTH_TYPE_NONE => "none"
-    case AuthType.AUTH_TYPE_DISCOVER => "discover"
-    case AuthType.AUTH_TYPE_STATIC_HEADER => "static_auth_header"
-    case AuthType.AUTH_TYPE_UNSPECIFIED | AuthType.Unrecognized(_) => "none"
-  }
-
-  /**
    * Converts a database row to a McpServer proto message.
    */
   private def rowToMcpServer(row: McpServerRow): McpServer = {
@@ -240,11 +220,11 @@ class MgmtServiceImpl()(
       }
     }
   }
-  
+
   /**
    * Initiate OAuth login flow for an MCP server.
    *
-   * @param in LoginMcpServerRequest containing the uuid
+   * @param in       LoginMcpServerRequest containing the uuid
    * @param metadata Request metadata containing authentication info
    * @return Future[McpServerLoginUrl] containing the login URL to redirect to
    */
@@ -292,12 +272,24 @@ class MgmtServiceImpl()(
       authContext <- ServerAuthService.authenticate(metadata)
       _ = logger.info(s"Received GetLoginStatusForMcpServer request for uuid: ${in.uuid} from userId: ${authContext.userId}")
       _ <- validateNotEmpty(in.uuid, "uuid")
-      loginStatusResult <- ClientAuthService.getMcpServerLoginStatus(in.uuid)
+      loginStatusResult <- ClientAuthService.getMcpServerLoginStatus(in.uuid)(db, ec, system)
     } yield {
       loginStatusResult match {
-        case Right(isLoggedIn) =>
-          logger.info(s"Retrieved login status for MCP server UUID: ${in.uuid}, isLoggedIn: $isLoggedIn")
-          McpServerLoginStatus(isLoggedIn = isLoggedIn)
+        case Right(statusInfo: ClientAuthService.LoginStatusInfo) =>
+          logger.info(s"Retrieved login status for MCP server UUID: ${in.uuid}, status: ${statusInfo.isAuthenticated}")
+
+          McpServerLoginStatus(
+            uuid = statusInfo.uuid,
+            status = determineLoginStatus(statusInfo.authType, statusInfo.hasRefreshToken, statusInfo.isAuthenticated),
+            authType = stringToAuthType(statusInfo.authType),
+            hasRefreshToken = statusInfo.hasRefreshToken,
+            tokenExpiresAt = statusInfo.tokenExpiresAt.map { instant =>
+              com.google.protobuf.timestamp.Timestamp(
+                seconds = instant.getEpochSecond,
+                nanos = instant.getNano
+              )
+            }
+          )
         case Left(ClientAuthService.ServerNotFound(msg)) =>
           logger.warn(s"MCP server not found: $msg")
           throw new GrpcServiceException(Status.NOT_FOUND,
@@ -313,4 +305,43 @@ class MgmtServiceImpl()(
       }
     }
   }
+
+  /**
+   * Determines the LoginStatus enum value based on auth type and authentication state.
+   */
+  private def determineLoginStatus(
+    authType: String,
+    hasRefreshToken: Boolean,
+    isAuthenticated: Boolean
+  ): LoginStatus = {
+    authType.toLowerCase match {
+      case "none" | "static_auth_header" => LoginStatus.LOGIN_STATUS_NOT_APPLICABLE
+      case "discover" if isAuthenticated => LoginStatus.LOGIN_STATUS_AUTHENTICATED
+      case "discover" if !isAuthenticated && hasRefreshToken => LoginStatus.LOGIN_STATUS_EXPIRED
+      case "discover" => LoginStatus.LOGIN_STATUS_NOT_AUTHENTICATED
+      case _ => LoginStatus.LOGIN_STATUS_UNSPECIFIED
+    }
+  }
+
+  /**
+   * Converts a database authType string to proto AuthType enum.
+   */
+  private def stringToAuthType(authType: String): AuthType = authType.toLowerCase match {
+    case "none" => AuthType.AUTH_TYPE_NONE
+    case "discover" => AuthType.AUTH_TYPE_DISCOVER
+    case "static_auth_header" => AuthType.AUTH_TYPE_STATIC_HEADER
+    case _ => AuthType.AUTH_TYPE_UNSPECIFIED
+  }
+
+  /**
+   * Converts a proto AuthType enum to database authType string.
+   */
+  private def authTypeToString(authType: AuthType): String = authType match {
+    case AuthType.AUTH_TYPE_NONE => "none"
+    case AuthType.AUTH_TYPE_DISCOVER => "discover"
+    case AuthType.AUTH_TYPE_STATIC_HEADER => "static_auth_header"
+    case AuthType.AUTH_TYPE_UNSPECIFIED | AuthType.Unrecognized(_) => "none"
+  }
+
+
 }
