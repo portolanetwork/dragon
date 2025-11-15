@@ -71,7 +71,7 @@ object ServiceValidationUtil {
     if (value1 != value2) {
       Future.failed(
         Status.INVALID_ARGUMENT
-          .withDescription(message+ ": '" + value1 + "' != '" + value2 + "'")
+          .withDescription(s"$message: '$value1' != '$value2'")
           .asRuntimeException())
     } else {
       Future.successful(())
