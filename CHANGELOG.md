@@ -1,3 +1,10 @@
+# [0.2.0](https://github.com/portolanetwork/dragon/compare/v0.1.0...v0.2.0) (2025-11-15)
+
+
+### Features
+
+* Feature/auth integration ([#3](https://github.com/portolanetwork/dragon/issues/3)) ([c9246d8](https://github.com/portolanetwork/dragon/commit/c9246d80fc644c4c6152d3cd14946f198e38bd52))
+
 # [0.1.0](https://github.com/portolanetwork/dragon/compare/v0.0.0...v0.1.0) (2025-11-05)
 
 
