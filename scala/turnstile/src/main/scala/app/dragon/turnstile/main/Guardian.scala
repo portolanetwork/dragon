@@ -18,15 +18,18 @@
 
 package app.dragon.turnstile.main
 
-import app.dragon.turnstile.actor.{McpClientActor, McpServerActor, McpSessionMapActor}
+import app.dragon.turnstile.auth.AuthCodeFlowActor
 import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.db.DatabaseMigration
-import app.dragon.turnstile.gateway.TurnstileMcpGateway
-import app.dragon.turnstile.server.TurnstileGrpcServer
+import app.dragon.turnstile.mcp_client.McpClientActor
+import app.dragon.turnstile.mcp_gateway.{McpGatewayServer, McpSessionMapActor}
+import app.dragon.turnstile.mcp_server.McpServerActor
+import app.dragon.turnstile.mgmt.MgmtGrpcServer
 import com.typesafe.config.Config
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorSystem, Behavior}
 import org.slf4j.{Logger, LoggerFactory}
+import slick.jdbc.JdbcBackend.Database
 
 /**
  * Guardian actor - the root supervisor for the Turnstile application.
@@ -61,7 +64,8 @@ object Guardian {
 
   val grpcConfig: Config = ApplicationConfig.grpcConfig
   val mcpStreamingConfig: Config = ApplicationConfig.mcpStreaming
-  val databaseConfig: Config = ApplicationConfig.dbConfig
+  val databaseConfig: Config = ApplicationConfig.db
+  val authConfig: Config = ApplicationConfig.auth
 
   /**
    * Creates the Guardian actor behavior.
@@ -76,7 +80,7 @@ object Guardian {
 
       // Run database migrations first
       context.log.info("Running database migrations...")
-      DatabaseMigration.migrate(ApplicationConfig.dbConfig) match {
+      DatabaseMigration.migrate(ApplicationConfig.db) match {
         case scala.util.Success(result) =>
           context.log.info(s"Database migrations completed: ${result.migrationsExecuted} migrations executed")
           if (result.targetSchemaVersion != null) {
@@ -86,19 +90,22 @@ object Guardian {
           val grpcHost = grpcConfig.getString("host")
           val grpcPort = grpcConfig.getInt("port")
 
+          // Create database instance for MCP gateway
+          implicit val db: Database = Database.forConfig("", ApplicationConfig.db)
+
           // Initialize sharding and actors here
           McpServerActor.initSharding(context.system)
-          McpClientActor.initSharding(context.system)
+          McpClientActor.initSharding(context.system, db)
           McpSessionMapActor.initSharding(context.system)
+          AuthCodeFlowActor.initSharding(context.system)
 
           // Start GRPC server (hosting both GreeterService and TurnstileService)
-          TurnstileGrpcServer.start(grpcHost, grpcPort, context.system)
+          MgmtGrpcServer.start(grpcHost, grpcPort, context.system)
 
           // Start MCP Streaming HTTP server if enabled
           if (mcpStreamingConfig.getBoolean("enabled")) {
             try {
-              //val mcpStreamingServer = StreamingHttpMcpServer(mcpStreamingConfig)
-              val mcpStreamingServer = TurnstileMcpGateway(mcpStreamingConfig)
+              val mcpStreamingServer = McpGatewayServer(mcpStreamingConfig, authConfig, db)
 
               mcpStreamingServer.start()
               context.log.info("MCP Streaming HTTP Server started successfully")

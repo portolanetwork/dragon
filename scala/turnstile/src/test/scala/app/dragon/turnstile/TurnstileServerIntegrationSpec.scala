@@ -18,9 +18,10 @@
 
 package app.dragon.turnstile
 
-import app.dragon.turnstile.actor.{McpClientActor, McpServerActor, McpSessionMapActor}
-import app.dragon.turnstile.client.TurnstileStreamingHttpAsyncMcpClient
-import app.dragon.turnstile.gateway.TurnstileMcpGateway
+import app.dragon.turnstile.mcp_client.{McpClientActor, McpStreamingHttpAsyncClient}
+import app.dragon.turnstile.config.ApplicationConfig
+import app.dragon.turnstile.mcp_gateway.{McpGatewayServer, McpSessionMapActor}
+import app.dragon.turnstile.mcp_server.McpServerActor
 import com.typesafe.config.ConfigFactory
 import io.modelcontextprotocol.spec.McpSchema
 import org.apache.pekko.actor.testkit.typed.scaladsl.ActorTestKit
@@ -30,6 +31,7 @@ import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Seconds, Span}
 import org.scalatest.wordspec.AnyWordSpec
+import slick.jdbc.JdbcBackend.Database
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
@@ -100,15 +102,18 @@ class TurnstileServerIntegrationSpec
   private implicit val system: ActorSystem[?] = testKit.system
   private implicit val ec: ExecutionContext = system.executionContext
 
-  private var mcpGateway: TurnstileMcpGateway = null.asInstanceOf[TurnstileMcpGateway]
-  private var client: TurnstileStreamingHttpAsyncMcpClient = null.asInstanceOf[TurnstileStreamingHttpAsyncMcpClient]
+  private var mcpGateway: McpGatewayServer = null.asInstanceOf[McpGatewayServer]
+  private var client: McpStreamingHttpAsyncClient = null.asInstanceOf[McpStreamingHttpAsyncClient]
 
   override def beforeAll(): Unit = {
     super.beforeAll()
 
+    // Create test database instance first (needed for actor initialization)
+    implicit val db: Database = Database.forConfig("", ApplicationConfig.db)
+
     // Initialize cluster sharding for MCP actors
     McpServerActor.initSharding(system)
-    McpClientActor.initSharding(system)
+    McpClientActor.initSharding(system, db)
     McpSessionMapActor.initSharding(system)
 
     // Join the cluster
@@ -120,14 +125,18 @@ class TurnstileServerIntegrationSpec
     Thread.sleep(3000)
 
     // Start MCP Gateway
-    mcpGateway = TurnstileMcpGateway(testConfig.getConfig("turnstile.mcp-streaming"))(system)
+    mcpGateway = TurnstileMcpGateway(
+      testConfig.getConfig("turnstile.mcp-streaming"),
+      testConfig.getConfig("turnstile.auth"),
+      db
+    )(system)
     mcpGateway.start()
 
     // Wait for server to be ready
     Thread.sleep(3000)
 
     // Create client
-    client = TurnstileStreamingHttpAsyncMcpClient(serverUrl, mcpEndpoint)
+    client = McpStreamingHttpAsyncClient(serverUrl, mcpEndpoint)
   }
 
   override def afterAll(): Unit = {
@@ -400,7 +409,7 @@ class TurnstileServerIntegrationSpec
       Thread.sleep(1000)
 
       // Recreate client for remaining tests
-      client = TurnstileStreamingHttpAsyncMcpClient(serverUrl, mcpEndpoint)
+      client = McpStreamingHttpAsyncClient(serverUrl, mcpEndpoint)
 
       succeed
     }

@@ -16,15 +16,9 @@
  * Author: Sami Malik (sami.malik [at] portolanetwork.io)
  */
 
-import sbt.*
+package app.dragon.turnstile.serializer
 
-object ProjectResolvers {
-  val publicAkkaRepo = "Akka library repository".at("https://repo.org.apache.pekko.io/maven")
-  val mavenCentral = "Maven Central" at "https://repo1.maven.org/maven2/"
-
-  // Include Maven Central so common OSS artifacts (circe, etc.) are resolvable.
-  val resolvers = Seq(
-    mavenCentral,
-    publicAkkaRepo
-  )
-}
+/**
+ * Marker trait for serializable messages in Turnstile
+ */
+trait TurnstileSerializable

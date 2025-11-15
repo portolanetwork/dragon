@@ -16,9 +16,9 @@ Dragon is a distributed MCP hub that aggregates tools from multiple downstream M
 - **MCP Server Aggregation**: Aggregate multiple MCP servers into one
 - **Tenant/User level isolation**: Route requests to user-specific MCP server instances
 - **Spec compliant**: Full support for streaming HTTP spec
+- **Auth**: OAuth2/OIDC authentication via third-party IDPs (Auth0)
 
 ### Planned
-- **Auth**: Full Auth support via third part IDPs
 - **Console UI**: Web based console UI
 - **Policy Based Enforcement**: Manage tool access via policies
 - **Monitoring**: Monitor tool usage via event logging
@@ -41,7 +41,7 @@ For the first developer release, Dragon provides a robust foundation for self-ho
 - **Self-Hostable & Distributed**: Run on a single machine or scale horizontally across a cluster using its native Apache Pekko foundation.
 - **Protocol Support**: Full support for the Model Context Protocol (MCP) specification (2025-06-18).
 - **Connectivity**: gRPC and HTTP APIs for both management and high-throughput MCP operations.
-- **Auth**: TBD
+- **Auth**: OAuth2/OIDC authentication with JWT validation, Authorization Code Flow with PKCE, Dynamic Client Registration (DCR), and automatic token refresh
 - **Observability**: TBD
 - **Reliable Persistence**: PostgreSQL-backed configuration management using Flyway for database migrations.
 - **Open Source**: Released under the permissive Apache 2.0 license.
@@ -88,6 +88,8 @@ export DEPLOYMENT_NAME=default
 export DATABASE_URL=<db-url>
 export DATABASE_PASSWORD=<db-password>
 
+# Configure Auth0 (see scala/turnstile/docs/auth-with-auth0.md for setup)
+# Update application.conf with your Auth0 settings
 
 # Start the gateway (migrations run automatically)
 sbt "runMain app.dragon.turnstile.main.Turnstile"
@@ -111,11 +113,18 @@ The gateway starts with:
 Use the gRPC API to register downstream servers:
 
 ```bash
-# Example using grpcurl
-grpcurl -plaintext -d '{
-  "name": "my-mcp-server",
-  "url": "https://mcp.deepwiki.com/mcp1"
-}' localhost:8080 dragon.turnstile.v1.TurnstileService/CreateMcpServer
+# Example using grpcurl (with authentication)
+grpcurl -plaintext \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "user_id": "user-123",
+    "name": "my-mcp-server",
+    "url": "https://mcp.deepwiki.com/mcp1",
+    "auth_type": "discover"
+  }' localhost:8080 dragon.turnstile.v1.TurnstileService/CreateMcpServer
+
+# For servers requiring OAuth, initiate login:
+# GET http://localhost:8081/login?uuid=<server-uuid>
 ```
 
 ### Connect an MCP Client
@@ -136,6 +145,7 @@ Steps:
 ## Documentation
 
 - [Configuration Reference](scala/turnstile/src/main/resources/application.conf) - All configuration options
+- [Auth0 Setup Guide](scala/turnstile/docs/auth-with-auth0.md) - TBD
 - [Database Schema](scala/turnstile/src/main/resources/db/migration/) - Flyway migrations
 - [API Documentation](scala/turnstile/src/main/protobuf/) - gRPC protocol definitions
 
@@ -148,6 +158,7 @@ Steps:
 - Flyway - Database migrations
 - MCP Java SDK 0.14.1 - MCP protocol implementation
 - Spring WebFlux - Reactive HTTP transport (embedded)
+- JWT/Auth0 - OAuth2/OIDC authentication and token validation
 
 ## Deployment
 
