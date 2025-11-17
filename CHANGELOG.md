@@ -1,3 +1,10 @@
+## [0.2.1](https://github.com/portolanetwork/dragon/compare/v0.2.0...v0.2.1) (2025-11-17)
+
+
+### Bug Fixes
+
+* Error introduced during v0.1.0 merge ([#11](https://github.com/portolanetwork/dragon/issues/11)) ([b069f6f](https://github.com/portolanetwork/dragon/commit/b069f6f86619f9729540d46a1e462b836b048a01))
+
 # [0.2.0](https://github.com/portolanetwork/dragon/compare/v0.1.0...v0.2.0) (2025-11-15)
 
 
