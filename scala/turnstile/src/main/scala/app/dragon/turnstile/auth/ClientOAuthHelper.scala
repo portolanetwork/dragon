@@ -18,7 +18,7 @@
 
 package app.dragon.turnstile.auth
 
-import io.circe*
+import io.circe.Json
 import io.circe.generic.auto.*
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.http.scaladsl.Http
