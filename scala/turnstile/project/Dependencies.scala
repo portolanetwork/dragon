@@ -35,7 +35,7 @@ object Dependencies {
   val jwtScalaVersion = "10.0.1"
   val auth0JwksRsaVersion = "0.22.1"
   val protobufJavaUtilVersion = "3.25.6"
-  val mcpSdkVersion = "0.14.1"
+  val mcpSdkVersion = "0.16.0"
   val slickVersion = "3.5.2"
   val slickPgVersion = "0.22.2"
   val postgresqlVersion = "42.7.4"
