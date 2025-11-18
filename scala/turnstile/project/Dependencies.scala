@@ -69,6 +69,7 @@ object Dependencies {
     "org.apache.pekko" %% "pekko-cluster-sharding-typed" % pekkoVersion,
     "org.apache.pekko" %% "pekko-http" % pekkoHttpVersion,
     "org.apache.pekko" %% "pekko-grpc-runtime" % pekkoGrpcVersion,
+    "org.apache.pekko" %% "pekko-http-cors" % pekkoHttpVersion,
     "org.apache.pekko" %% "pekko-pki" % pekkoVersion,
     "org.apache.pekko" %% "pekko-serialization-jackson" % pekkoVersion,
     "org.apache.pekko" %% "pekko-http-spray-json" % pekkoHttpVersion,
