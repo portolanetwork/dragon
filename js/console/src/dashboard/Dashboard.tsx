@@ -33,6 +33,7 @@ import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import SignpostIcon from '@mui/icons-material/Signpost';
 import ChatIcon from '@mui/icons-material/Chat';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
+import StorageIcon from '@mui/icons-material/Storage';
 
 
 
@@ -44,6 +45,7 @@ import {
 } from './theme/customizations';
 import AllExportsGrid from "./components/AllExportsGrid";
 import AuthClientGrid from "./components/AuthClientGrid";
+import McpServersGrid from "./components/McpServersGrid";
 import SpyderProxy from "../spyder_proxy/SpyderProxy";
 import {useEffect} from "react";
 import {useAuthState} from "react-firebase-hooks/auth";
@@ -124,6 +126,7 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
             //{ text: 'Exports', isSelected:selectedMenuItem.at(0) == 'Exports' , icon: <PeopleRoundedIcon />, onClick: () => onMenuItemClick(['Exports']) },
             //{ text: 'File Manager', isSelected:selectedMenuItem.at(0) == 'File Manager', icon: <SignpostIcon />, onClick: () => onMenuItemClick(['File Manager']) },
 
+            { text: 'MCP Servers', isSelected:selectedMenuItem.at(0) == 'MCP Servers', icon: <StorageIcon />, onClick: () => onMenuItemClick(['MCP Servers']) },
             { text: 'New Chat', isSelected:selectedMenuItem.at(0) == 'New Chat' ,icon: <ChatIcon />, onClick: () => onMenuItemClick(['New Chat']) },
             /*
             { text: 'Chats', isDisabled: true, isSelected:false, icon: <SignpostIcon />, onClick: () => onMenuItemClick(['Chat']),
@@ -260,6 +263,7 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
                     {selectedMenuItem.at(0) === 'Tunnels' && <AllTunnelsGrid />}
                     {selectedMenuItem.at(0) === 'Exports' && <AllExportsGrid />}
                     {selectedMenuItem.at(0) === 'File Manager' && <FileFinder />}
+                    {selectedMenuItem.at(0) === 'MCP Servers' && <McpServersGrid />}
                     {selectedMenuItem.at(0) === 'New Chat' && <NewChatWindow onCreateChat={handleCreateChat} />}
                     {selectedMenuItem.at(0) === 'Chat' && <ChatWindow
                         chatId={selectedMenuItem.at(1) ?? ''}

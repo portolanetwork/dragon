@@ -46,61 +46,40 @@ class DragonProxy {
 
     private async getAccessToken(auth: User): Promise<string> {
         if (auth && typeof auth.getIdToken === 'function') {
-            return new Promise((resolve, reject) => {
-                auth.getIdToken(false)
-                    .then((idToken) => {
-                        resolve(idToken);
-                    })
-                    .catch((error) => {
-                        reject(error);
-                    });
-            });
+            return await auth.getIdToken(false);
         } else {
             throw new Error("Invalid auth object. Expected a User instance.");
         }
     }
 
     public async listMcpServers(user: User): Promise<McpServerRow[]> {
-        let accessToken = await this.getAccessToken(user).then((accessToken) => {
-            return accessToken;
-        }).catch((error) => {
-            console.error("Error getting access token: ", error.message);
-            return "";
-        });
+        try {
+            const accessToken = await this.getAccessToken(user);
+            const metadata = { Authorization: `Bearer ${accessToken}` };
 
-        let metadata = {
-            Authorization: `Bearer ${accessToken}`
+            const unaryCall = await this.client.listMcpServers(
+                ListMcpServersRequest.create({ userId: user?.uid }),
+                { meta: metadata }
+            );
+
+            console.log("MCP Server list: ", unaryCall.response.mcpServer);
+            return unaryCall.response.mcpServer.map((server) => ({
+                uuid: server.uuid,
+                name: server.name,
+                url: server.url,
+                authType: server.authType,
+                hasStaticToken: server.hasStaticToken,
+                createdAt: server.createdAt
+                    ? new Date(Number(server.createdAt.seconds) * 1000).toISOString()
+                    : undefined,
+                updatedAt: server.updatedAt
+                    ? new Date(Number(server.updatedAt.seconds) * 1000).toISOString()
+                    : undefined,
+            }));
+        } catch (error: any) {
+            console.error("Error listing MCP servers: ", error.message);
+            return [];
         }
-
-        const listRequest: ListMcpServersRequest = ListMcpServersRequest.create({
-            userId: user?.uid,
-        });
-
-        console.log("Listing MCP servers with request: ", listRequest);
-
-        return await this.client.listMcpServers(listRequest, { meta: metadata })
-            .then((unaryCall) => {
-                const mcpServerList = unaryCall.response.mcpServer;
-                console.log("MCP Server list: ", mcpServerList);
-
-                return mcpServerList.map((server) => ({
-                    uuid: server.uuid,
-                    name: server.name,
-                    url: server.url,
-                    authType: server.authType,
-                    hasStaticToken: server.hasStaticToken,
-                    createdAt: server.createdAt
-                        ? new Date(Number(server.createdAt.seconds) * 1000).toISOString()
-                        : undefined,
-                    updatedAt: server.updatedAt
-                        ? new Date(Number(server.updatedAt.seconds) * 1000).toISOString()
-                        : undefined,
-                }));
-            })
-            .catch((error) => {
-                console.error("Error listing MCP servers: ", error.message);
-                return [];
-            });
     }
 
     public async createMcpServer(
@@ -110,163 +89,110 @@ class DragonProxy {
         authType: AuthType,
         staticToken?: string
     ): Promise<McpServerRow> {
-        let accessToken = await this.getAccessToken(user).then((accessToken) => {
-            return accessToken;
-        }).catch((error) => {
-            console.error("Error getting access token: ", error.message);
-            return "";
-        });
+        try {
+            const accessToken = await this.getAccessToken(user);
+            const metadata = { Authorization: `Bearer ${accessToken}` };
 
-        let metadata = {
-            Authorization: `Bearer ${accessToken}`
+            const unaryCall = await this.client.createMcpServer(
+                CreateMcpServerRequest.create({
+                    name,
+                    url,
+                    authType,
+                    staticToken: staticToken || "",
+                }),
+                { meta: metadata }
+            );
+
+            const server = unaryCall.response;
+            console.log("MCP server created successfully: ", server);
+
+            return {
+                uuid: server.uuid,
+                name: server.name,
+                url: server.url,
+                authType: server.authType,
+                hasStaticToken: server.hasStaticToken,
+                createdAt: server.createdAt
+                    ? new Date(Number(server.createdAt.seconds) * 1000).toISOString()
+                    : undefined,
+                updatedAt: server.updatedAt
+                    ? new Date(Number(server.updatedAt.seconds) * 1000).toISOString()
+                    : undefined,
+            };
+        } catch (error: any) {
+            console.error("Error creating MCP server: ", error.message);
+            throw error;
         }
-
-        const createRequest: CreateMcpServerRequest = CreateMcpServerRequest.create({
-            name: name,
-            url: url,
-            authType: authType,
-            staticToken: staticToken || "",
-        });
-
-        console.log("Creating MCP server with request: ", createRequest);
-
-        return await this.client.createMcpServer(createRequest, { meta: metadata })
-            .then((unaryCall) => {
-                const server = unaryCall.response;
-                console.log("MCP server created successfully: ", server);
-
-                return {
-                    uuid: server.uuid,
-                    name: server.name,
-                    url: server.url,
-                    authType: server.authType,
-                    hasStaticToken: server.hasStaticToken,
-                    createdAt: server.createdAt
-                        ? new Date(Number(server.createdAt.seconds) * 1000).toISOString()
-                        : undefined,
-                    updatedAt: server.updatedAt
-                        ? new Date(Number(server.updatedAt.seconds) * 1000).toISOString()
-                        : undefined,
-                };
-            })
-            .catch((error) => {
-                console.error("Error creating MCP server: ", error.message);
-                return Promise.reject(error);
-            });
     }
 
     public async deleteMcpServer(user: User, uuid: string): Promise<void> {
-        let accessToken = await this.getAccessToken(user).then((accessToken) => {
-            return accessToken;
-        }).catch((error) => {
-            console.error("Error getting access token: ", error.message);
-            return "";
-        });
+        try {
+            const accessToken = await this.getAccessToken(user);
+            const metadata = { Authorization: `Bearer ${accessToken}` };
 
-        let metadata = {
-            Authorization: `Bearer ${accessToken}`
+            await this.client.deleteMcpServer(
+                DeleteMcpServerRequest.create({ uuid }),
+                { meta: metadata }
+            );
+
+            console.log("MCP server deleted successfully");
+        } catch (error: any) {
+            console.error("Error deleting MCP server: ", error.message);
+            throw error;
         }
-
-        const deleteRequest: DeleteMcpServerRequest = DeleteMcpServerRequest.create({
-            uuid: uuid,
-        });
-
-        console.log("Deleting MCP server with request: ", deleteRequest);
-
-        return await this.client.deleteMcpServer(deleteRequest, { meta: metadata })
-            .then(() => {
-                console.log("MCP server deleted successfully");
-            })
-            .catch((error) => {
-                console.error("Error deleting MCP server: ", error.message);
-            });
     }
 
     public async getLoginStatusForMcpServer(user: User, uuid: string): Promise<McpServerLoginStatus> {
-        let accessToken = await this.getAccessToken(user).then((accessToken) => {
-            return accessToken;
-        }).catch((error) => {
-            console.error("Error getting access token: ", error.message);
-            return "";
-        });
+        try {
+            const accessToken = await this.getAccessToken(user);
+            const metadata = { Authorization: `Bearer ${accessToken}` };
 
-        let metadata = {
-            Authorization: `Bearer ${accessToken}`
+            const unaryCall = await this.client.getLoginStatusForMcpServer(
+                GetLoginStatusForMcpServerRequest.create({ uuid }),
+                { meta: metadata }
+            );
+
+            console.log("MCP server login status: ", unaryCall.response);
+            return unaryCall.response;
+        } catch (error: any) {
+            console.error("Error getting login status for MCP server: ", error.message);
+            throw error;
         }
-
-        const getStatusRequest: GetLoginStatusForMcpServerRequest = GetLoginStatusForMcpServerRequest.create({
-            uuid: uuid,
-        });
-
-        console.log("Getting login status for MCP server: ", uuid);
-
-        return await this.client.getLoginStatusForMcpServer(getStatusRequest, { meta: metadata })
-            .then((unaryCall) => {
-                const status = unaryCall.response;
-                console.log("MCP server login status: ", status);
-                return status;
-            })
-            .catch((error) => {
-                console.error("Error getting login status for MCP server: ", error.message);
-                return Promise.reject(error);
-            });
     }
 
     public async loginMcpServer(user: User, uuid: string): Promise<string> {
-        let accessToken = await this.getAccessToken(user).then((accessToken) => {
-            return accessToken;
-        }).catch((error) => {
-            console.error("Error getting access token: ", error.message);
-            return "";
-        });
+        try {
+            const accessToken = await this.getAccessToken(user);
+            const metadata = { Authorization: `Bearer ${accessToken}` };
 
-        let metadata = {
-            Authorization: `Bearer ${accessToken}`
+            const unaryCall = await this.client.loginMcpServer(
+                LoginMcpServerRequest.create({ uuid }),
+                { meta: metadata }
+            );
+
+            console.log("MCP server login URL: ", unaryCall.response.loginUrl);
+            return unaryCall.response.loginUrl;
+        } catch (error: any) {
+            console.error("Error logging in to MCP server: ", error.message);
+            throw error;
         }
-
-        const loginRequest: LoginMcpServerRequest = LoginMcpServerRequest.create({
-            uuid: uuid,
-        });
-
-        console.log("Logging in to MCP server: ", uuid);
-
-        return await this.client.loginMcpServer(loginRequest, { meta: metadata })
-            .then((unaryCall) => {
-                const loginUrl = unaryCall.response.loginUrl;
-                console.log("MCP server login URL: ", loginUrl);
-                return loginUrl;
-            })
-            .catch((error) => {
-                console.error("Error logging in to MCP server: ", error.message);
-                return Promise.reject(error);
-            });
     }
 
     public async logoutMcpServer(user: User, uuid: string): Promise<void> {
-        let accessToken = await this.getAccessToken(user).then((accessToken) => {
-            return accessToken;
-        }).catch((error) => {
-            console.error("Error getting access token: ", error.message);
-            return "";
-        });
+        try {
+            const accessToken = await this.getAccessToken(user);
+            const metadata = { Authorization: `Bearer ${accessToken}` };
 
-        let metadata = {
-            Authorization: `Bearer ${accessToken}`
+            await this.client.logoutMcpServer(
+                LogoutMcpServerRequest.create({ uuid }),
+                { meta: metadata }
+            );
+
+            console.log("MCP server logout successful");
+        } catch (error: any) {
+            console.error("Error logging out from MCP server: ", error.message);
+            throw error;
         }
-
-        const logoutRequest: LogoutMcpServerRequest = LogoutMcpServerRequest.create({
-            uuid: uuid,
-        });
-
-        console.log("Logging out from MCP server: ", uuid);
-
-        return await this.client.logoutMcpServer(logoutRequest, { meta: metadata })
-            .then(() => {
-                console.log("MCP server logout successful");
-            })
-            .catch((error) => {
-                console.error("Error logging out from MCP server: ", error.message);
-            });
     }
 }
 
