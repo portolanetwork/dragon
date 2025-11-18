@@ -65,6 +65,7 @@ class MgmtServiceImpl(authEnabled: Boolean)(
    */
   private def rowToMcpServer(row: McpServerRow): McpServer = {
     val authType = stringToAuthType(row.authType)
+    val transportType = stringToTransportType(row.transportType)
 
     // Build OAuth config if auth type is DISCOVER and OAuth fields are present
     val oauthConfig = if (authType == AuthType.AUTH_TYPE_DISCOVER) {
@@ -83,6 +84,7 @@ class MgmtServiceImpl(authEnabled: Boolean)(
       name = row.name,
       url = row.url,
       authType = authType,
+      transportType = transportType,
       hasStaticToken = row.staticToken.isDefined,
       oauthConfig = oauthConfig,
       createdAt = Some(com.google.protobuf.timestamp.Timestamp(
@@ -368,5 +370,20 @@ class MgmtServiceImpl(authEnabled: Boolean)(
     case AuthType.AUTH_TYPE_UNSPECIFIED | AuthType.Unrecognized(_) => "none"
   }
 
+  /**
+   * Converts a database transportType string to proto TransportType enum.
+   */
+  private def stringToTransportType(transportType: String): TransportType = transportType.toLowerCase match {
+    case "streaming_http" => TransportType.TRANSPORT_TYPE_STREAMING_HTTP
+    case _ => TransportType.TRANSPORT_TYPE_UNSPECIFIED
+  }
+
+  /**
+   * Converts a proto TransportType enum to database transportType string.
+   */
+  private def transportTypeToString(transportType: TransportType): String = transportType match {
+    case TransportType.TRANSPORT_TYPE_STREAMING_HTTP => "streaming_http"
+    case TransportType.TRANSPORT_TYPE_UNSPECIFIED | TransportType.Unrecognized(_) => "streaming_http"
+  }
 
 }

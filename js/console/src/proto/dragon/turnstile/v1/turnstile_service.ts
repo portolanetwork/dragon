@@ -20,19 +20,19 @@ import { Timestamp } from "../../../google/protobuf/timestamp";
  */
 export interface AddMcpServerRequest {
     /**
-     * @generated from protobuf field: string name = 1;
+     * @generated from protobuf field: string name = 10;
      */
     name: string;
     /**
-     * @generated from protobuf field: string url = 2;
+     * @generated from protobuf field: string url = 20;
      */
     url: string;
     /**
-     * @generated from protobuf field: dragon.turnstile.v1.AuthType auth_type = 3;
+     * @generated from protobuf field: dragon.turnstile.v1.AuthType auth_type = 30;
      */
     authType: AuthType; // Authentication type
     /**
-     * @generated from protobuf field: string static_token = 4;
+     * @generated from protobuf field: string static_token = 40;
      */
     staticToken: string; // Static authentication token (optional, used with AUTH_TYPE_STATIC_HEADER)
 }
@@ -41,17 +41,17 @@ export interface AddMcpServerRequest {
  */
 export interface ListMcpServersRequest {
     /**
-     * @generated from protobuf field: string user_id = 1;
+     * @generated from protobuf field: string user_id = 10;
      */
-    userId: string; // string page_size = 2;
-    // string page_token = 3;
+    userId: string; // string page_size = 20;
+    // string page_token = 30;
 }
 /**
  * @generated from protobuf message dragon.turnstile.v1.RemoveMcpServerRequest
  */
 export interface RemoveMcpServerRequest {
     /**
-     * @generated from protobuf field: string uuid = 1;
+     * @generated from protobuf field: string uuid = 10;
      */
     uuid: string;
 }
@@ -60,7 +60,7 @@ export interface RemoveMcpServerRequest {
  */
 export interface McpServerList {
     /**
-     * @generated from protobuf field: repeated dragon.turnstile.v1.McpServer mcp_server = 1;
+     * @generated from protobuf field: repeated dragon.turnstile.v1.McpServer mcp_server = 10;
      */
     mcpServer: McpServer[];
 }
@@ -71,19 +71,19 @@ export interface McpServerList {
  */
 export interface OAuthConfig {
     /**
-     * @generated from protobuf field: string client_id = 1;
+     * @generated from protobuf field: string client_id = 10;
      */
     clientId: string; // OAuth client ID (safe to expose)
     /**
-     * @generated from protobuf field: string token_endpoint = 2;
+     * @generated from protobuf field: string token_endpoint = 20;
      */
     tokenEndpoint: string; // OAuth token endpoint URL
     /**
-     * @generated from protobuf field: bool has_client_secret = 3;
+     * @generated from protobuf field: bool has_client_secret = 30;
      */
     hasClientSecret: boolean; // Indicates if client secret is configured
     /**
-     * @generated from protobuf field: bool has_refresh_token = 4;
+     * @generated from protobuf field: bool has_refresh_token = 40;
      */
     hasRefreshToken: boolean; // Indicates if refresh token is stored
 }
@@ -92,35 +92,39 @@ export interface OAuthConfig {
  */
 export interface McpServer {
     /**
-     * @generated from protobuf field: string uuid = 1;
+     * @generated from protobuf field: string uuid = 10;
      */
     uuid: string;
     /**
-     * @generated from protobuf field: string name = 2;
+     * @generated from protobuf field: string name = 20;
      */
     name: string;
     /**
-     * @generated from protobuf field: string url = 3;
+     * @generated from protobuf field: string url = 30;
      */
     url: string;
     /**
-     * @generated from protobuf field: dragon.turnstile.v1.AuthType auth_type = 4;
+     * @generated from protobuf field: dragon.turnstile.v1.AuthType auth_type = 40;
      */
     authType: AuthType; // Authentication type
     /**
-     * @generated from protobuf field: bool has_static_token = 5;
+     * @generated from protobuf field: dragon.turnstile.v1.TransportType transport_type = 50;
+     */
+    transportType: TransportType; // Transport type
+    /**
+     * @generated from protobuf field: bool has_static_token = 60;
      */
     hasStaticToken: boolean; // Indicates if a static token is configured (token value not returned for security)
     /**
-     * @generated from protobuf field: dragon.turnstile.v1.OAuthConfig oauth_config = 6;
+     * @generated from protobuf field: dragon.turnstile.v1.OAuthConfig oauth_config = 70;
      */
     oauthConfig?: OAuthConfig; // OAuth configuration (only present for AUTH_TYPE_DISCOVER)
     /**
-     * @generated from protobuf field: google.protobuf.Timestamp created_at = 7;
+     * @generated from protobuf field: google.protobuf.Timestamp created_at = 80;
      */
     createdAt?: Timestamp; // Creation timestamp
     /**
-     * @generated from protobuf field: google.protobuf.Timestamp updated_at = 8;
+     * @generated from protobuf field: google.protobuf.Timestamp updated_at = 90;
      */
     updatedAt?: Timestamp; // Last update timestamp
 }
@@ -129,7 +133,7 @@ export interface McpServer {
  */
 export interface GetLoginStatusForMcpServerRequest {
     /**
-     * @generated from protobuf field: string uuid = 1;
+     * @generated from protobuf field: string uuid = 10;
      */
     uuid: string; // UUID of the MCP server to check login status for
 }
@@ -138,15 +142,15 @@ export interface GetLoginStatusForMcpServerRequest {
  */
 export interface McpServerLoginStatus {
     /**
-     * @generated from protobuf field: string uuid = 1;
+     * @generated from protobuf field: string uuid = 10;
      */
     uuid: string; // UUID of the MCP server
     /**
-     * @generated from protobuf field: dragon.turnstile.v1.LoginStatus status = 2;
+     * @generated from protobuf field: dragon.turnstile.v1.LoginStatus status = 20;
      */
     status: LoginStatus; // Current login status
     /**
-     * @generated from protobuf field: dragon.turnstile.v1.AuthType auth_type = 3;
+     * @generated from protobuf field: dragon.turnstile.v1.AuthType auth_type = 30;
      */
     authType: AuthType; // Authentication type of the server
 }
@@ -155,7 +159,7 @@ export interface McpServerLoginStatus {
  */
 export interface LoginMcpServerRequest {
     /**
-     * @generated from protobuf field: string uuid = 1;
+     * @generated from protobuf field: string uuid = 10;
      */
     uuid: string;
 }
@@ -164,7 +168,7 @@ export interface LoginMcpServerRequest {
  */
 export interface McpServerLoginUrl {
     /**
-     * @generated from protobuf field: string login_url = 1;
+     * @generated from protobuf field: string login_url = 10;
      */
     loginUrl: string;
 }
@@ -173,7 +177,7 @@ export interface McpServerLoginUrl {
  */
 export interface LogoutMcpServerRequest {
     /**
-     * @generated from protobuf field: string uuid = 1;
+     * @generated from protobuf field: string uuid = 10;
      */
     uuid: string;
 }
@@ -241,14 +245,27 @@ export enum LoginStatus {
      */
     NOT_APPLICABLE = 4
 }
+/**
+ * @generated from protobuf enum dragon.turnstile.v1.TransportType
+ */
+export enum TransportType {
+    /**
+     * @generated from protobuf enum value: TRANSPORT_TYPE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from protobuf enum value: TRANSPORT_TYPE_STREAMING_HTTP = 1;
+     */
+    STREAMING_HTTP = 1
+}
 // @generated message type with reflection information, may provide speed optimized methods
 class AddMcpServerRequest$Type extends MessageType<AddMcpServerRequest> {
     constructor() {
         super("dragon.turnstile.v1.AddMcpServerRequest", [
-            { no: 1, name: "name", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 2, name: "url", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 3, name: "auth_type", kind: "enum", T: () => ["dragon.turnstile.v1.AuthType", AuthType, "AUTH_TYPE_"] },
-            { no: 4, name: "static_token", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+            { no: 10, name: "name", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 20, name: "url", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 30, name: "auth_type", kind: "enum", T: () => ["dragon.turnstile.v1.AuthType", AuthType, "AUTH_TYPE_"] },
+            { no: 40, name: "static_token", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
         ]);
     }
     create(value?: PartialMessage<AddMcpServerRequest>): AddMcpServerRequest {
@@ -266,16 +283,16 @@ class AddMcpServerRequest$Type extends MessageType<AddMcpServerRequest> {
         while (reader.pos < end) {
             let [fieldNo, wireType] = reader.tag();
             switch (fieldNo) {
-                case /* string name */ 1:
+                case /* string name */ 10:
                     message.name = reader.string();
                     break;
-                case /* string url */ 2:
+                case /* string url */ 20:
                     message.url = reader.string();
                     break;
-                case /* dragon.turnstile.v1.AuthType auth_type */ 3:
+                case /* dragon.turnstile.v1.AuthType auth_type */ 30:
                     message.authType = reader.int32();
                     break;
-                case /* string static_token */ 4:
+                case /* string static_token */ 40:
                     message.staticToken = reader.string();
                     break;
                 default:
@@ -290,18 +307,18 @@ class AddMcpServerRequest$Type extends MessageType<AddMcpServerRequest> {
         return message;
     }
     internalBinaryWrite(message: AddMcpServerRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
-        /* string name = 1; */
+        /* string name = 10; */
         if (message.name !== "")
-            writer.tag(1, WireType.LengthDelimited).string(message.name);
-        /* string url = 2; */
+            writer.tag(10, WireType.LengthDelimited).string(message.name);
+        /* string url = 20; */
         if (message.url !== "")
-            writer.tag(2, WireType.LengthDelimited).string(message.url);
-        /* dragon.turnstile.v1.AuthType auth_type = 3; */
+            writer.tag(20, WireType.LengthDelimited).string(message.url);
+        /* dragon.turnstile.v1.AuthType auth_type = 30; */
         if (message.authType !== 0)
-            writer.tag(3, WireType.Varint).int32(message.authType);
-        /* string static_token = 4; */
+            writer.tag(30, WireType.Varint).int32(message.authType);
+        /* string static_token = 40; */
         if (message.staticToken !== "")
-            writer.tag(4, WireType.LengthDelimited).string(message.staticToken);
+            writer.tag(40, WireType.LengthDelimited).string(message.staticToken);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -316,7 +333,7 @@ export const AddMcpServerRequest = new AddMcpServerRequest$Type();
 class ListMcpServersRequest$Type extends MessageType<ListMcpServersRequest> {
     constructor() {
         super("dragon.turnstile.v1.ListMcpServersRequest", [
-            { no: 1, name: "user_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+            { no: 10, name: "user_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
         ]);
     }
     create(value?: PartialMessage<ListMcpServersRequest>): ListMcpServersRequest {
@@ -331,7 +348,7 @@ class ListMcpServersRequest$Type extends MessageType<ListMcpServersRequest> {
         while (reader.pos < end) {
             let [fieldNo, wireType] = reader.tag();
             switch (fieldNo) {
-                case /* string user_id */ 1:
+                case /* string user_id */ 10:
                     message.userId = reader.string();
                     break;
                 default:
@@ -346,9 +363,9 @@ class ListMcpServersRequest$Type extends MessageType<ListMcpServersRequest> {
         return message;
     }
     internalBinaryWrite(message: ListMcpServersRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
-        /* string user_id = 1; */
+        /* string user_id = 10; */
         if (message.userId !== "")
-            writer.tag(1, WireType.LengthDelimited).string(message.userId);
+            writer.tag(10, WireType.LengthDelimited).string(message.userId);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -363,7 +380,7 @@ export const ListMcpServersRequest = new ListMcpServersRequest$Type();
 class RemoveMcpServerRequest$Type extends MessageType<RemoveMcpServerRequest> {
     constructor() {
         super("dragon.turnstile.v1.RemoveMcpServerRequest", [
-            { no: 1, name: "uuid", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+            { no: 10, name: "uuid", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
         ]);
     }
     create(value?: PartialMessage<RemoveMcpServerRequest>): RemoveMcpServerRequest {
@@ -378,7 +395,7 @@ class RemoveMcpServerRequest$Type extends MessageType<RemoveMcpServerRequest> {
         while (reader.pos < end) {
             let [fieldNo, wireType] = reader.tag();
             switch (fieldNo) {
-                case /* string uuid */ 1:
+                case /* string uuid */ 10:
                     message.uuid = reader.string();
                     break;
                 default:
@@ -393,9 +410,9 @@ class RemoveMcpServerRequest$Type extends MessageType<RemoveMcpServerRequest> {
         return message;
     }
     internalBinaryWrite(message: RemoveMcpServerRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
-        /* string uuid = 1; */
+        /* string uuid = 10; */
         if (message.uuid !== "")
-            writer.tag(1, WireType.LengthDelimited).string(message.uuid);
+            writer.tag(10, WireType.LengthDelimited).string(message.uuid);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -410,7 +427,7 @@ export const RemoveMcpServerRequest = new RemoveMcpServerRequest$Type();
 class McpServerList$Type extends MessageType<McpServerList> {
     constructor() {
         super("dragon.turnstile.v1.McpServerList", [
-            { no: 1, name: "mcp_server", kind: "message", repeat: 1 /*RepeatType.PACKED*/, T: () => McpServer }
+            { no: 10, name: "mcp_server", kind: "message", repeat: 1 /*RepeatType.PACKED*/, T: () => McpServer }
         ]);
     }
     create(value?: PartialMessage<McpServerList>): McpServerList {
@@ -425,7 +442,7 @@ class McpServerList$Type extends MessageType<McpServerList> {
         while (reader.pos < end) {
             let [fieldNo, wireType] = reader.tag();
             switch (fieldNo) {
-                case /* repeated dragon.turnstile.v1.McpServer mcp_server */ 1:
+                case /* repeated dragon.turnstile.v1.McpServer mcp_server */ 10:
                     message.mcpServer.push(McpServer.internalBinaryRead(reader, reader.uint32(), options));
                     break;
                 default:
@@ -440,9 +457,9 @@ class McpServerList$Type extends MessageType<McpServerList> {
         return message;
     }
     internalBinaryWrite(message: McpServerList, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
-        /* repeated dragon.turnstile.v1.McpServer mcp_server = 1; */
+        /* repeated dragon.turnstile.v1.McpServer mcp_server = 10; */
         for (let i = 0; i < message.mcpServer.length; i++)
-            McpServer.internalBinaryWrite(message.mcpServer[i], writer.tag(1, WireType.LengthDelimited).fork(), options).join();
+            McpServer.internalBinaryWrite(message.mcpServer[i], writer.tag(10, WireType.LengthDelimited).fork(), options).join();
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -457,10 +474,10 @@ export const McpServerList = new McpServerList$Type();
 class OAuthConfig$Type extends MessageType<OAuthConfig> {
     constructor() {
         super("dragon.turnstile.v1.OAuthConfig", [
-            { no: 1, name: "client_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 2, name: "token_endpoint", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 3, name: "has_client_secret", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
-            { no: 4, name: "has_refresh_token", kind: "scalar", T: 8 /*ScalarType.BOOL*/ }
+            { no: 10, name: "client_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 20, name: "token_endpoint", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 30, name: "has_client_secret", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
+            { no: 40, name: "has_refresh_token", kind: "scalar", T: 8 /*ScalarType.BOOL*/ }
         ]);
     }
     create(value?: PartialMessage<OAuthConfig>): OAuthConfig {
@@ -478,16 +495,16 @@ class OAuthConfig$Type extends MessageType<OAuthConfig> {
         while (reader.pos < end) {
             let [fieldNo, wireType] = reader.tag();
             switch (fieldNo) {
-                case /* string client_id */ 1:
+                case /* string client_id */ 10:
                     message.clientId = reader.string();
                     break;
-                case /* string token_endpoint */ 2:
+                case /* string token_endpoint */ 20:
                     message.tokenEndpoint = reader.string();
                     break;
-                case /* bool has_client_secret */ 3:
+                case /* bool has_client_secret */ 30:
                     message.hasClientSecret = reader.bool();
                     break;
-                case /* bool has_refresh_token */ 4:
+                case /* bool has_refresh_token */ 40:
                     message.hasRefreshToken = reader.bool();
                     break;
                 default:
@@ -502,18 +519,18 @@ class OAuthConfig$Type extends MessageType<OAuthConfig> {
         return message;
     }
     internalBinaryWrite(message: OAuthConfig, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
-        /* string client_id = 1; */
+        /* string client_id = 10; */
         if (message.clientId !== "")
-            writer.tag(1, WireType.LengthDelimited).string(message.clientId);
-        /* string token_endpoint = 2; */
+            writer.tag(10, WireType.LengthDelimited).string(message.clientId);
+        /* string token_endpoint = 20; */
         if (message.tokenEndpoint !== "")
-            writer.tag(2, WireType.LengthDelimited).string(message.tokenEndpoint);
-        /* bool has_client_secret = 3; */
+            writer.tag(20, WireType.LengthDelimited).string(message.tokenEndpoint);
+        /* bool has_client_secret = 30; */
         if (message.hasClientSecret !== false)
-            writer.tag(3, WireType.Varint).bool(message.hasClientSecret);
-        /* bool has_refresh_token = 4; */
+            writer.tag(30, WireType.Varint).bool(message.hasClientSecret);
+        /* bool has_refresh_token = 40; */
         if (message.hasRefreshToken !== false)
-            writer.tag(4, WireType.Varint).bool(message.hasRefreshToken);
+            writer.tag(40, WireType.Varint).bool(message.hasRefreshToken);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -528,14 +545,15 @@ export const OAuthConfig = new OAuthConfig$Type();
 class McpServer$Type extends MessageType<McpServer> {
     constructor() {
         super("dragon.turnstile.v1.McpServer", [
-            { no: 1, name: "uuid", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 2, name: "name", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 3, name: "url", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 4, name: "auth_type", kind: "enum", T: () => ["dragon.turnstile.v1.AuthType", AuthType, "AUTH_TYPE_"] },
-            { no: 5, name: "has_static_token", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
-            { no: 6, name: "oauth_config", kind: "message", T: () => OAuthConfig },
-            { no: 7, name: "created_at", kind: "message", T: () => Timestamp },
-            { no: 8, name: "updated_at", kind: "message", T: () => Timestamp }
+            { no: 10, name: "uuid", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 20, name: "name", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 30, name: "url", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 40, name: "auth_type", kind: "enum", T: () => ["dragon.turnstile.v1.AuthType", AuthType, "AUTH_TYPE_"] },
+            { no: 50, name: "transport_type", kind: "enum", T: () => ["dragon.turnstile.v1.TransportType", TransportType, "TRANSPORT_TYPE_"] },
+            { no: 60, name: "has_static_token", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
+            { no: 70, name: "oauth_config", kind: "message", T: () => OAuthConfig },
+            { no: 80, name: "created_at", kind: "message", T: () => Timestamp },
+            { no: 90, name: "updated_at", kind: "message", T: () => Timestamp }
         ]);
     }
     create(value?: PartialMessage<McpServer>): McpServer {
@@ -544,6 +562,7 @@ class McpServer$Type extends MessageType<McpServer> {
         message.name = "";
         message.url = "";
         message.authType = 0;
+        message.transportType = 0;
         message.hasStaticToken = false;
         if (value !== undefined)
             reflectionMergePartial<McpServer>(this, message, value);
@@ -554,28 +573,31 @@ class McpServer$Type extends MessageType<McpServer> {
         while (reader.pos < end) {
             let [fieldNo, wireType] = reader.tag();
             switch (fieldNo) {
-                case /* string uuid */ 1:
+                case /* string uuid */ 10:
                     message.uuid = reader.string();
                     break;
-                case /* string name */ 2:
+                case /* string name */ 20:
                     message.name = reader.string();
                     break;
-                case /* string url */ 3:
+                case /* string url */ 30:
                     message.url = reader.string();
                     break;
-                case /* dragon.turnstile.v1.AuthType auth_type */ 4:
+                case /* dragon.turnstile.v1.AuthType auth_type */ 40:
                     message.authType = reader.int32();
                     break;
-                case /* bool has_static_token */ 5:
+                case /* dragon.turnstile.v1.TransportType transport_type */ 50:
+                    message.transportType = reader.int32();
+                    break;
+                case /* bool has_static_token */ 60:
                     message.hasStaticToken = reader.bool();
                     break;
-                case /* dragon.turnstile.v1.OAuthConfig oauth_config */ 6:
+                case /* dragon.turnstile.v1.OAuthConfig oauth_config */ 70:
                     message.oauthConfig = OAuthConfig.internalBinaryRead(reader, reader.uint32(), options, message.oauthConfig);
                     break;
-                case /* google.protobuf.Timestamp created_at */ 7:
+                case /* google.protobuf.Timestamp created_at */ 80:
                     message.createdAt = Timestamp.internalBinaryRead(reader, reader.uint32(), options, message.createdAt);
                     break;
-                case /* google.protobuf.Timestamp updated_at */ 8:
+                case /* google.protobuf.Timestamp updated_at */ 90:
                     message.updatedAt = Timestamp.internalBinaryRead(reader, reader.uint32(), options, message.updatedAt);
                     break;
                 default:
@@ -590,30 +612,33 @@ class McpServer$Type extends MessageType<McpServer> {
         return message;
     }
     internalBinaryWrite(message: McpServer, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
-        /* string uuid = 1; */
+        /* string uuid = 10; */
         if (message.uuid !== "")
-            writer.tag(1, WireType.LengthDelimited).string(message.uuid);
-        /* string name = 2; */
+            writer.tag(10, WireType.LengthDelimited).string(message.uuid);
+        /* string name = 20; */
         if (message.name !== "")
-            writer.tag(2, WireType.LengthDelimited).string(message.name);
-        /* string url = 3; */
+            writer.tag(20, WireType.LengthDelimited).string(message.name);
+        /* string url = 30; */
         if (message.url !== "")
-            writer.tag(3, WireType.LengthDelimited).string(message.url);
-        /* dragon.turnstile.v1.AuthType auth_type = 4; */
+            writer.tag(30, WireType.LengthDelimited).string(message.url);
+        /* dragon.turnstile.v1.AuthType auth_type = 40; */
         if (message.authType !== 0)
-            writer.tag(4, WireType.Varint).int32(message.authType);
-        /* bool has_static_token = 5; */
+            writer.tag(40, WireType.Varint).int32(message.authType);
+        /* dragon.turnstile.v1.TransportType transport_type = 50; */
+        if (message.transportType !== 0)
+            writer.tag(50, WireType.Varint).int32(message.transportType);
+        /* bool has_static_token = 60; */
         if (message.hasStaticToken !== false)
-            writer.tag(5, WireType.Varint).bool(message.hasStaticToken);
-        /* dragon.turnstile.v1.OAuthConfig oauth_config = 6; */
+            writer.tag(60, WireType.Varint).bool(message.hasStaticToken);
+        /* dragon.turnstile.v1.OAuthConfig oauth_config = 70; */
         if (message.oauthConfig)
-            OAuthConfig.internalBinaryWrite(message.oauthConfig, writer.tag(6, WireType.LengthDelimited).fork(), options).join();
-        /* google.protobuf.Timestamp created_at = 7; */
+            OAuthConfig.internalBinaryWrite(message.oauthConfig, writer.tag(70, WireType.LengthDelimited).fork(), options).join();
+        /* google.protobuf.Timestamp created_at = 80; */
         if (message.createdAt)
-            Timestamp.internalBinaryWrite(message.createdAt, writer.tag(7, WireType.LengthDelimited).fork(), options).join();
-        /* google.protobuf.Timestamp updated_at = 8; */
+            Timestamp.internalBinaryWrite(message.createdAt, writer.tag(80, WireType.LengthDelimited).fork(), options).join();
+        /* google.protobuf.Timestamp updated_at = 90; */
         if (message.updatedAt)
-            Timestamp.internalBinaryWrite(message.updatedAt, writer.tag(8, WireType.LengthDelimited).fork(), options).join();
+            Timestamp.internalBinaryWrite(message.updatedAt, writer.tag(90, WireType.LengthDelimited).fork(), options).join();
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -628,7 +653,7 @@ export const McpServer = new McpServer$Type();
 class GetLoginStatusForMcpServerRequest$Type extends MessageType<GetLoginStatusForMcpServerRequest> {
     constructor() {
         super("dragon.turnstile.v1.GetLoginStatusForMcpServerRequest", [
-            { no: 1, name: "uuid", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+            { no: 10, name: "uuid", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
         ]);
     }
     create(value?: PartialMessage<GetLoginStatusForMcpServerRequest>): GetLoginStatusForMcpServerRequest {
@@ -643,7 +668,7 @@ class GetLoginStatusForMcpServerRequest$Type extends MessageType<GetLoginStatusF
         while (reader.pos < end) {
             let [fieldNo, wireType] = reader.tag();
             switch (fieldNo) {
-                case /* string uuid */ 1:
+                case /* string uuid */ 10:
                     message.uuid = reader.string();
                     break;
                 default:
@@ -658,9 +683,9 @@ class GetLoginStatusForMcpServerRequest$Type extends MessageType<GetLoginStatusF
         return message;
     }
     internalBinaryWrite(message: GetLoginStatusForMcpServerRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
-        /* string uuid = 1; */
+        /* string uuid = 10; */
         if (message.uuid !== "")
-            writer.tag(1, WireType.LengthDelimited).string(message.uuid);
+            writer.tag(10, WireType.LengthDelimited).string(message.uuid);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -675,9 +700,9 @@ export const GetLoginStatusForMcpServerRequest = new GetLoginStatusForMcpServerR
 class McpServerLoginStatus$Type extends MessageType<McpServerLoginStatus> {
     constructor() {
         super("dragon.turnstile.v1.McpServerLoginStatus", [
-            { no: 1, name: "uuid", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 2, name: "status", kind: "enum", T: () => ["dragon.turnstile.v1.LoginStatus", LoginStatus, "LOGIN_STATUS_"] },
-            { no: 3, name: "auth_type", kind: "enum", T: () => ["dragon.turnstile.v1.AuthType", AuthType, "AUTH_TYPE_"] }
+            { no: 10, name: "uuid", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 20, name: "status", kind: "enum", T: () => ["dragon.turnstile.v1.LoginStatus", LoginStatus, "LOGIN_STATUS_"] },
+            { no: 30, name: "auth_type", kind: "enum", T: () => ["dragon.turnstile.v1.AuthType", AuthType, "AUTH_TYPE_"] }
         ]);
     }
     create(value?: PartialMessage<McpServerLoginStatus>): McpServerLoginStatus {
@@ -694,13 +719,13 @@ class McpServerLoginStatus$Type extends MessageType<McpServerLoginStatus> {
         while (reader.pos < end) {
             let [fieldNo, wireType] = reader.tag();
             switch (fieldNo) {
-                case /* string uuid */ 1:
+                case /* string uuid */ 10:
                     message.uuid = reader.string();
                     break;
-                case /* dragon.turnstile.v1.LoginStatus status */ 2:
+                case /* dragon.turnstile.v1.LoginStatus status */ 20:
                     message.status = reader.int32();
                     break;
-                case /* dragon.turnstile.v1.AuthType auth_type */ 3:
+                case /* dragon.turnstile.v1.AuthType auth_type */ 30:
                     message.authType = reader.int32();
                     break;
                 default:
@@ -715,15 +740,15 @@ class McpServerLoginStatus$Type extends MessageType<McpServerLoginStatus> {
         return message;
     }
     internalBinaryWrite(message: McpServerLoginStatus, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
-        /* string uuid = 1; */
+        /* string uuid = 10; */
         if (message.uuid !== "")
-            writer.tag(1, WireType.LengthDelimited).string(message.uuid);
-        /* dragon.turnstile.v1.LoginStatus status = 2; */
+            writer.tag(10, WireType.LengthDelimited).string(message.uuid);
+        /* dragon.turnstile.v1.LoginStatus status = 20; */
         if (message.status !== 0)
-            writer.tag(2, WireType.Varint).int32(message.status);
-        /* dragon.turnstile.v1.AuthType auth_type = 3; */
+            writer.tag(20, WireType.Varint).int32(message.status);
+        /* dragon.turnstile.v1.AuthType auth_type = 30; */
         if (message.authType !== 0)
-            writer.tag(3, WireType.Varint).int32(message.authType);
+            writer.tag(30, WireType.Varint).int32(message.authType);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -738,7 +763,7 @@ export const McpServerLoginStatus = new McpServerLoginStatus$Type();
 class LoginMcpServerRequest$Type extends MessageType<LoginMcpServerRequest> {
     constructor() {
         super("dragon.turnstile.v1.LoginMcpServerRequest", [
-            { no: 1, name: "uuid", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+            { no: 10, name: "uuid", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
         ]);
     }
     create(value?: PartialMessage<LoginMcpServerRequest>): LoginMcpServerRequest {
@@ -753,7 +778,7 @@ class LoginMcpServerRequest$Type extends MessageType<LoginMcpServerRequest> {
         while (reader.pos < end) {
             let [fieldNo, wireType] = reader.tag();
             switch (fieldNo) {
-                case /* string uuid */ 1:
+                case /* string uuid */ 10:
                     message.uuid = reader.string();
                     break;
                 default:
@@ -768,9 +793,9 @@ class LoginMcpServerRequest$Type extends MessageType<LoginMcpServerRequest> {
         return message;
     }
     internalBinaryWrite(message: LoginMcpServerRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
-        /* string uuid = 1; */
+        /* string uuid = 10; */
         if (message.uuid !== "")
-            writer.tag(1, WireType.LengthDelimited).string(message.uuid);
+            writer.tag(10, WireType.LengthDelimited).string(message.uuid);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -785,7 +810,7 @@ export const LoginMcpServerRequest = new LoginMcpServerRequest$Type();
 class McpServerLoginUrl$Type extends MessageType<McpServerLoginUrl> {
     constructor() {
         super("dragon.turnstile.v1.McpServerLoginUrl", [
-            { no: 1, name: "login_url", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+            { no: 10, name: "login_url", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
         ]);
     }
     create(value?: PartialMessage<McpServerLoginUrl>): McpServerLoginUrl {
@@ -800,7 +825,7 @@ class McpServerLoginUrl$Type extends MessageType<McpServerLoginUrl> {
         while (reader.pos < end) {
             let [fieldNo, wireType] = reader.tag();
             switch (fieldNo) {
-                case /* string login_url */ 1:
+                case /* string login_url */ 10:
                     message.loginUrl = reader.string();
                     break;
                 default:
@@ -815,9 +840,9 @@ class McpServerLoginUrl$Type extends MessageType<McpServerLoginUrl> {
         return message;
     }
     internalBinaryWrite(message: McpServerLoginUrl, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
-        /* string login_url = 1; */
+        /* string login_url = 10; */
         if (message.loginUrl !== "")
-            writer.tag(1, WireType.LengthDelimited).string(message.loginUrl);
+            writer.tag(10, WireType.LengthDelimited).string(message.loginUrl);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -832,7 +857,7 @@ export const McpServerLoginUrl = new McpServerLoginUrl$Type();
 class LogoutMcpServerRequest$Type extends MessageType<LogoutMcpServerRequest> {
     constructor() {
         super("dragon.turnstile.v1.LogoutMcpServerRequest", [
-            { no: 1, name: "uuid", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+            { no: 10, name: "uuid", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
         ]);
     }
     create(value?: PartialMessage<LogoutMcpServerRequest>): LogoutMcpServerRequest {
@@ -847,7 +872,7 @@ class LogoutMcpServerRequest$Type extends MessageType<LogoutMcpServerRequest> {
         while (reader.pos < end) {
             let [fieldNo, wireType] = reader.tag();
             switch (fieldNo) {
-                case /* string uuid */ 1:
+                case /* string uuid */ 10:
                     message.uuid = reader.string();
                     break;
                 default:
@@ -862,9 +887,9 @@ class LogoutMcpServerRequest$Type extends MessageType<LogoutMcpServerRequest> {
         return message;
     }
     internalBinaryWrite(message: LogoutMcpServerRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
-        /* string uuid = 1; */
+        /* string uuid = 10; */
         if (message.uuid !== "")
-            writer.tag(1, WireType.LengthDelimited).string(message.uuid);
+            writer.tag(10, WireType.LengthDelimited).string(message.uuid);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);

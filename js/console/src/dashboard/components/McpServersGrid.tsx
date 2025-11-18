@@ -7,7 +7,6 @@ import DragonProxy, { McpServerRow } from "../../dragon_proxy/DragonProxy";
 import StyledDataGrid from "./StyledDataGrid";
 import UUIDDisplay from './UUIDDisplay';
 import SyncIcon from '@mui/icons-material/Sync';
-import AddIcon from '@mui/icons-material/Add';
 import { AuthType } from "../../proto/dragon/turnstile/v1/turnstile_service";
 
 interface McpServersGridProps {
@@ -107,18 +106,16 @@ const McpServersGrid = ({ onServerSelect, onAddServer, refreshTrigger }: McpServ
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-            <Box display="flex" justifyContent="space-between" alignItems="center">
-                <Box display="flex" alignItems="center">
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        onClick={onAddServer}
-                        startIcon={<AddIcon />}
-                        sx={{ padding: '10px 20px', borderRadius: '0' }}
-                    >
-                        Add MCP Server
-                    </Button>
-                </Box>
+            <Box display="flex" justifyContent="left" alignItems="center">
+                <Button
+                    variant="text"
+                    color="primary"
+                    onClick={onAddServer}
+                    sx={{ padding: '10px 20px', borderRadius: '0' }}
+                >
+                    Add MCP Server
+                </Button>
+                <Divider orientation="vertical" variant="middle" flexItem />
                 <Button
                     variant="text"
                     color="primary"
