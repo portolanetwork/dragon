@@ -96,7 +96,7 @@ const AddMcpServer = ({ onGoBack }: AddMcpServerProps) => {
     };
 
     return (
-        <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '800px' } }}>
+        <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
             <Button
                 variant="text"
                 startIcon={<ArrowBackIcon />}
@@ -114,74 +114,79 @@ const AddMcpServer = ({ onGoBack }: AddMcpServerProps) => {
                     </Typography>
 
                     {error && (
-                        <Alert severity="error" sx={{ mb: 2 }}>
+                        <Alert severity="error" sx={{ mt: 3, mb: 2 }}>
                             {error}
                         </Alert>
                     )}
 
                     {success && (
-                        <Alert severity="success" sx={{ mb: 2 }}>
+                        <Alert severity="success" sx={{ mt: 3, mb: 2 }}>
                             MCP Server added successfully! Redirecting...
                         </Alert>
                     )}
 
                     <Box component="form" onSubmit={handleSubmit} sx={{ mt: 3 }}>
-                        <TextField
-                            fullWidth
-                            label="Name"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            required
-                            margin="normal"
-                            disabled={submitting}
-                            helperText="A friendly name for this MCP server"
-                        />
-
-                        <TextField
-                            fullWidth
-                            label="URL"
-                            value={url}
-                            onChange={(e) => setUrl(e.target.value)}
-                            required
-                            margin="normal"
-                            disabled={submitting}
-                            helperText="The URL of the MCP server"
-                            placeholder="https://example.com/mcp"
-                        />
-
-                        <FormControl fullWidth margin="normal">
-                            <InputLabel id="auth-type-label">Authentication Type</InputLabel>
-                            <Select
-                                labelId="auth-type-label"
-                                value={authType}
-                                label="Authentication Type"
-                                onChange={(e) => setAuthType(e.target.value as AuthType)}
-                                disabled={submitting}
-                            >
-                                <MenuItem value={AuthType.NONE}>
-                                    {getAuthTypeLabel(AuthType.NONE)}
-                                </MenuItem>
-                                <MenuItem value={AuthType.DISCOVER}>
-                                    {getAuthTypeLabel(AuthType.DISCOVER)}
-                                </MenuItem>
-                                <MenuItem value={AuthType.STATIC_HEADER}>
-                                    {getAuthTypeLabel(AuthType.STATIC_HEADER)}
-                                </MenuItem>
-                            </Select>
-                        </FormControl>
-
-                        {authType === AuthType.STATIC_HEADER && (
+                        <Box mb={2}>
                             <TextField
                                 fullWidth
-                                label="Static Token"
-                                value={staticToken}
-                                onChange={(e) => setStaticToken(e.target.value)}
-                                required={authType === AuthType.STATIC_HEADER}
-                                margin="normal"
+                                label="Name"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                required
                                 disabled={submitting}
-                                helperText="The static authentication token for this server"
-                                type="password"
+                                helperText="A friendly name for this MCP server"
                             />
+                        </Box>
+
+                        <Box mb={2}>
+                            <TextField
+                                fullWidth
+                                label="URL"
+                                value={url}
+                                onChange={(e) => setUrl(e.target.value)}
+                                required
+                                disabled={submitting}
+                                helperText="The URL of the MCP server"
+                                placeholder="https://example.com/mcp"
+                            />
+                        </Box>
+
+                        <Box mb={2}>
+                            <FormControl fullWidth>
+                                <InputLabel id="auth-type-label">Authentication Type</InputLabel>
+                                <Select
+                                    labelId="auth-type-label"
+                                    value={authType}
+                                    label="Authentication Type"
+                                    onChange={(e) => setAuthType(e.target.value as AuthType)}
+                                    disabled={submitting}
+                                >
+                                    <MenuItem value={AuthType.NONE}>
+                                        {getAuthTypeLabel(AuthType.NONE)}
+                                    </MenuItem>
+                                    <MenuItem value={AuthType.DISCOVER}>
+                                        {getAuthTypeLabel(AuthType.DISCOVER)}
+                                    </MenuItem>
+                                    <MenuItem value={AuthType.STATIC_HEADER}>
+                                        {getAuthTypeLabel(AuthType.STATIC_HEADER)}
+                                    </MenuItem>
+                                </Select>
+                            </FormControl>
+                        </Box>
+
+                        {authType === AuthType.STATIC_HEADER && (
+                            <Box mb={2}>
+                                <TextField
+                                    fullWidth
+                                    label="Static Token"
+                                    value={staticToken}
+                                    onChange={(e) => setStaticToken(e.target.value)}
+                                    required={authType === AuthType.STATIC_HEADER}
+                                    disabled={submitting}
+                                    helperText="The static authentication token for this server"
+                                    type="password"
+                                />
+                            </Box>
                         )}
 
                         <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
