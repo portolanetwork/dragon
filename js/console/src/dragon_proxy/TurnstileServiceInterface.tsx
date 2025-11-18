@@ -12,7 +12,7 @@ class TurnstileServiceInterface {
 
             let baseUrl;
             if (window.location.hostname === 'localhost') {
-                baseUrl = 'http://localhost:8082';
+                baseUrl = 'http://localhost:8081';
             } else {
                 baseUrl = `${window.location.protocol}//${window.location.hostname.replace('console', 'turnstile')}`;
             }

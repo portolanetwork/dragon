@@ -10,14 +10,15 @@ import SignInContainer from './sign-in/SignIn';
 import LoginPending from "./dashboard/components/LoginPending";
 import MessagePage from "./dashboard/components/MessagePage";
 import LoginDone from './dashboard/components/LoginDone';
+import {Auth0Provider} from "@auth0/auth0-react";
 
 const router = createBrowserRouter([
     {
         path: '/',
         element: (
-            <AuthRoute>
+            <Auth0Provider>
                 <App />
-            </AuthRoute>
+            </Auth0Provider>
         ),
     },
     {
