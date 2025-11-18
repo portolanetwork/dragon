@@ -11,7 +11,10 @@ import {
     McpServerLoginStatus,
     McpServerLoginUrl,
     AuthType,
-    LoginStatus, RemoveMcpServerRequest, AddMcpServerRequest,
+    LoginStatus,
+    RemoveMcpServerRequest,
+    AddMcpServerRequest,
+    TransportType,
 } from "../proto/dragon/turnstile/v1/turnstile_service";
 
 export interface McpServerRow {
@@ -19,6 +22,7 @@ export interface McpServerRow {
     name: string;
     url: string;
     authType: AuthType;
+    transportType: TransportType;
     hasStaticToken: boolean;
     createdAt?: string;
     updatedAt?: string;
@@ -75,6 +79,7 @@ class DragonProxy {
                 name: server.name,
                 url: server.url,
                 authType: server.authType,
+                transportType: server.transportType,
                 hasStaticToken: server.hasStaticToken,
                 createdAt: server.createdAt
                     ? new Date(Number(server.createdAt.seconds) * 1000).toISOString()
@@ -94,11 +99,12 @@ class DragonProxy {
         name: string,
         url: string,
         authType: AuthType,
+        transportType: TransportType,
         staticToken?: string
     ): Promise<McpServerRow> {
         try {
             const accessToken = await this.getAccessToken(user);
-            return await this.addMcpServerWithToken(user.uid, accessToken, name, url, authType, staticToken);
+            return await this.addMcpServerWithToken(user.uid, accessToken, name, url, authType, transportType, staticToken);
         } catch (error: any) {
             console.error("Error adding MCP server: ", error.message);
             throw error;
@@ -111,6 +117,7 @@ class DragonProxy {
         name: string,
         url: string,
         authType: AuthType,
+        transportType: TransportType,
         staticToken?: string
     ): Promise<McpServerRow> {
         try {
@@ -121,8 +128,9 @@ class DragonProxy {
                     name,
                     url,
                     authType,
+                    transportType,
                     staticToken: staticToken || "",
-                }),
+                } as any),
                 { meta: metadata }
             );
 
@@ -134,6 +142,7 @@ class DragonProxy {
                 name: server.name,
                 url: server.url,
                 authType: server.authType,
+                transportType: server.transportType,
                 hasStaticToken: server.hasStaticToken,
                 createdAt: server.createdAt
                     ? new Date(Number(server.createdAt.seconds) * 1000).toISOString()

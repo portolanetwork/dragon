@@ -4,7 +4,7 @@ import { Box, Typography, Card, CardContent, Button, Chip } from '@mui/material'
 import { useAuth0 } from '@auth0/auth0-react';
 import DragonProxy, { McpServerRow } from "../../dragon_proxy/DragonProxy";
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import { AuthType } from "../../proto/dragon/turnstile/v1/turnstile_service";
+import { AuthType, TransportType } from "../../proto/dragon/turnstile/v1/turnstile_service";
 
 interface McpServerDetailsProps {
     serverUuid: string;
@@ -44,6 +44,17 @@ const McpServerDetails = ({ serverUuid, onGoBack }: McpServerDetailsProps) => {
                 return "OAuth Discovery";
             case AuthType.STATIC_HEADER:
                 return "Static Header";
+            default:
+                return "Unspecified";
+        }
+    };
+
+    const getTransportTypeLabel = (transportType: TransportType): string => {
+        switch (transportType) {
+            case TransportType.STREAMING_HTTP:
+                return "Streaming HTTP";
+            case TransportType.UNSPECIFIED:
+                return "Unspecified";
             default:
                 return "Unspecified";
         }
@@ -113,6 +124,14 @@ const McpServerDetails = ({ serverUuid, onGoBack }: McpServerDetailsProps) => {
                             <Chip
                                 label={getAuthTypeLabel(server.authType)}
                                 color={server.authType === AuthType.NONE ? "default" : "primary"}
+                            />
+                        </Box>
+
+                        <Box display="flex" alignItems="center" mb={2}>
+                            <Typography variant="h6" minWidth={180}>Transport Type</Typography>
+                            <Chip
+                                label={getTransportTypeLabel(server.transportType)}
+                                color={server.transportType === TransportType.STREAMING_HTTP ? "primary" : "default"}
                             />
                         </Box>
 

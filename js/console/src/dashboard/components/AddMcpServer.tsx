@@ -17,7 +17,7 @@ import { useAuth0 } from '@auth0/auth0-react';
 import DragonProxy from "../../dragon_proxy/DragonProxy";
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SaveIcon from '@mui/icons-material/Save';
-import { AuthType } from "../../proto/dragon/turnstile/v1/turnstile_service";
+import { AuthType, TransportType } from "../../proto/dragon/turnstile/v1/turnstile_service";
 
 interface AddMcpServerProps {
     onGoBack: () => void;
@@ -28,6 +28,7 @@ const AddMcpServer = ({ onGoBack }: AddMcpServerProps) => {
     const [name, setName] = useState('');
     const [url, setUrl] = useState('');
     const [authType, setAuthType] = useState<AuthType>(AuthType.NONE);
+    const [transportType, setTransportType] = useState<TransportType>(TransportType.STREAMING_HTTP);
     const [staticToken, setStaticToken] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -66,6 +67,7 @@ const AddMcpServer = ({ onGoBack }: AddMcpServerProps) => {
                 name,
                 url,
                 authType,
+                transportType,
                 authType === AuthType.STATIC_HEADER ? staticToken : undefined
             );
 
@@ -90,6 +92,17 @@ const AddMcpServer = ({ onGoBack }: AddMcpServerProps) => {
                 return "OAuth Discovery";
             case AuthType.STATIC_HEADER:
                 return "Static Header";
+            default:
+                return "Unspecified";
+        }
+    };
+
+    const getTransportTypeLabel = (type: TransportType): string => {
+        switch (type) {
+            case TransportType.STREAMING_HTTP:
+                return "Streaming HTTP";
+            case TransportType.UNSPECIFIED:
+                return "Unspecified";
             default:
                 return "Unspecified";
         }
@@ -169,6 +182,23 @@ const AddMcpServer = ({ onGoBack }: AddMcpServerProps) => {
                                     </MenuItem>
                                     <MenuItem value={AuthType.STATIC_HEADER}>
                                         {getAuthTypeLabel(AuthType.STATIC_HEADER)}
+                                    </MenuItem>
+                                </Select>
+                            </FormControl>
+                        </Box>
+
+                        <Box mb={2}>
+                            <FormControl fullWidth>
+                                <InputLabel id="transport-type-label">Transport Type</InputLabel>
+                                <Select
+                                    labelId="transport-type-label"
+                                    value={transportType}
+                                    label="Transport Type"
+                                    onChange={(e) => setTransportType(e.target.value as TransportType)}
+                                    disabled={submitting}
+                                >
+                                    <MenuItem value={TransportType.STREAMING_HTTP}>
+                                        {getTransportTypeLabel(TransportType.STREAMING_HTTP)}
                                     </MenuItem>
                                 </Select>
                             </FormControl>

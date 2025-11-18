@@ -7,7 +7,7 @@ import DragonProxy, { McpServerRow } from "../../dragon_proxy/DragonProxy";
 import StyledDataGrid from "./StyledDataGrid";
 import UUIDDisplay from './UUIDDisplay';
 import SyncIcon from '@mui/icons-material/Sync';
-import { AuthType } from "../../proto/dragon/turnstile/v1/turnstile_service";
+import { AuthType, TransportType } from "../../proto/dragon/turnstile/v1/turnstile_service";
 
 interface McpServersGridProps {
     onServerSelect: (serverUuid: string) => void;
@@ -55,6 +55,17 @@ const McpServersGrid = ({ onServerSelect, onAddServer, refreshTrigger }: McpServ
         }
     };
 
+    const getTransportTypeLabel = (transportType: TransportType): string => {
+        switch (transportType) {
+            case TransportType.STREAMING_HTTP:
+                return "Streaming HTTP";
+            case TransportType.UNSPECIFIED:
+                return "Unspecified";
+            default:
+                return "Unspecified";
+        }
+    };
+
     const columns: GridColDef[] = [
         {
             field: 'uuid',
@@ -72,6 +83,18 @@ const McpServersGrid = ({ onServerSelect, onAddServer, refreshTrigger }: McpServ
                 <Chip
                     label={getAuthTypeLabel(params.value)}
                     color={params.value === AuthType.NONE ? "default" : "primary"}
+                    size="small"
+                />
+            ),
+        },
+        {
+            field: 'transportType',
+            headerName: 'Transport',
+            width: 150,
+            renderCell: (params) => (
+                <Chip
+                    label={getTransportTypeLabel(params.value)}
+                    color={params.value === TransportType.STREAMING_HTTP ? "primary" : "default"}
                     size="small"
                 />
             ),
