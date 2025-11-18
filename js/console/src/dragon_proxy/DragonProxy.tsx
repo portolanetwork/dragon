@@ -2,8 +2,6 @@ import TurnstileServiceInterface from "./TurnstileServiceInterface";
 import { User } from 'firebase/auth';
 import { TurnstileServiceClient } from "../proto/dragon/turnstile/v1/turnstile_service.client";
 import {
-    CreateMcpServerRequest,
-    DeleteMcpServerRequest,
     ListMcpServersRequest,
     GetLoginStatusForMcpServerRequest,
     LoginMcpServerRequest,
@@ -13,7 +11,7 @@ import {
     McpServerLoginStatus,
     McpServerLoginUrl,
     AuthType,
-    LoginStatus,
+    LoginStatus, RemoveMcpServerRequest, AddMcpServerRequest,
 } from "../proto/dragon/turnstile/v1/turnstile_service";
 
 export interface McpServerRow {
@@ -100,10 +98,26 @@ class DragonProxy {
     ): Promise<McpServerRow> {
         try {
             const accessToken = await this.getAccessToken(user);
+            return await this.addMcpServerWithToken(user.uid, accessToken, name, url, authType, staticToken);
+        } catch (error: any) {
+            console.error("Error adding MCP server: ", error.message);
+            throw error;
+        }
+    }
+
+    public async addMcpServerWithToken(
+        userId: string,
+        accessToken: string,
+        name: string,
+        url: string,
+        authType: AuthType,
+        staticToken?: string
+    ): Promise<McpServerRow> {
+        try {
             const metadata = { Authorization: `Bearer ${accessToken}` };
 
             const unaryCall = await this.client.addMcpServer(
-                CreateMcpServerRequest.create({
+                AddMcpServerRequest.create({
                     name,
                     url,
                     authType,
@@ -140,7 +154,7 @@ class DragonProxy {
             const metadata = { Authorization: `Bearer ${accessToken}` };
 
             await this.client.removeMcpServer(
-                DeleteMcpServerRequest.create({ uuid }),
+                RemoveMcpServerRequest.create({ uuid }),
                 { meta: metadata }
             );
 

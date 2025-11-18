@@ -47,6 +47,7 @@ import AllExportsGrid from "./components/AllExportsGrid";
 import AuthClientGrid from "./components/AuthClientGrid";
 import McpServersGrid from "./components/McpServersGrid";
 import McpServerDetails from "./components/McpServerDetails";
+import AddMcpServer from "./components/AddMcpServer";
 import SpyderProxy from "../spyder_proxy/SpyderProxy";
 import {useEffect} from "react";
 import {useAuthState} from "react-firebase-hooks/auth";
@@ -75,6 +76,7 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
     const [firstMessage, setFirstMessage] = useState<string | null>(null);
     const [firstMessageChatId, setFirstMessageChatId] = useState<string | null>(null);
     const [selectedMcpServerUuid, setSelectedMcpServerUuid] = useState<string | null>(null);
+    const [mcpServersRefreshTrigger, setMcpServersRefreshTrigger] = useState(0);
 
     const [mainMenuProps, setMainMenuProps] = useState<MenuItem[]>([]);
     const [middleMenuProps, setMiddleMenuProps] = useState<MenuItem[]>([]);
@@ -227,6 +229,15 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
         setSelectedMenuItem(['MCP Servers']);
     };
 
+    const handleAddMcpServer = () => {
+        setSelectedMenuItem(['Add MCP Server']);
+    };
+
+    const handleAddMcpServerBack = () => {
+        setMcpServersRefreshTrigger(prev => prev + 1); // Trigger refresh
+        setSelectedMenuItem(['MCP Servers']);
+    };
+
 
 
     return (
@@ -275,7 +286,16 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
                     {selectedMenuItem.at(0) === 'Tunnels' && <AllTunnelsGrid />}
                     {selectedMenuItem.at(0) === 'Exports' && <AllExportsGrid />}
                     {selectedMenuItem.at(0) === 'File Manager' && <FileFinder />}
-                    {selectedMenuItem.at(0) === 'MCP Servers' && <McpServersGrid onServerSelect={handleMcpServerSelect} />}
+                    {selectedMenuItem.at(0) === 'MCP Servers' && (
+                        <McpServersGrid
+                            onServerSelect={handleMcpServerSelect}
+                            onAddServer={handleAddMcpServer}
+                            refreshTrigger={mcpServersRefreshTrigger}
+                        />
+                    )}
+                    {selectedMenuItem.at(0) === 'Add MCP Server' && (
+                        <AddMcpServer onGoBack={handleAddMcpServerBack} />
+                    )}
                     {selectedMenuItem.at(0) === 'MCP Server Details' && selectedMcpServerUuid && (
                         <McpServerDetails serverUuid={selectedMcpServerUuid} onGoBack={handleMcpServerDetailsBack} />
                     )}

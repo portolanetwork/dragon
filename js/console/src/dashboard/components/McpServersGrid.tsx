@@ -7,13 +7,16 @@ import DragonProxy, { McpServerRow } from "../../dragon_proxy/DragonProxy";
 import StyledDataGrid from "./StyledDataGrid";
 import UUIDDisplay from './UUIDDisplay';
 import SyncIcon from '@mui/icons-material/Sync';
+import AddIcon from '@mui/icons-material/Add';
 import { AuthType } from "../../proto/dragon/turnstile/v1/turnstile_service";
 
 interface McpServersGridProps {
     onServerSelect: (serverUuid: string) => void;
+    onAddServer: () => void;
+    refreshTrigger?: number;
 }
 
-const McpServersGrid = ({ onServerSelect }: McpServersGridProps) => {
+const McpServersGrid = ({ onServerSelect, onAddServer, refreshTrigger }: McpServersGridProps) => {
     const { user, isLoading, isAuthenticated, getAccessTokenSilently } = useAuth0();
     const [mcpServerRows, setMcpServerRows] = useState<McpServerRow[]>([]);
 
@@ -38,7 +41,7 @@ const McpServersGrid = ({ onServerSelect }: McpServersGridProps) => {
 
     useEffect(() => {
         fetchMcpServers();
-    }, [user]);
+    }, [user, refreshTrigger]);
 
     const getAuthTypeLabel = (authType: AuthType): string => {
         switch (authType) {
@@ -104,7 +107,18 @@ const McpServersGrid = ({ onServerSelect }: McpServersGridProps) => {
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-            <Box display="flex" justifyContent="left" alignItems="center">
+            <Box display="flex" justifyContent="space-between" alignItems="center">
+                <Box display="flex" alignItems="center">
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={onAddServer}
+                        startIcon={<AddIcon />}
+                        sx={{ padding: '10px 20px', borderRadius: '0' }}
+                    >
+                        Add MCP Server
+                    </Button>
+                </Box>
                 <Button
                     variant="text"
                     color="primary"
