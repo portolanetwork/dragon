@@ -111,6 +111,7 @@ object AuthCodeFlowActor {
     clientSecret: Option[String] = None,
     token: Option[TokenResponse] = None,
     wellKnownResponse: Option[OpenIdConfigurationResponse] = None,
+    codeVerifier: String = ""
   )
 
   def apply(flowId: String): Behavior[Message] =
@@ -146,6 +147,11 @@ class AuthCodeFlowActor(
   ): PartialFunction[Message, Behavior[Message]] = {
     case StartFlow(mcpServerUuid, domain, clientId, clientSecret, replyTo) =>
       context.log.info(s"[$flowId] Received StartFlow")
+
+      // Generate PKCE code_verifier for this flow
+      val codeVerifier = ClientOAuthHelper.generateCodeVerifier()
+      context.log.debug(s"[$flowId] Generated PKCE code_verifier")
+
       val data = FlowData(
         mcpServerUuid = mcpServerUuid,
         domain = domain,
@@ -153,6 +159,7 @@ class AuthCodeFlowActor(
         clientSecret = clientSecret,
         token = None,
         wellKnownResponse = None,
+        codeVerifier = codeVerifier
       )
 
       // Always start with well-known lookup to get endpoints
@@ -203,7 +210,11 @@ class AuthCodeFlowActor(
       updatedData.clientId match {
         case Some(clientId) if clientId.nonEmpty =>
           context.log.info(s"[$flowId] ClientId exists ($clientId), proceeding to auth code request")
-          
+
+          // Generate PKCE code_challenge from the stored code_verifier
+          val codeChallenge = ClientOAuthHelper.createCodeChallenge(updatedData.codeVerifier)
+          context.log.debug(s"[$flowId] Generated PKCE code_challenge")
+
           val authUrl = ClientOAuthHelper.buildAuthorizationUrl(
             discoveryResponse.authorization_endpoint.getOrElse(""),
             audience,
@@ -211,9 +222,14 @@ class AuthCodeFlowActor(
             redirectUrl,
             scope,
             flowId,
-          )
+            codeChallenge)
 
-          replyTo ! FlowAuthResponse(updatedData.mcpServerUuid, authUrl, discoveryResponse.token_endpoint.getOrElse(""), clientId, updatedData.clientSecret)
+          replyTo ! FlowAuthResponse(
+            updatedData.mcpServerUuid, 
+            authUrl, 
+            discoveryResponse.token_endpoint.getOrElse(""), 
+            clientId, 
+            updatedData.clientSecret)
 
           authCodeRequestInProcess(updatedData)
 
@@ -277,6 +293,10 @@ class AuthCodeFlowActor(
         case _ => context.log.debug(s"[$flowId] Redirect URI $redirectUrl is registered")
       }
 
+      // Generate PKCE code_challenge from the stored code_verifier
+      val codeChallenge = ClientOAuthHelper.createCodeChallenge(updatedData.codeVerifier)
+      context.log.debug(s"[$flowId] Generated PKCE code_challenge")
+
       val authUrl = ClientOAuthHelper.buildAuthorizationUrl(
         data.wellKnownResponse.get.authorization_endpoint.getOrElse(""),
         audience,
@@ -284,6 +304,7 @@ class AuthCodeFlowActor(
         redirectUrl,
         scope,
         flowId,
+        codeChallenge
       )
 
       replyTo ! FlowAuthResponse(updatedData.mcpServerUuid, authUrl, data.wellKnownResponse.get.token_endpoint.getOrElse(""),
@@ -321,7 +342,7 @@ class AuthCodeFlowActor(
     case GetToken(state, code, replyTo) =>
       context.log.info(s"[$flowId] Received authorization code")
 
-      context.log.info(s"[$flowId] Auth code received, proceeding to token exchange")
+      context.log.info(s"[$flowId] Auth code received, proceeding to token exchange with PKCE")
 
       context.pipeToSelf(ClientOAuthHelper.exchangeAuthorizationCode(
         data.wellKnownResponse.get.token_endpoint.get,
@@ -329,6 +350,7 @@ class AuthCodeFlowActor(
         data.clientSecret,
         code,
         redirectUrl,
+        data.codeVerifier
       )) {
         case Success(Right(tokenResp)) => TokenExchangeResponse(tokenResp, replyTo)
         case Success(Left(error)) => FlowError(s"Token exchange failed: ${error.toString}", replyTo)

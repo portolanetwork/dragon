@@ -27,6 +27,8 @@ import org.apache.pekko.http.scaladsl.model.headers.{Authorization, BasicHttpCre
 import org.slf4j.LoggerFactory
 
 import java.net.URI
+import java.security.{MessageDigest, SecureRandom}
+import java.util.Base64
 import scala.concurrent.duration.*
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -73,6 +75,32 @@ object ClientOAuthHelper {
     client_secret_expires_at: Option[Int]
   )
 
+  // PKCE (Proof Key for Code Exchange) utilities
+
+  /**
+   * Generates a cryptographically secure random code_verifier for PKCE.
+   * The verifier is a 43-128 character URL-safe string (A-Z, a-z, 0-9, -, _, ., ~).
+   * This implementation generates a 64-character verifier.
+   */
+  def generateCodeVerifier(): String = {
+    val random = new SecureRandom()
+    val bytes = new Array[Byte](48) // 48 bytes = 64 base64url characters
+    random.nextBytes(bytes)
+    Base64.getUrlEncoder.withoutPadding().encodeToString(bytes)
+  }
+
+  /**
+   * Creates a code_challenge from a code_verifier using SHA-256 hashing.
+   * The challenge is the base64url-encoded SHA-256 hash of the verifier.
+   *
+   * @param codeVerifier The code_verifier to hash
+   * @return The base64url-encoded SHA-256 hash
+   */
+  def createCodeChallenge(codeVerifier: String): String = {
+    val digest = MessageDigest.getInstance("SHA-256")
+    val hash = digest.digest(codeVerifier.getBytes("UTF-8"))
+    Base64.getUrlEncoder.withoutPadding().encodeToString(hash)
+  }
 
   // Perform dynamic client registration (DCR) by POSTing JSON metadata to the registration endpoint.
   // Returns a DcrResponse on success.
@@ -163,7 +191,8 @@ object ClientOAuthHelper {
     clientId: String,
     redirectUri: String,
     scope: String,
-    state: String
+    state: String,
+    codeChallenge: String
   ): String = {
     val params = Map(
       "audience" -> audience, // No refresh token without audience in Auth0
@@ -171,21 +200,24 @@ object ClientOAuthHelper {
       "client_id" -> clientId,
       "redirect_uri" -> redirectUri,
       "scope" -> scope,
-      "state" -> state
+      "state" -> state,
+      "code_challenge" -> codeChallenge,
+      "code_challenge_method" -> "S256"
     ).map { case (k, v) => s"${urlEncode(k)}=${urlEncode(v)}" }.mkString("&")
     if (authEndpoint.contains("?")) s"$authEndpoint&$params" else s"$authEndpoint?$params"
   }
 
   private def urlEncode(
-    s: String
-  ): String = java.net.URLEncoder.encode(s, "UTF-8")
+    url: String
+  ): String = java.net.URLEncoder.encode(url, "UTF-8")
 
   def exchangeAuthorizationCode(
     tokenUrl: String,
     clientId: String,
     clientSecretOpt: Option[String],
     code: String,
-    redirectUri: String
+    redirectUri: String,
+    codeVerifier: String
   )(
     implicit system: ActorSystem[Nothing]
   ): Future[Either[String, TokenResponse]] = {
@@ -194,7 +226,8 @@ object ClientOAuthHelper {
       "grant_type" -> "authorization_code",
       "code" -> code,
       "redirect_uri" -> redirectUri,
-      "client_id" -> clientId
+      "client_id" -> clientId,
+      "code_verifier" -> codeVerifier
     )
 
     val formWithClient = clientSecretOpt match {
