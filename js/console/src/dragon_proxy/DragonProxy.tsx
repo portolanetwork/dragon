@@ -55,10 +55,19 @@ class DragonProxy {
     public async listMcpServers(user: User): Promise<McpServerRow[]> {
         try {
             const accessToken = await this.getAccessToken(user);
+            return await this.listMcpServersWithToken(user.uid, accessToken);
+        } catch (error: any) {
+            console.error("Error listing MCP servers: ", error.message);
+            return [];
+        }
+    }
+
+    public async listMcpServersWithToken(userId: string, accessToken: string): Promise<McpServerRow[]> {
+        try {
             const metadata = { Authorization: `Bearer ${accessToken}` };
 
             const unaryCall = await this.client.listMcpServers(
-                ListMcpServersRequest.create({ userId: user?.uid }),
+                ListMcpServersRequest.create({ userId }),
                 { meta: metadata }
             );
 
@@ -82,7 +91,7 @@ class DragonProxy {
         }
     }
 
-    public async createMcpServer(
+    public async addMcpServer(
         user: User,
         name: string,
         url: string,
@@ -93,7 +102,7 @@ class DragonProxy {
             const accessToken = await this.getAccessToken(user);
             const metadata = { Authorization: `Bearer ${accessToken}` };
 
-            const unaryCall = await this.client.createMcpServer(
+            const unaryCall = await this.client.addMcpServer(
                 CreateMcpServerRequest.create({
                     name,
                     url,
@@ -125,12 +134,12 @@ class DragonProxy {
         }
     }
 
-    public async deleteMcpServer(user: User, uuid: string): Promise<void> {
+    public async removeMcpServer(user: User, uuid: string): Promise<void> {
         try {
             const accessToken = await this.getAccessToken(user);
             const metadata = { Authorization: `Bearer ${accessToken}` };
 
-            await this.client.deleteMcpServer(
+            await this.client.removeMcpServer(
                 DeleteMcpServerRequest.create({ uuid }),
                 { meta: metadata }
             );

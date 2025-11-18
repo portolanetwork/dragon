@@ -10,9 +10,9 @@ import type { LoginMcpServerRequest } from "./turnstile_service";
 import type { McpServerLoginStatus } from "./turnstile_service";
 import type { GetLoginStatusForMcpServerRequest } from "./turnstile_service";
 import type { Empty } from "../../../google/protobuf/empty";
-import type { DeleteMcpServerRequest } from "./turnstile_service";
+import type { RemoveMcpServerRequest } from "./turnstile_service";
 import type { McpServer } from "./turnstile_service";
-import type { CreateMcpServerRequest } from "./turnstile_service";
+import type { AddMcpServerRequest } from "./turnstile_service";
 import { stackIntercept } from "@protobuf-ts/runtime-rpc";
 import type { McpServerList } from "./turnstile_service";
 import type { ListMcpServersRequest } from "./turnstile_service";
@@ -27,13 +27,13 @@ export interface ITurnstileServiceClient {
      */
     listMcpServers(input: ListMcpServersRequest, options?: RpcOptions): UnaryCall<ListMcpServersRequest, McpServerList>;
     /**
-     * @generated from protobuf rpc: CreateMcpServer(dragon.turnstile.v1.CreateMcpServerRequest) returns (dragon.turnstile.v1.McpServer);
+     * @generated from protobuf rpc: AddMcpServer(dragon.turnstile.v1.AddMcpServerRequest) returns (dragon.turnstile.v1.McpServer);
      */
-    createMcpServer(input: CreateMcpServerRequest, options?: RpcOptions): UnaryCall<CreateMcpServerRequest, McpServer>;
+    addMcpServer(input: AddMcpServerRequest, options?: RpcOptions): UnaryCall<AddMcpServerRequest, McpServer>;
     /**
-     * @generated from protobuf rpc: DeleteMcpServer(dragon.turnstile.v1.DeleteMcpServerRequest) returns (google.protobuf.Empty);
+     * @generated from protobuf rpc: RemoveMcpServer(dragon.turnstile.v1.RemoveMcpServerRequest) returns (google.protobuf.Empty);
      */
-    deleteMcpServer(input: DeleteMcpServerRequest, options?: RpcOptions): UnaryCall<DeleteMcpServerRequest, Empty>;
+    removeMcpServer(input: RemoveMcpServerRequest, options?: RpcOptions): UnaryCall<RemoveMcpServerRequest, Empty>;
     /**
      * @generated from protobuf rpc: GetLoginStatusForMcpServer(dragon.turnstile.v1.GetLoginStatusForMcpServerRequest) returns (dragon.turnstile.v1.McpServerLoginStatus);
      */
@@ -64,18 +64,18 @@ export class TurnstileServiceClient implements ITurnstileServiceClient, ServiceI
         return stackIntercept<ListMcpServersRequest, McpServerList>("unary", this._transport, method, opt, input);
     }
     /**
-     * @generated from protobuf rpc: CreateMcpServer(dragon.turnstile.v1.CreateMcpServerRequest) returns (dragon.turnstile.v1.McpServer);
+     * @generated from protobuf rpc: AddMcpServer(dragon.turnstile.v1.AddMcpServerRequest) returns (dragon.turnstile.v1.McpServer);
      */
-    createMcpServer(input: CreateMcpServerRequest, options?: RpcOptions): UnaryCall<CreateMcpServerRequest, McpServer> {
+    addMcpServer(input: AddMcpServerRequest, options?: RpcOptions): UnaryCall<AddMcpServerRequest, McpServer> {
         const method = this.methods[1], opt = this._transport.mergeOptions(options);
-        return stackIntercept<CreateMcpServerRequest, McpServer>("unary", this._transport, method, opt, input);
+        return stackIntercept<AddMcpServerRequest, McpServer>("unary", this._transport, method, opt, input);
     }
     /**
-     * @generated from protobuf rpc: DeleteMcpServer(dragon.turnstile.v1.DeleteMcpServerRequest) returns (google.protobuf.Empty);
+     * @generated from protobuf rpc: RemoveMcpServer(dragon.turnstile.v1.RemoveMcpServerRequest) returns (google.protobuf.Empty);
      */
-    deleteMcpServer(input: DeleteMcpServerRequest, options?: RpcOptions): UnaryCall<DeleteMcpServerRequest, Empty> {
+    removeMcpServer(input: RemoveMcpServerRequest, options?: RpcOptions): UnaryCall<RemoveMcpServerRequest, Empty> {
         const method = this.methods[2], opt = this._transport.mergeOptions(options);
-        return stackIntercept<DeleteMcpServerRequest, Empty>("unary", this._transport, method, opt, input);
+        return stackIntercept<RemoveMcpServerRequest, Empty>("unary", this._transport, method, opt, input);
     }
     /**
      * @generated from protobuf rpc: GetLoginStatusForMcpServer(dragon.turnstile.v1.GetLoginStatusForMcpServerRequest) returns (dragon.turnstile.v1.McpServerLoginStatus);

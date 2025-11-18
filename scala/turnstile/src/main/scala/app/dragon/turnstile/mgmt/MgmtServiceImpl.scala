@@ -102,8 +102,8 @@ class MgmtServiceImpl(authEnabled: Boolean)(
    * @param in CreateMcpServerRequest containing name and url
    * @return Future[McpServer] containing the created MCP server info
    */
-  override def createMcpServer(
-    in: CreateMcpServerRequest,
+  override def addMcpServer(
+    in: AddMcpServerRequest,
     metadata: Metadata,
   ): Future[McpServer] = {
     val now = Timestamp(System.currentTimeMillis())
@@ -185,8 +185,8 @@ class MgmtServiceImpl(authEnabled: Boolean)(
    * @param in DeleteMcpServerRequest containing the uuid
    * @return Future[Empty] on successful deletion
    */
-  override def deleteMcpServer(
-    in: DeleteMcpServerRequest,
+  override def removeMcpServer(
+    in: RemoveMcpServerRequest,
     metadata: Metadata,
   ): Future[Empty] = {
     // Validate request and delete server

@@ -33,8 +33,8 @@ enum LoginStatus {
 
 service TurnstileService {
     rpc ListMcpServers (ListMcpServersRequest)  returns (McpServerList) {}
-    rpc CreateMcpServer (CreateMcpServerRequest) returns (McpServer) {}
-    rpc DeleteMcpServer (DeleteMcpServerRequest) returns (google.protobuf.Empty) {}
+    rpc AddMcpServer (AddMcpServerRequest) returns (McpServer) {}
+    rpc RemoveMcpServer (RemoveMcpServerRequest) returns (google.protobuf.Empty) {}
 
     rpc GetLoginStatusForMcpServer (GetLoginStatusForMcpServerRequest) returns (McpServerLoginStatus) {}
     rpc LoginMcpServer (LoginMcpServerRequest) returns (McpServerLoginUrl) {}
@@ -42,7 +42,7 @@ service TurnstileService {
 }
 
 // MCP Servers
-message CreateMcpServerRequest {
+message AddMcpServerRequest {
     string name = 1;
     string url = 2;
     AuthType auth_type = 3; // Authentication type
@@ -55,7 +55,7 @@ message ListMcpServersRequest {
     //string page_token = 3;
 }
 
-message DeleteMcpServerRequest {
+message RemoveMcpServerRequest {
     string uuid = 1;
 }
 

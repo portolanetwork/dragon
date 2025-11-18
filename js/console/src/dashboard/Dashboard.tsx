@@ -46,6 +46,7 @@ import {
 import AllExportsGrid from "./components/AllExportsGrid";
 import AuthClientGrid from "./components/AuthClientGrid";
 import McpServersGrid from "./components/McpServersGrid";
+import McpServerDetails from "./components/McpServerDetails";
 import SpyderProxy from "../spyder_proxy/SpyderProxy";
 import {useEffect} from "react";
 import {useAuthState} from "react-firebase-hooks/auth";
@@ -73,6 +74,7 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
     //const [firstMessages, setFirstMessages] = useState<Map<string, string>>(new Map());
     const [firstMessage, setFirstMessage] = useState<string | null>(null);
     const [firstMessageChatId, setFirstMessageChatId] = useState<string | null>(null);
+    const [selectedMcpServerUuid, setSelectedMcpServerUuid] = useState<string | null>(null);
 
     const [mainMenuProps, setMainMenuProps] = useState<MenuItem[]>([]);
     const [middleMenuProps, setMiddleMenuProps] = useState<MenuItem[]>([]);
@@ -215,6 +217,16 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
         }
     };
 
+    const handleMcpServerSelect = (serverUuid: string) => {
+        setSelectedMcpServerUuid(serverUuid);
+        setSelectedMenuItem(['MCP Server Details', serverUuid]);
+    };
+
+    const handleMcpServerDetailsBack = () => {
+        setSelectedMcpServerUuid(null);
+        setSelectedMenuItem(['MCP Servers']);
+    };
+
 
 
     return (
@@ -263,7 +275,10 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
                     {selectedMenuItem.at(0) === 'Tunnels' && <AllTunnelsGrid />}
                     {selectedMenuItem.at(0) === 'Exports' && <AllExportsGrid />}
                     {selectedMenuItem.at(0) === 'File Manager' && <FileFinder />}
-                    {selectedMenuItem.at(0) === 'MCP Servers' && <McpServersGrid />}
+                    {selectedMenuItem.at(0) === 'MCP Servers' && <McpServersGrid onServerSelect={handleMcpServerSelect} />}
+                    {selectedMenuItem.at(0) === 'MCP Server Details' && selectedMcpServerUuid && (
+                        <McpServerDetails serverUuid={selectedMcpServerUuid} onGoBack={handleMcpServerDetailsBack} />
+                    )}
                     {selectedMenuItem.at(0) === 'New Chat' && <NewChatWindow onCreateChat={handleCreateChat} />}
                     {selectedMenuItem.at(0) === 'Chat' && <ChatWindow
                         chatId={selectedMenuItem.at(1) ?? ''}

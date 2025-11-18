@@ -2,33 +2,34 @@ import * as React from 'react';
 import { useEffect, useState } from 'react';
 import { GridColDef, GridRowParams } from '@mui/x-data-grid';
 import { Box, Chip, Divider, Typography, Card, CardContent, Button } from '@mui/material';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth } from "../../firebase";
+import { useAuth0 } from '@auth0/auth0-react';
 import DragonProxy, { McpServerRow } from "../../dragon_proxy/DragonProxy";
 import StyledDataGrid from "./StyledDataGrid";
 import UUIDDisplay from './UUIDDisplay';
 import SyncIcon from '@mui/icons-material/Sync';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import { AuthType } from "../../proto/dragon/turnstile/v1/turnstile_service";
 
-const McpServersGrid = () => {
-    const [user, loading, error] = useAuthState(auth);
-    const [mcpServerRows, setMcpServerRows] = useState<McpServerRow[]>([]);
-    const [selectedServer, setSelectedServer] = useState<McpServerRow | null>(null);
+interface McpServersGridProps {
+    onServerSelect: (serverUuid: string) => void;
+}
 
-    if (loading) {
+const McpServersGrid = ({ onServerSelect }: McpServersGridProps) => {
+    const { user, isLoading, isAuthenticated, getAccessTokenSilently } = useAuth0();
+    const [mcpServerRows, setMcpServerRows] = useState<McpServerRow[]>([]);
+
+    if (isLoading) {
         return <div>Loading...</div>;
     }
 
-    if (!user) {
+    if (!isAuthenticated || !user) {
         console.error("User not logged in");
         return <div>User not logged in</div>;
     }
 
     const fetchMcpServers = async () => {
         try {
-            const servers = await DragonProxy.getInstance().listMcpServers(user);
+            const accessToken = await getAccessTokenSilently();
+            const servers = await DragonProxy.getInstance().listMcpServersWithToken(user.sub!, accessToken);
             setMcpServerRows(servers);
         } catch (error: any) {
             console.error("Error fetching MCP servers: ", error.message);
@@ -53,14 +54,6 @@ const McpServersGrid = () => {
     };
 
     const columns: GridColDef[] = [
-        {
-            field: 'selected',
-            headerName: '',
-            width: 50,
-            renderCell: (params) => (
-                params.row.uuid === selectedServer?.uuid ? <CheckCircleOutlineIcon color="primary" /> : <RadioButtonUncheckedIcon />
-            ),
-        },
         {
             field: 'uuid',
             headerName: 'UUID',
@@ -102,7 +95,7 @@ const McpServersGrid = () => {
     ];
 
     const handleRowClick = async (params: GridRowParams) => {
-        setSelectedServer(params.row);
+        onServerSelect(params.row.uuid);
     };
 
     const refreshAll = async () => {
@@ -158,55 +151,6 @@ const McpServersGrid = () => {
                             onRowClick={handleRowClick}
                         />
                     </div>
-                </>
-            )}
-
-            {selectedServer && (
-                <>
-                    <br />
-                    <Card sx={{ border: '2px solid', borderColor: 'primary.main' }}>
-                        <CardContent>
-                            <Typography variant="h5" component="div" gutterBottom>
-                                MCP Server Details
-                            </Typography>
-                            <Box display="flex" alignItems="center" mb={1}>
-                                <Typography minWidth={120}>UUID</Typography>
-                                <Typography sx={{ color: '#00bcd4' }}>{selectedServer.uuid}</Typography>
-                            </Box>
-                            <Box display="flex" alignItems="center" mb={1}>
-                                <Typography minWidth={120}>Name</Typography>
-                                <Typography sx={{ color: '#00bcd4' }}>{selectedServer.name}</Typography>
-                            </Box>
-                            <Box display="flex" alignItems="center" mb={1}>
-                                <Typography minWidth={120}>URL</Typography>
-                                <Typography sx={{ color: '#00bcd4' }}>{selectedServer.url}</Typography>
-                            </Box>
-                            <Box display="flex" alignItems="center" mb={1}>
-                                <Typography minWidth={120}>Auth Type</Typography>
-                                <Typography sx={{ color: '#00bcd4' }}>{getAuthTypeLabel(selectedServer.authType)}</Typography>
-                            </Box>
-                            <Box display="flex" alignItems="center" mb={1}>
-                                <Typography minWidth={120}>Has Static Token</Typography>
-                                <Typography sx={{ color: '#00bcd4' }}>{selectedServer.hasStaticToken ? "Yes" : "No"}</Typography>
-                            </Box>
-                            {selectedServer.createdAt && (
-                                <Box display="flex" alignItems="center" mb={1}>
-                                    <Typography minWidth={120}>Created</Typography>
-                                    <Typography sx={{ color: '#00bcd4' }}>
-                                        {new Date(selectedServer.createdAt).toLocaleString()}
-                                    </Typography>
-                                </Box>
-                            )}
-                            {selectedServer.updatedAt && (
-                                <Box display="flex" alignItems="center" mb={1}>
-                                    <Typography minWidth={120}>Updated</Typography>
-                                    <Typography sx={{ color: '#00bcd4' }}>
-                                        {new Date(selectedServer.updatedAt).toLocaleString()}
-                                    </Typography>
-                                </Box>
-                            )}
-                        </CardContent>
-                    </Card>
                 </>
             )}
         </Box>

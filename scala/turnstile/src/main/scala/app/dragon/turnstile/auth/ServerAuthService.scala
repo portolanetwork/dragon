@@ -27,6 +27,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
 object ServerAuthService {
+  val logger: org.slf4j.Logger = org.slf4j.LoggerFactory.getLogger("ServerAuthService")
 
   case class AuthContext(
     userId: String,
@@ -75,6 +76,7 @@ object ServerAuthService {
               .asRuntimeException()
             )
         case Left(AccessDenied) =>
+          logger.warn("Access denied due to invalid or expired token")
           Future.failed(
             Status.PERMISSION_DENIED
               .withDescription("Access denied: invalid or expired token")

@@ -16,9 +16,9 @@ import { Timestamp } from "../../../google/protobuf/timestamp";
 /**
  * MCP Servers
  *
- * @generated from protobuf message dragon.turnstile.v1.CreateMcpServerRequest
+ * @generated from protobuf message dragon.turnstile.v1.AddMcpServerRequest
  */
-export interface CreateMcpServerRequest {
+export interface AddMcpServerRequest {
     /**
      * @generated from protobuf field: string name = 1;
      */
@@ -47,9 +47,9 @@ export interface ListMcpServersRequest {
     // string page_token = 3;
 }
 /**
- * @generated from protobuf message dragon.turnstile.v1.DeleteMcpServerRequest
+ * @generated from protobuf message dragon.turnstile.v1.RemoveMcpServerRequest
  */
-export interface DeleteMcpServerRequest {
+export interface RemoveMcpServerRequest {
     /**
      * @generated from protobuf field: string uuid = 1;
      */
@@ -242,26 +242,26 @@ export enum LoginStatus {
     NOT_APPLICABLE = 4
 }
 // @generated message type with reflection information, may provide speed optimized methods
-class CreateMcpServerRequest$Type extends MessageType<CreateMcpServerRequest> {
+class AddMcpServerRequest$Type extends MessageType<AddMcpServerRequest> {
     constructor() {
-        super("dragon.turnstile.v1.CreateMcpServerRequest", [
+        super("dragon.turnstile.v1.AddMcpServerRequest", [
             { no: 1, name: "name", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
             { no: 2, name: "url", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
             { no: 3, name: "auth_type", kind: "enum", T: () => ["dragon.turnstile.v1.AuthType", AuthType, "AUTH_TYPE_"] },
             { no: 4, name: "static_token", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
         ]);
     }
-    create(value?: PartialMessage<CreateMcpServerRequest>): CreateMcpServerRequest {
+    create(value?: PartialMessage<AddMcpServerRequest>): AddMcpServerRequest {
         const message = globalThis.Object.create((this.messagePrototype!));
         message.name = "";
         message.url = "";
         message.authType = 0;
         message.staticToken = "";
         if (value !== undefined)
-            reflectionMergePartial<CreateMcpServerRequest>(this, message, value);
+            reflectionMergePartial<AddMcpServerRequest>(this, message, value);
         return message;
     }
-    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: CreateMcpServerRequest): CreateMcpServerRequest {
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: AddMcpServerRequest): AddMcpServerRequest {
         let message = target ?? this.create(), end = reader.pos + length;
         while (reader.pos < end) {
             let [fieldNo, wireType] = reader.tag();
@@ -289,7 +289,7 @@ class CreateMcpServerRequest$Type extends MessageType<CreateMcpServerRequest> {
         }
         return message;
     }
-    internalBinaryWrite(message: CreateMcpServerRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+    internalBinaryWrite(message: AddMcpServerRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
         /* string name = 1; */
         if (message.name !== "")
             writer.tag(1, WireType.LengthDelimited).string(message.name);
@@ -309,9 +309,9 @@ class CreateMcpServerRequest$Type extends MessageType<CreateMcpServerRequest> {
     }
 }
 /**
- * @generated MessageType for protobuf message dragon.turnstile.v1.CreateMcpServerRequest
+ * @generated MessageType for protobuf message dragon.turnstile.v1.AddMcpServerRequest
  */
-export const CreateMcpServerRequest = new CreateMcpServerRequest$Type();
+export const AddMcpServerRequest = new AddMcpServerRequest$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class ListMcpServersRequest$Type extends MessageType<ListMcpServersRequest> {
     constructor() {
@@ -360,20 +360,20 @@ class ListMcpServersRequest$Type extends MessageType<ListMcpServersRequest> {
  */
 export const ListMcpServersRequest = new ListMcpServersRequest$Type();
 // @generated message type with reflection information, may provide speed optimized methods
-class DeleteMcpServerRequest$Type extends MessageType<DeleteMcpServerRequest> {
+class RemoveMcpServerRequest$Type extends MessageType<RemoveMcpServerRequest> {
     constructor() {
-        super("dragon.turnstile.v1.DeleteMcpServerRequest", [
+        super("dragon.turnstile.v1.RemoveMcpServerRequest", [
             { no: 1, name: "uuid", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
         ]);
     }
-    create(value?: PartialMessage<DeleteMcpServerRequest>): DeleteMcpServerRequest {
+    create(value?: PartialMessage<RemoveMcpServerRequest>): RemoveMcpServerRequest {
         const message = globalThis.Object.create((this.messagePrototype!));
         message.uuid = "";
         if (value !== undefined)
-            reflectionMergePartial<DeleteMcpServerRequest>(this, message, value);
+            reflectionMergePartial<RemoveMcpServerRequest>(this, message, value);
         return message;
     }
-    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: DeleteMcpServerRequest): DeleteMcpServerRequest {
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: RemoveMcpServerRequest): RemoveMcpServerRequest {
         let message = target ?? this.create(), end = reader.pos + length;
         while (reader.pos < end) {
             let [fieldNo, wireType] = reader.tag();
@@ -392,7 +392,7 @@ class DeleteMcpServerRequest$Type extends MessageType<DeleteMcpServerRequest> {
         }
         return message;
     }
-    internalBinaryWrite(message: DeleteMcpServerRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+    internalBinaryWrite(message: RemoveMcpServerRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
         /* string uuid = 1; */
         if (message.uuid !== "")
             writer.tag(1, WireType.LengthDelimited).string(message.uuid);
@@ -403,9 +403,9 @@ class DeleteMcpServerRequest$Type extends MessageType<DeleteMcpServerRequest> {
     }
 }
 /**
- * @generated MessageType for protobuf message dragon.turnstile.v1.DeleteMcpServerRequest
+ * @generated MessageType for protobuf message dragon.turnstile.v1.RemoveMcpServerRequest
  */
-export const DeleteMcpServerRequest = new DeleteMcpServerRequest$Type();
+export const RemoveMcpServerRequest = new RemoveMcpServerRequest$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class McpServerList$Type extends MessageType<McpServerList> {
     constructor() {
@@ -880,8 +880,8 @@ export const LogoutMcpServerRequest = new LogoutMcpServerRequest$Type();
  */
 export const TurnstileService = new ServiceType("dragon.turnstile.v1.TurnstileService", [
     { name: "ListMcpServers", options: {}, I: ListMcpServersRequest, O: McpServerList },
-    { name: "CreateMcpServer", options: {}, I: CreateMcpServerRequest, O: McpServer },
-    { name: "DeleteMcpServer", options: {}, I: DeleteMcpServerRequest, O: Empty },
+    { name: "AddMcpServer", options: {}, I: AddMcpServerRequest, O: McpServer },
+    { name: "RemoveMcpServer", options: {}, I: RemoveMcpServerRequest, O: Empty },
     { name: "GetLoginStatusForMcpServer", options: {}, I: GetLoginStatusForMcpServerRequest, O: McpServerLoginStatus },
     { name: "LoginMcpServer", options: {}, I: LoginMcpServerRequest, O: McpServerLoginUrl },
     { name: "LogoutMcpServer", options: {}, I: LogoutMcpServerRequest, O: Empty }

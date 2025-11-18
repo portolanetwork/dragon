@@ -5,7 +5,7 @@ import { CssBaseline } from '@mui/material';
 import theme from './theme';
 import App from './dashboard/Dashboard';
 import { createBrowserRouter, RouterProvider } from 'react-router';
-import AuthRoute from './dashboard/components/AuthRoute';
+import Auth0ProtectedRoute from './dashboard/components/Auth0ProtectedRoute';
 import SignInContainer from './sign-in/SignIn';
 import LoginPending from "./dashboard/components/LoginPending";
 import MessagePage from "./dashboard/components/MessagePage";
@@ -16,8 +16,18 @@ const router = createBrowserRouter([
     {
         path: '/',
         element: (
-            <Auth0Provider>
-                <App />
+            <Auth0Provider
+                domain="portola-dev.us.auth0.com"
+                clientId="sfxhXr2jMA0arQ0C3kAGatI1z0k4j8rt"
+                authorizationParams={{
+                    //audience: "https://dragonpi.app/api",
+                    redirect_uri: 'http://localhost:5173',//window.location.origin,
+                    //scope: 'openid profile email',
+                }}
+            >
+                <Auth0ProtectedRoute>
+                    <App />
+                </Auth0ProtectedRoute>
             </Auth0Provider>
         ),
     },
