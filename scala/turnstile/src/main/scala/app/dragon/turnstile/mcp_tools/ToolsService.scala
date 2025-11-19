@@ -162,19 +162,13 @@ class ToolsService(
    * @return A Future containing either an error or a list of namespaced tools
    */
   private[mcp_tools] def getDownstreamTools(
-    //mcpServerUuid: String,
-    //mcpServerName: String,
-    //mcpServerUrl: String,
     mcpServerRow: McpServerRow
   )(implicit
     system: ActorSystem[?],
     timeout: Timeout = 30.seconds
   ): Future[Either[McpClientActor.McpClientError, List[McpTool]]] = {
-    //require(mcpServerUuid.nonEmpty, "mcpServerUuid cannot be empty")
-
     implicit val sharding: ClusterSharding = ClusterSharding(system)
     
-    //logger.info(s"Fetching namespaced tools from MCP client actor: $mcpServerRowUuid for user=$userId")
     logger.info(s"Fetching namespaced tools from MCP client actor: ${mcpServerRow.uuid} (${mcpServerRow.name}) for user=$userId")
 
     ActorLookup.getMcpClientActor(userId, mcpServerRow.uuid.toString) ! McpClientActor.Initialize(mcpServerRow)
@@ -211,16 +205,11 @@ class ToolsService(
   }
 
   private def getDownstreamToolsSpec(
-    //mcpServerUuid: String,
-    //mcpServerName: String,
-    //serverUrl: String,
     mcpServerRow: McpServerRow
   )(implicit
     system: ActorSystem[?],
     timeout: Timeout = 30.seconds
   ): Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]] = {
-    //require(mcpServerUuid.nonEmpty, "mcpClientActorId cannot be empty")
-
     getDownstreamTools(mcpServerRow).map {
       case Right(tools) =>
         val toolSpecs = convertToAsyncToolSpec(tools)

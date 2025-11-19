@@ -49,7 +49,7 @@ object McpStreamingHttpAsyncClient {
    */
   def apply(
     serverUrl: String,
-    endpoint: String = "/mcp",
+    endpoint: String = "/",
     authTokenProvider: Option[() => Future[String]] = None
   )(implicit ec: ExecutionContext): McpStreamingHttpAsyncClient =
     new McpStreamingHttpAsyncClient(clientName, clientVersion, serverUrl, endpoint, authTokenProvider).start()

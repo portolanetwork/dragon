@@ -137,7 +137,7 @@ object McpServerActor {
   // Internal message for server initialization
   private final case class DownstreamRefreshStatus(status: Either[McpActorError, Unit]) extends Message
 
-  def apply(mcpServerActorId: McpServerActorId): Behavior[Message] = {
+  def apply(mcpServerActorId: McpServerActorId): Behavior[Message] = {f
     Behaviors.withStash(100) { buffer =>
       Behaviors.setup { context =>
         implicit val system: ActorSystem[Nothing] = context.system
