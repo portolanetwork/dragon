@@ -19,7 +19,6 @@
 package app.dragon.turnstile.mcp_tools.impl
 
 import app.dragon.turnstile.mcp_tools.{AsyncToolHandler, McpTool, McpUtils}
-import io.modelcontextprotocol.server.McpAsyncServerExchange
 import io.modelcontextprotocol.spec.McpSchema
 import reactor.core.publisher.{Flux, Mono}
 
@@ -67,9 +66,9 @@ object StreamingDemoTool extends McpTool {
 
   override def getSchema(): McpSchema.Tool = {
     McpUtils.createToolSchemaBuilder(
-      name = "streaming_demo_tool",
-      description = "Demonstrates streaming/async capabilities with progress notifications"
-    )
+        name = "streaming_demo_tool",
+        description = "Demonstrates streaming/async capabilities with progress notifications"
+      )
       .inputSchema(McpUtils.createObjectSchema(
         properties = Map(
           "message" -> Map(
@@ -92,9 +91,8 @@ object StreamingDemoTool extends McpTool {
       val count = Math.min(Math.max(McpUtils.getIntArg(request, "count", 1), 1), 10)
       val streamingDemoName = "TurnstileStreamingDemo"
       val startTime = System.currentTimeMillis()
-
-      // Create a unique progress token that includes tool name and timestamp for correlation
-      val progressToken = s"streaming-demo-tool-${request.name()}-$startTime"
+      // Per spec, use the request's progress token if provided
+      val progressToken = request.progressToken()
 
       logger.info(s"[StreamingDemoTool] Starting streaming processing: message='$message', count=$count, token=$progressToken")
 
@@ -116,88 +114,44 @@ object StreamingDemoTool extends McpTool {
       )
 
       // Emit a progress notification for each step, with 2 second delays
-      val notificationFlux = Mono.fromRunnable(() =>
-        exchange.progressNotification(initialNotification).subscribe()
-      ).thenMany(
-        Flux.range(1, count)
-          .delayElements(Duration.ofSeconds(2))
-          .doOnNext(i => logger.info(s"[StreamingDemoTool] Processing iteration $i/$count (after 2s delay)"))
-          .flatMap { i =>
-            val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
-            val iterationMeta = java.util.Map.of[String, Object](
-              "toolName", request.name(),
-              "startTime", Long.box(startTime),
-              "iteration", Integer.valueOf(i),
-              "elapsedSeconds", Double.box(elapsed)
-            )
+      exchange.progressNotification(initialNotification)
+        .doOnSuccess(_ => logger.info(s"[StreamingDemoTool] Sent initial progress notification: 0/$count"))
+        .thenMany(
+          Flux.range(1, count)
+            .delayElements(Duration.ofSeconds(2))
+            .doOnNext(i => logger.info(s"[StreamingDemoTool] Processing iteration $i/$count (after 2s delay)"))
+            .flatMap { i =>
+              val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
+              val iterationMeta = java.util.Map.of[String, Object](
+                "toolName", request.name(),
+                "startTime", Long.box(startTime),
+                "iteration", Integer.valueOf(i),
+                "elapsedSeconds", Double.box(elapsed)
+              )
 
-            val notification = new McpSchema.ProgressNotification(
-              progressToken,
-              Double.box(i.toDouble),
-              Double.box(count.toDouble),
-              s"[$streamingDemoName] Processed '$message' ($i/$count) - ${elapsed}s elapsed",
-              iterationMeta
-            )
+              val notification = new McpSchema.ProgressNotification(
+                progressToken,
+                Double.box(i.toDouble),
+                Double.box(count.toDouble),
+                s"[$streamingDemoName] Processed '$message' ($i/$count) - ${elapsed}s elapsed",
+                iterationMeta
+              )
 
-            exchange.progressNotification(notification)
-              .doOnSuccess(_ => logger.info(s"[StreamingDemoTool] Sent progress notification: $i/$count"))
-          }
-      )
+              exchange.progressNotification(notification)
+                .doOnSuccess(_ => logger.info(s"[StreamingDemoTool] Sent progress notification: $i/$count"))
+            }
+        ).`then`(
+          Mono.fromSupplier(() => {
+            val endTime = System.currentTimeMillis()
+            val totalElapsed = (endTime - startTime) / 1000.0
 
-      // After all notifications, return the final result
-      notificationFlux.`then`(
-        Mono.fromSupplier(() => {
-          val endTime = System.currentTimeMillis()
-          val totalElapsed = (endTime - startTime) / 1000.0
+            logger.info(s"[StreamingDemoTool] Streaming complete: $count iterations in ${totalElapsed}s")
 
-          logger.info(s"[StreamingDemoTool] Streaming complete: $count iterations in ${totalElapsed}s")
+            val response1 = "This is the final response"
 
-          val headerParts = Seq(
-            s"🎭 Streaming Demo Response (TRUE STREAMING with 2s delays)",
-            s"Streaming Demo: $streamingDemoName",
-            s"Start Time: $startTime",
-            s"End Time: $endTime",
-            s"Total Duration: ${totalElapsed}s",
-            s"Message Count: $count",
-            s"Progress Token: $progressToken",
-            s"",
-            s"📨 Received Message: \"$message\"",
-            s""
-          )
-          val streamParts = (1 to count).flatMap { i =>
-            Seq(
-              s"[Stream $i/$count] Processing...",
-              s"  ├─ Message validated",
-              s"  ├─ Streaming Demo state updated",
-              s"  └─ Response: \"$streamingDemoName processed '$message' (iteration $i)\"",
-              if (i < count) "" else s""
-            )
-          }
-          val footerParts = Seq(
-            s"✅ Processing Complete",
-            s"   Total messages processed: $count",
-            s"   Total duration: ${totalElapsed}s (expected: ~${count * 2}s)",
-            s"   Status: SUCCESS",
-            s"",
-            s"📊 Progress Notifications:",
-            s"   - Progress Token: $progressToken",
-            s"   - Notifications sent: ${count + 1} (initial + $count iterations)",
-            s"   - Each notification includes correlation metadata:",
-            s"     • toolName: ${request.name()}",
-            s"     • startTime: $startTime",
-            s"     • iteration: (current iteration number)",
-            s"     • elapsedSeconds: (time elapsed for that iteration)",
-            s"",
-            s"ℹ️  TRUE Streaming Demo:",
-            s"   - Real 2-second delays using Flux.delayElements(Duration.ofSeconds(2))",
-            s"   - Progress notifications sent via SSE with correlation metadata",
-            s"   - Non-blocking execution on Reactor scheduler",
-            s"   - Clients can correlate notifications using progressToken + metadata"
-          )
-          val response = (headerParts ++ streamParts ++ footerParts).mkString("\n")
-          McpUtils.createTextResult(response)
-        })
-      )
+            McpUtils.createTextResult(response1)
+          })
+        )
     }
   }
 }
