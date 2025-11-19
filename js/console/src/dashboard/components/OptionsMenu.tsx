@@ -7,11 +7,9 @@ import {paperClasses} from '@mui/material/Paper';
 import {listClasses} from '@mui/material/List';
 import ListItemText from '@mui/material/ListItemText';
 import ListItemIcon, {listItemIconClasses} from '@mui/material/ListItemIcon';
-import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded';
 import MenuButton from './MenuButton';
-//import { firebaseAuth } from '../../firebase/firebaseConfig';
-import { auth } from "../../firebase";
+import {useAuth0} from '@auth0/auth0-react';
 
 
 
@@ -20,6 +18,7 @@ const MenuItem = styled(MuiMenuItem)({
 });
 
 export default function OptionsMenu() {
+    const { logout } = useAuth0();
     const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
     const open = Boolean(anchorEl);
     const handleClick = (event: React.MouseEvent<HTMLElement>) => {
@@ -30,13 +29,12 @@ export default function OptionsMenu() {
         setAnchorEl(null);
     };
 
-    const handleLogout = async () => {
-        try {
-            await auth.signOut();
-            console.log('User signed out');
-        } catch (error) {
-            console.error('Error signing out: ', error);
-        }
+    const handleLogout = () => {
+        logout({
+            logoutParams: {
+                returnTo: window.location.origin
+            }
+        });
     };
 
     return (

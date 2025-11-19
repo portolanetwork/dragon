@@ -5,19 +5,10 @@ import FormControl from '@mui/material/FormControl';
 import FormLabel from '@mui/material/FormLabel';
 import RadioGroup from '@mui/material/RadioGroup';
 import Radio from '@mui/material/Radio';
-import Subscription from './Subscription';
+
 
 const Settings: React.FC = () => {
     const { mode, setMode } = useColorScheme();
-    //const [darkMode, setDarkMode] = React.useState(mode === 'dark');
-
-    /*
-    const handleDarkModeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        setDarkMode(event.target.checked);
-        setMode(event.target.checked ? 'dark' : 'light');
-    };
-
-     */
 
     return (
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>

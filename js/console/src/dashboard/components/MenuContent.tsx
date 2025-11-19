@@ -7,13 +7,12 @@ import ListItemButton from '@mui/material/ListItemButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Stack from '@mui/material/Stack';
-import {useAuthState} from "react-firebase-hooks/auth";
-import {auth} from "../../firebase";
 import {MenuContentProps} from "./types/MenuContentProps";
 import DeleteIcon from '@mui/icons-material/Delete';
 import Typography from "@mui/material/Typography";
 import ClearIcon from '@mui/icons-material/Clear';
 import Divider from '@mui/material/Divider';
+import {useAuth0} from '@auth0/auth0-react';
 
 
 export default function MenuContent({
@@ -21,17 +20,11 @@ export default function MenuContent({
                                         middleListItems = [],
                                         secondaryListItems = [],
                                     }: MenuContentProps) {
-    const [user] = useAuthState(auth);
-    //const [selectedIndex, setSelectedIndex] = useState(0);
+    const { user, isAuthenticated } = useAuth0();
 
-    if (!user) {
+    if (!isAuthenticated || !user) {
         throw new Error("User is not authenticated");
     }
-
-    //const handleListItemClick = (index: number, onClick: () => void) => {
-        //setSelectedIndex(index);
-        //onClick();
-    //};
 
     return (
         <Stack sx={{flexGrow: 1, p: 1, height: '100%'}}>
@@ -42,8 +35,6 @@ export default function MenuContent({
                             <ListItem disablePadding sx={{display: 'block'}}>
                                 <ListItemButton
                                     disabled={item.isDisabled ?? false}
-                                    //selected={selectedIndex === index}
-                                    //onClick={() => handleListItemClick(index, item.onClick)}>
                                     selected={item.isSelected}
                                     onClick={item.onClick}>
                                     <ListItemIcon>{item.icon}</ListItemIcon>
@@ -142,8 +133,6 @@ export default function MenuContent({
                     {secondaryListItems.map((item, index) => (
                         <ListItem key={index} disablePadding sx={{display: 'block'}}>
                             <ListItemButton
-                                //selected={selectedIndex === index + mainListItems.length}
-                                //onClick={() => handleListItemClick(index, item.onClick)}>
                                 selected={item.isSelected}
                                 onClick={item.onClick}>
                                 <ListItemIcon>{item.icon}</ListItemIcon>

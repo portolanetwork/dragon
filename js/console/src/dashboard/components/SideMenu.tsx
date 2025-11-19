@@ -8,8 +8,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import MenuContent from './MenuContent';
 import OptionsMenu from './OptionsMenu';
-import {useAuthState} from 'react-firebase-hooks/auth';
-import {auth} from "../../firebase";
+import {useAuth0} from '@auth0/auth0-react';
 import {MenuContentProps} from "./types/MenuContentProps";
 
 
@@ -32,14 +31,14 @@ export default function SideMenu({
                                      middleListItems,
                                      secondaryListItems
                                  }: MenuContentProps) {
-    const [user, loading, error] = useAuthState(auth);
+    const { user, isLoading } = useAuth0();
 
-    if (loading) {
+    if (isLoading) {
         return <div>Loading...</div>;
     }
 
-    let photoURL = user?.photoURL ?? undefined;
-    let displayName = user?.displayName ?? undefined;
+    let photoURL = user?.picture ?? undefined;
+    let displayName = user?.name ?? undefined;
     let email = user?.email;
 
     return (

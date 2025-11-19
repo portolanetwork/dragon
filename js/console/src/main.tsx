@@ -6,10 +6,6 @@ import theme from './theme';
 import App from './dashboard/Dashboard';
 import { createBrowserRouter, RouterProvider } from 'react-router';
 import Auth0ProtectedRoute from './dashboard/components/Auth0ProtectedRoute';
-import SignInContainer from './sign-in/SignIn';
-import LoginPending from "./dashboard/components/LoginPending";
-import MessagePage from "./dashboard/components/MessagePage";
-import LoginDone from './dashboard/components/LoginDone';
 import {Auth0Provider} from "@auth0/auth0-react";
 
 const router = createBrowserRouter([
@@ -30,22 +26,6 @@ const router = createBrowserRouter([
                 </Auth0ProtectedRoute>
             </Auth0Provider>
         ),
-    },
-    {
-        path: '/sign-in',
-        element: <SignInContainer />,
-    },
-    {
-        path: '/proceed',
-        element: <LoginDone />,
-    },
-    {
-        path: '/pending',
-        element: <LoginPending />,
-    },
-    {
-        path: '/message',
-        element: <MessagePage />,
     }
 ]);
 

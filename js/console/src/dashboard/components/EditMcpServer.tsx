@@ -384,7 +384,7 @@ const EditMcpServer = ({ serverUuid, onGoBack }: EditMcpServerProps) => {
                                 onClick={handleDeleteClick}
                                 disabled={deleting || connecting || disconnecting}
                             >
-                                {deleting ? 'Deleting...' : 'Delete Server'}
+                                {deleting ? 'Deleting...' : 'Delete'}
                             </Button>
 
                             <Button

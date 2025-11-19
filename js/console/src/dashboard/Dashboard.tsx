@@ -26,25 +26,19 @@ import StorageIcon from '@mui/icons-material/Storage';
 
 import {
   chartsCustomizations,
-  //dataGridCustomizations,
-  //datePickersCustomizations,
   treeViewCustomizations,
 } from './theme/customizations';
 import McpServersGrid from "./components/McpServersGrid";
 import EditMcpServer from "./components/EditMcpServer";
 import AddMcpServer from "./components/AddMcpServer";
 import {useEffect} from "react";
-import {useAuthState} from "react-firebase-hooks/auth";
 
 
 const xThemeComponents = {
   ...chartsCustomizations,
-  //...dataGridCustomizations,
-  //...datePickersCustomizations,
   ...treeViewCustomizations,
 };
 
-import { auth } from "../firebase";
 
 const drawerWidth = 400;
 
@@ -52,22 +46,12 @@ const drawerWidth = 400;
 export default function Dashboard(props: { disableCustomTheme?: boolean }) {
     const [selectedMenuItem, setSelectedMenuItem] = React.useState<string[]>(['MCP Servers']);
     const [drawerOpen, setDrawerOpen] = React.useState(false);
-    const [user] = useAuthState(auth);
     const [selectedMcpServerUuid, setSelectedMcpServerUuid] = useState<string | null>(null);
     const [mcpServersRefreshTrigger, setMcpServersRefreshTrigger] = useState(0);
 
     const [mainMenuProps, setMainMenuProps] = useState<MenuItem[]>([]);
     const [secondaryMenuProps, setSecondaryMenuProps] = useState<MenuItem[]>([]);
 
-    /*
-    const toggleDrawer = (newOpen: boolean) => () => {
-        setOpen(newOpen);
-    };
-     */
-
-    if (!user) {
-        throw new Error("User is not authenticated");
-    }
 
     useEffect(() => {
         setMainMenuProps(mainListItems(handleMenuItemClick));
