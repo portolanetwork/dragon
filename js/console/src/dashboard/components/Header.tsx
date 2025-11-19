@@ -21,41 +21,6 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({selectedMenuItem, onDrawerToggle}) => {
 
-    const handleDownloadClick = async () => {
-        let appCastUrl = `https://portolanetwork.github.io/portola-appcast/appcast.xml`;
-
-        const currentDomain = window.location.hostname;
-        console.log("Current Domain:", currentDomain);
-
-        if (currentDomain === "portola.app") {
-            appCastUrl = `https://portolanetwork.github.io/portola-appcast/appcast.xml`;
-        } else if (currentDomain === "staging-app.portolanetwork.com" || currentDomain === "localhost") {
-            appCastUrl = `https://portolanetwork.github.io/portola-staging-appcast/appcast.xml`;
-        }
-
-        console.log("AppCast URL:", appCastUrl);
-
-        try {
-            const response = await fetch(appCastUrl);
-            if (!response.ok) throw new Error("Failed to fetch appcast.xml");
-
-            const xmlText = await response.text();
-            const parser = new DOMParser();
-            const xmlDoc = parser.parseFromString(xmlText, "application/xml");
-
-            const enclosure = xmlDoc.querySelector("enclosure");
-            if (enclosure) {
-                const fileUrl = enclosure.getAttribute("url");
-                if (fileUrl) {
-                    window.location.href = fileUrl; // Trigger the download
-                    console.log("Download triggered for:", fileUrl);
-                }
-            }
-        } catch (error) {
-            console.error("Error fetching or parsing appcast.xml:", error);
-        }
-    };
-
     return (
         <Stack
             direction="row"
@@ -80,17 +45,6 @@ const Header: React.FC<HeaderProps> = ({selectedMenuItem, onDrawerToggle}) => {
         <ColorModeIconDropdown />
                   */
                     <>
-                    <Button
-                        variant="outlined"
-                        color="primary"
-                        onClick={handleDownloadClick}
-                        sx={{margin: '10px'}}
-                        startIcon={<AppleIcon/>}
-                    >
-                        Download for macOS
-                    </Button>
-
-
                         <MenuButton aria-label="Open notifications" onClick={onDrawerToggle}>
                             <HelpRounded/>
                         </MenuButton>
