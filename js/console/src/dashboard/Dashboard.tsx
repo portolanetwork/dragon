@@ -46,7 +46,7 @@ import {
 import AllExportsGrid from "./components/AllExportsGrid";
 import AuthClientGrid from "./components/AuthClientGrid";
 import McpServersGrid from "./components/McpServersGrid";
-import McpServerDetails from "./components/McpServerDetails";
+import EditMcpServer from "./components/EditMcpServer";
 import AddMcpServer from "./components/AddMcpServer";
 import SpyderProxy from "../spyder_proxy/SpyderProxy";
 import {useEffect} from "react";
@@ -221,11 +221,12 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
 
     const handleMcpServerSelect = (serverUuid: string) => {
         setSelectedMcpServerUuid(serverUuid);
-        setSelectedMenuItem(['MCP Server Details', serverUuid]);
+        setSelectedMenuItem(['Edit MCP Server', serverUuid]);
     };
 
-    const handleMcpServerDetailsBack = () => {
+    const handleEditMcpServerBack = () => {
         setSelectedMcpServerUuid(null);
+        setMcpServersRefreshTrigger(prev => prev + 1); // Trigger refresh
         setSelectedMenuItem(['MCP Servers']);
     };
 
@@ -296,8 +297,8 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
                     {selectedMenuItem.at(0) === 'Add MCP Server' && (
                         <AddMcpServer onGoBack={handleAddMcpServerBack} />
                     )}
-                    {selectedMenuItem.at(0) === 'MCP Server Details' && selectedMcpServerUuid && (
-                        <McpServerDetails serverUuid={selectedMcpServerUuid} onGoBack={handleMcpServerDetailsBack} />
+                    {selectedMenuItem.at(0) === 'Edit MCP Server' && selectedMcpServerUuid && (
+                        <EditMcpServer serverUuid={selectedMcpServerUuid} onGoBack={handleEditMcpServerBack} />
                     )}
                     {selectedMenuItem.at(0) === 'New Chat' && <NewChatWindow onCreateChat={handleCreateChat} />}
                     {selectedMenuItem.at(0) === 'Chat' && <ChatWindow

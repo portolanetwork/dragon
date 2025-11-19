@@ -160,6 +160,15 @@ class DragonProxy {
     public async removeMcpServer(user: User, uuid: string): Promise<void> {
         try {
             const accessToken = await this.getAccessToken(user);
+            return await this.removeMcpServerWithToken(user.uid, accessToken, uuid);
+        } catch (error: any) {
+            console.error("Error removing MCP server: ", error.message);
+            throw error;
+        }
+    }
+
+    public async removeMcpServerWithToken(userId: string, accessToken: string, uuid: string): Promise<void> {
+        try {
             const metadata = { Authorization: `Bearer ${accessToken}` };
 
             await this.client.removeMcpServer(
@@ -177,6 +186,15 @@ class DragonProxy {
     public async getLoginStatusForMcpServer(user: User, uuid: string): Promise<McpServerLoginStatus> {
         try {
             const accessToken = await this.getAccessToken(user);
+            return await this.getLoginStatusForMcpServerWithToken(user.uid, accessToken, uuid);
+        } catch (error: any) {
+            console.error("Error getting login status for MCP server: ", error.message);
+            throw error;
+        }
+    }
+
+    public async getLoginStatusForMcpServerWithToken(userId: string, accessToken: string, uuid: string): Promise<McpServerLoginStatus> {
+        try {
             const metadata = { Authorization: `Bearer ${accessToken}` };
 
             const unaryCall = await this.client.getLoginStatusForMcpServer(
@@ -195,6 +213,15 @@ class DragonProxy {
     public async loginMcpServer(user: User, uuid: string): Promise<string> {
         try {
             const accessToken = await this.getAccessToken(user);
+            return await this.loginMcpServerWithToken(user.uid, accessToken, uuid);
+        } catch (error: any) {
+            console.error("Error logging in to MCP server: ", error.message);
+            throw error;
+        }
+    }
+
+    public async loginMcpServerWithToken(userId: string, accessToken: string, uuid: string): Promise<string> {
+        try {
             const metadata = { Authorization: `Bearer ${accessToken}` };
 
             const unaryCall = await this.client.loginMcpServer(
@@ -213,6 +240,15 @@ class DragonProxy {
     public async logoutMcpServer(user: User, uuid: string): Promise<void> {
         try {
             const accessToken = await this.getAccessToken(user);
+            return await this.logoutMcpServerWithToken(user.uid, accessToken, uuid);
+        } catch (error: any) {
+            console.error("Error logging out from MCP server: ", error.message);
+            throw error;
+        }
+    }
+
+    public async logoutMcpServerWithToken(userId: string, accessToken: string, uuid: string): Promise<void> {
+        try {
             const metadata = { Authorization: `Bearer ${accessToken}` };
 
             await this.client.logoutMcpServer(
