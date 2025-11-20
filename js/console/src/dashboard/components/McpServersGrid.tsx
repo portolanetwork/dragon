@@ -101,7 +101,7 @@ const McpServersGrid = ({ onServerSelect, onAddServer, refreshTrigger }: McpServ
         },
         {
             field: 'hasStaticToken',
-            headerName: 'Has Token',
+            headerName: 'Static Token',
             width: 100,
             renderCell: (params) => (
                 <Chip

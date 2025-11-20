@@ -62,45 +62,7 @@ class MgmtServiceImpl(authEnabled: Boolean)(
   private val logger: Logger = LoggerFactory.getLogger(classOf[MgmtServiceImpl])
 
   implicit private val ec: ExecutionContext = ExecutionContext.global
-
-  /**
-   * Converts a database row to a McpServer proto message.
-   */
-  private def rowToMcpServer(row: McpServerRow): McpServer = {
-    val authType = stringToAuthType(row.authType)
-    val transportType = stringToTransportType(row.transportType)
-
-    // Build OAuth config if auth type is DISCOVER and OAuth fields are present
-    val oauthConfig = if (authType == AuthType.AUTH_TYPE_DISCOVER) {
-      Some(OAuthConfig(
-        clientId = row.clientId.getOrElse(""),
-        tokenEndpoint = row.tokenEndpoint.getOrElse(""),
-        hasClientSecret = row.clientSecret.isDefined,
-        hasRefreshToken = row.refreshToken.isDefined
-      ))
-    } else {
-      None
-    }
-
-    McpServer(
-      uuid = row.uuid.toString,
-      name = row.name,
-      url = row.url,
-      authType = authType,
-      transportType = transportType,
-      hasStaticToken = row.staticToken.isDefined,
-      oauthConfig = oauthConfig,
-      createdAt = Some(com.google.protobuf.timestamp.Timestamp(
-        seconds = row.createdAt.getTime / 1000,
-        nanos = ((row.createdAt.getTime % 1000) * 1000000).toInt
-      )),
-      updatedAt = Some(com.google.protobuf.timestamp.Timestamp(
-        seconds = row.updatedAt.getTime / 1000,
-        nanos = ((row.updatedAt.getTime % 1000) * 1000000).toInt
-      ))
-    )
-  }
-
+  
   /**
    * Create a new MCP server registration.
    *
@@ -467,6 +429,39 @@ class MgmtServiceImpl(authEnabled: Boolean)(
     case TransportType.TRANSPORT_TYPE_STREAMING_HTTP => "streaming_http"
     case TransportType.TRANSPORT_TYPE_UNSPECIFIED | TransportType.Unrecognized(_) => "streaming_http"
   }
+  
+  /**
+   * Converts a database row to a McpServer proto message.
+   */
+  private def rowToMcpServer(row: McpServerRow): McpServer = {
+    val authType = stringToAuthType(row.authType)
 
+    McpServer(
+      uuid = row.uuid.toString,
+      name = row.name,
+      url = row.url,
+      authType = authType,
+      transportType = stringToTransportType(row.transportType),
+      hasStaticToken = row.staticToken.isDefined,
+      oauthConfig = authType match {
+        case AuthType.AUTH_TYPE_DISCOVER =>
+          Some(OAuthConfig(
+            clientId = row.clientId.getOrElse(""),
+            tokenEndpoint = row.tokenEndpoint.getOrElse(""),
+            hasClientSecret = row.clientSecret.isDefined,
+            hasRefreshToken = row.refreshToken.isDefined
+          ))
+        case _ => None
+      },
+      createdAt = Some(com.google.protobuf.timestamp.Timestamp(
+        seconds = row.createdAt.getTime / 1000,
+        nanos = ((row.createdAt.getTime % 1000) * 1000000).toInt
+      )),
+      updatedAt = Some(com.google.protobuf.timestamp.Timestamp(
+        seconds = row.updatedAt.getTime / 1000,
+        nanos = ((row.updatedAt.getTime % 1000) * 1000000).toInt
+      ))
+    )
+  }
 
 }
