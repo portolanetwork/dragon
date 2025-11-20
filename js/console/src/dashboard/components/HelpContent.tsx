@@ -5,123 +5,122 @@ import {Fragment} from "react";
 function HelpContent({selectedMenuItem}: { selectedMenuItem: string[] }) {
     const getHelpContent = () => {
         switch (selectedMenuItem.at(0)) {
-            case 'Endpoints':
+            case 'MCP Servers':
                 return (
                     <>
-                        <Typography variant="h6">Endpoints</Typography>
+                        <Typography variant="h6">MCP Servers</Typography>
                         <Typography variant="body1" paragraph>
-                            An Endpoint corresponds to a device/computer running under your account on Portola Network.
+                            MCP Servers available in available in your account.
                         </Typography>
-                        <Typography variant="body1" paragraph>
-                            Install the Portola App on your MacOS device. The device will show up here as an Endpoint.
-                        </Typography>
-                        <Typography variant="subtitle1" sx={{ mb: 2 }}>Actions</Typography>
-                        <Typography variant="subtitle2">Caffeinate</Typography>
-                        <Typography variant="body1" paragraph>
-                            Keep your Mac awake by clicking the Caffeinate button. If the device is currently offline,
-                            it will be Caffeinated when it comes online periodically per MacOs system settings. To prevent
-                            battery depletion, a device cannot be caffeinated when on battery power.
-                        </Typography>
-                        <Typography variant="subtitle2">Create Port Forward - Private</Typography>
-                        <Typography variant="body1" paragraph>
-                            To create a TCP Port Forward between two Endpoints on your account, click the
-                            Create Port Forward button. You will be prompted to enter Server and Client ports. The tunnel
-                            will be active immediately if the endpoints are online.
-                        </Typography>
-                        <Typography variant="subtitle2">Create Export</Typography>
-                        <Typography variant="body1" paragraph>
-                            To create a TCP Port Forward between your Endpoint and a remote Endpoint on another account,
-                            you can create an Export. You will be prompted to enter Server ports and remote users' email.
-                            The remote user will receive an email to accept the Export and pick Client side of the tunnel
-                            using 'Create Port-Forward From Export'.
-                        </Typography>
-                        <Typography variant="subtitle2">Create Port-forward - From Export</Typography>
-                        <Typography variant="body1" paragraph>
-                            To create a TCP Port Forward from an Export created by another user, click the 'Create Port-forward
-                            From Export' button. You will be prompted to enter Client port. The tunnel will be active immediately
-                            if the endpoints are online.
-                        </Typography>
-                        <Typography variant="subtitle1" sx={{ mb: 2 }}>Endpoint Detail</Typography>
-                        <Typography variant="body1" paragraph>
-                            Clicking on an Endpoint row will display 'Endpoint details' for the selected Endpoint.
-                        </Typography>
-                        <Typography variant="subtitle2">Tab: Tunnels</Typography>
-                        <Typography variant="body1" paragraph>
-                            This section displays all the Port Forwards created on selected Endpoint and their status. You can delete
-                            a Port Forward by clicking the 'Delete' button. The tunnel will be deleted immediately.
-                        </Typography>
-                        <Typography variant="subtitle2">Tab: Exports</Typography>
-                        <Typography variant="body1" paragraph>
-                            This section displays all the Exports created on selected Endpoint. You can delete an Export
-                            by clicking the 'Delete' buttonee.
-                        </Typography>
-                    </>
-                );
-            case 'Tunnels':
-                return (
-                    <>
-                        <Typography variant="h6">Port Forwards</Typography>
-                        <Typography variant="body1" paragraph>
-                            A Port Forward is a TCP tunnel connecting ports on two Endpoints on your account. This table
-                            displays all the Port Forwards created on an Endpoint on your account. A Port Forward is active
-                            when both Endpoints are online.
-                        </Typography>
-                        <Typography variant="body1" paragraph>
-                            A Port Forward can be deleted by clicking the 'Delete' button. The tunnel will be deleted immediately.
-                        </Typography>
-                    </>
-                );
-            case 'Exports':
-                return (
-                    <>
-                        <Typography variant="h6">Exports</Typography>
-                        <Typography variant="body1" paragraph>
-                            This Exports table displays all the Exports created and shared with you by other Portola users. You can
-                            create a Port Forward from an Export by clicking the 'Create Port-forward From Export' button in
-                            the Endpoints section.
-                        </Typography>
-                        <Typography variant="body1" paragraph>
-                            A Port Forward can be deleted by clicking the 'Delete' button. The tunnel will be deleted immediately.
-                        </Typography>
-                    </>
-                );
-            case 'Finder':
-                return (
-                    <>
-                        <Typography variant="h6">Dual Pane File Manager</Typography>
-                        <Typography variant="body1" paragraph>
-                            The Dual Pane File Manager allows you to view and manage filesystems from two different machines side by side.
-                            This feature is designed to simplify file transfers and basic file system actions between two endpoints.
-                        </Typography>
-                        <Typography variant="subtitle1" sx={{ mb: 2 }}>Key Features</Typography>
-                        <Typography variant="subtitle2">Side-by-Side View</Typography>
-                        <Typography variant="body1" paragraph>
-                            Each pane represents the filesystem of a different machine. You can navigate through directories, view files,
-                            and perform actions independently in each pane.
-                        </Typography>
-                        <Typography variant="subtitle2">Drag and Drop File Transfers</Typography>
-                        <Typography variant="body1" paragraph>
-                            Easily transfer files between the two machines by dragging and dropping files or folders from one pane to the other.
-                            The system ensures that files are copied to the correct location.
-                        </Typography>
-                        <Typography variant="subtitle2">Basic File System Actions</Typography>
-                        <Typography variant="body1" paragraph>
-                            Perform basic file system actions such as creating directories, renaming files, and refreshing the view.
-                            These actions are available for both panes and can be performed independently.
-                        </Typography>
-                        <Typography variant="subtitle2">Quick Filters</Typography>
-                        <Typography variant="body1" paragraph>
-                            Use the quick filter feature to search and filter files within each pane. This helps you locate files quickly
-                            without manually navigating through directories.
-                        </Typography>
-                        <Typography variant="subtitle2">Endpoint Management</Typography>
-                        <Typography variant="body1" paragraph>
-                            Select and manage endpoints for each pane. You can switch between different machines and configure their settings
-                            as needed.
-                        </Typography>
-                    </>
-                );
 
+                        <Typography variant="subtitle1" sx={{ mb: 2 }}>MCP Servers Overview</Typography>
+                        <Typography variant="body1" paragraph>
+                            The MCP Servers table displays all configured servers, showing their UUID, name, URL,
+                            authentication type, transport protocol, token status, and creation date. Click on any
+                            server row to view its details and manage its settings.
+                        </Typography>
+
+                        <Typography variant="subtitle1" sx={{ mb: 2 }}>Adding a New MCP Server</Typography>
+                        <Typography variant="body1" paragraph>
+                            Click the "Add MCP Server" button to configure a new server.
+                        </Typography>
+                        <Typography variant="subtitle1" sx={{ mb: 2 }}>Managing MCP Servers</Typography>
+                        <Typography variant="body1" paragraph>
+                            Click on a server in the table to access its detail page.
+                        </Typography>
+                    </>
+                );
+            case 'Edit MCP Server':
+                return (
+                    <>
+                        <Typography variant="h6">MCP Server Details</Typography>
+                        <Typography variant="body1" paragraph>
+                            This page displays the configuration details for the selected MCP server.
+                        </Typography>
+
+                        <Typography variant="subtitle1" sx={{ mb: 2 }}>Server Information</Typography>
+                        <Typography variant="body1" paragraph>
+                            View the server's UUID, name, URL, authentication type, transport protocol, static token
+                            status, and creation/update timestamps. For servers using OAuth Discovery authentication,
+                            the current connection status is also displayed.
+                        </Typography>
+
+                        <Typography variant="subtitle1" sx={{ mb: 2 }}>Available Actions</Typography>
+                        <Typography variant="subtitle2">Connect/Disconnect</Typography>
+                        <Typography variant="body1" paragraph>
+                            Available only for servers using OAuth Discovery authentication. Click Connect to open
+                            a new window for authentication. Once authenticated, use Disconnect to terminate the
+                            connection. The current connection status is shown in the Connection Status field.
+                        </Typography>
+                        <Typography variant="subtitle2">Load Tools</Typography>
+                        <Typography variant="body1" paragraph>
+                            Activate this MCP server's tools, making them available to your upstream AI assistant.
+                        </Typography>
+                        <Typography variant="subtitle2">Unload Tools</Typography>
+                        <Typography variant="body1" paragraph>
+                            Deactivate this server's tools.
+                        </Typography>
+                        <Typography variant="subtitle2">Delete</Typography>
+                        <Typography variant="body1" paragraph>
+                            Permanently remove this server configuration. You will be prompted to confirm before
+                            deletion. This action cannot be undone.
+                        </Typography>
+                    </>
+                );
+            case 'Add MCP Server':
+                return (
+                    <>
+                        <Typography variant="h6">Add MCP Server</Typography>
+                        <Typography variant="body1" paragraph>
+                            Configure a new MCP (Model Context Protocol) server to extend your AI assistant's
+                            capabilities with additional tools and resources.
+                        </Typography>
+
+                        <Typography variant="subtitle1" sx={{ mb: 2 }}>Required Fields</Typography>
+                        <Typography variant="subtitle2">Name</Typography>
+                        <Typography variant="body1" paragraph>
+                            Provide a friendly, descriptive name for this MCP server. This name will be used to
+                            identify the server in the MCP Servers list.
+                        </Typography>
+                        <Typography variant="subtitle2">URL</Typography>
+                        <Typography variant="body1" paragraph>
+                            Enter the full URL endpoint of the MCP server (e.g., https://example.com/mcp).
+                        </Typography>
+                        <Typography variant="subtitle2">Authentication Type</Typography>
+                        <Typography variant="body1" paragraph>
+                            Select the authentication method required by the server:
+                        </Typography>
+                        <Typography variant="body1" paragraph>
+                            <strong>None:</strong> No authentication required. The server is publicly accessible.
+                        </Typography>
+                        <Typography variant="body1" paragraph>
+                            <strong>OAuth Discovery:</strong> Uses OAuth for authentication. After adding the server,
+                            you'll need to connect and authenticate through the OAuth provider.
+                        </Typography>
+                        <Typography variant="body1" paragraph>
+                            <strong>Static Header:</strong> Uses a static authentication token. When selected, you
+                            must provide the token in the Static Token field that appears below.
+                        </Typography>
+                        <Typography variant="subtitle2">Transport Type</Typography>
+                        <Typography variant="body1" paragraph>
+                            Select the communication protocol. Currently, only Streaming HTTP is supported for
+                            real-time communication with the MCP server.
+                        </Typography>
+                        <Typography variant="subtitle2">Static Token (conditional)</Typography>
+                        <Typography variant="body1" paragraph>
+                            This field appears only when Static Header authentication is selected. Enter the
+                            authentication token provided by the MCP server administrator. This token will be
+                            stored securely and used for all requests to the server.
+                        </Typography>
+
+                        <Typography variant="subtitle1" sx={{ mb: 2 }}>Saving</Typography>
+                        <Typography variant="body1" paragraph>
+                            Click "Add Server" to save the configuration. After successful creation, you'll be
+                            redirected back to the MCP Servers list where you can manage the new server. Click
+                            "Cancel" to return without saving.
+                        </Typography>
+                    </>
+                );
 
             case 'Settings':
                 return (
