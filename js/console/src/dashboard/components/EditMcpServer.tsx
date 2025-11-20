@@ -20,6 +20,8 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DeleteIcon from '@mui/icons-material/Delete';
 import LoginIcon from '@mui/icons-material/Login';
 import LogoutIcon from '@mui/icons-material/Logout';
+import DownloadIcon from '@mui/icons-material/Download';
+import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import { AuthType, TransportType, LoginStatus } from "../../proto/dragon/turnstile/v1/turnstile_service";
 
 interface EditMcpServerProps {
@@ -38,6 +40,8 @@ const EditMcpServer = ({ serverUuid, onGoBack }: EditMcpServerProps) => {
     const [checkingLoginStatus, setCheckingLoginStatus] = useState(false);
     const [connecting, setConnecting] = useState(false);
     const [disconnecting, setDisconnecting] = useState(false);
+    const [loadingTools, setLoadingTools] = useState(false);
+    const [unloadingTools, setUnloadingTools] = useState(false);
 
     useEffect(() => {
         const fetchServerDetails = async () => {
@@ -175,6 +179,62 @@ const EditMcpServer = ({ serverUuid, onGoBack }: EditMcpServerProps) => {
             setError(`Failed to disconnect: ${error.message}`);
         } finally {
             setDisconnecting(false);
+        }
+    };
+
+    const handleLoadTools = async () => {
+        setError(null);
+
+        if (!user?.sub) {
+            setError('User not authenticated');
+            return;
+        }
+
+        try {
+            setLoadingTools(true);
+            const accessToken = await getAccessTokenSilently();
+
+            await DragonProxy.getInstance().loadToolsForMcpServerWithToken(
+                user.sub,
+                accessToken,
+                serverUuid
+            );
+
+            // Show success message by clearing any errors
+            setError(null);
+        } catch (error: any) {
+            console.error("Error loading tools for MCP server: ", error.message);
+            setError(`Failed to load tools: ${error.message}`);
+        } finally {
+            setLoadingTools(false);
+        }
+    };
+
+    const handleUnloadTools = async () => {
+        setError(null);
+
+        if (!user?.sub) {
+            setError('User not authenticated');
+            return;
+        }
+
+        try {
+            setUnloadingTools(true);
+            const accessToken = await getAccessTokenSilently();
+
+            await DragonProxy.getInstance().unloadToolsForMcpServerWithToken(
+                user.sub,
+                accessToken,
+                serverUuid
+            );
+
+            // Show success message by clearing any errors
+            setError(null);
+        } catch (error: any) {
+            console.error("Error unloading tools for MCP server: ", error.message);
+            setError(`Failed to unload tools: ${error.message}`);
+        } finally {
+            setUnloadingTools(false);
         }
     };
 
@@ -359,7 +419,7 @@ const EditMcpServer = ({ serverUuid, onGoBack }: EditMcpServerProps) => {
                                             color="warning"
                                             startIcon={<LogoutIcon />}
                                             onClick={handleDisconnect}
-                                            disabled={disconnecting || connecting || deleting}
+                                            disabled={disconnecting || connecting || deleting || loadingTools || unloadingTools}
                                         >
                                             {disconnecting ? 'Disconnecting...' : 'Disconnect'}
                                         </Button>
@@ -369,7 +429,7 @@ const EditMcpServer = ({ serverUuid, onGoBack }: EditMcpServerProps) => {
                                             color="success"
                                             startIcon={<LoginIcon />}
                                             onClick={handleConnect}
-                                            disabled={connecting || disconnecting || deleting}
+                                            disabled={connecting || disconnecting || deleting || loadingTools || unloadingTools}
                                         >
                                             {connecting ? 'Connecting...' : 'Connect'}
                                         </Button>
@@ -379,10 +439,30 @@ const EditMcpServer = ({ serverUuid, onGoBack }: EditMcpServerProps) => {
 
                             <Button
                                 variant="contained"
+                                color="primary"
+                                startIcon={<DownloadIcon />}
+                                onClick={handleLoadTools}
+                                disabled={loadingTools || unloadingTools || connecting || disconnecting || deleting}
+                            >
+                                {loadingTools ? 'Loading Tools...' : 'Load Tools'}
+                            </Button>
+
+                            <Button
+                                variant="contained"
+                                color="secondary"
+                                startIcon={<RemoveCircleOutlineIcon />}
+                                onClick={handleUnloadTools}
+                                disabled={unloadingTools || loadingTools || connecting || disconnecting || deleting}
+                            >
+                                {unloadingTools ? 'Unloading Tools...' : 'Unload Tools'}
+                            </Button>
+
+                            <Button
+                                variant="contained"
                                 color="error"
                                 startIcon={<DeleteIcon />}
                                 onClick={handleDeleteClick}
-                                disabled={deleting || connecting || disconnecting}
+                                disabled={deleting || connecting || disconnecting || loadingTools || unloadingTools}
                             >
                                 {deleting ? 'Deleting...' : 'Delete'}
                             </Button>
@@ -390,7 +470,7 @@ const EditMcpServer = ({ serverUuid, onGoBack }: EditMcpServerProps) => {
                             <Button
                                 variant="outlined"
                                 onClick={onGoBack}
-                                disabled={deleting || connecting || disconnecting}
+                                disabled={deleting || connecting || disconnecting || loadingTools || unloadingTools}
                             >
                                 Cancel
                             </Button>

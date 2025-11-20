@@ -196,7 +196,7 @@ class McpServerActor(
     }
 
     // Pipe the result to self
-    context.pipeToSelf(ToolsService.getInstance(mcpServerActorId.userId).getAllDownstreamToolsSpec()) {//turnstileMcpServer.refreshDownstreamTools()) {
+    context.pipeToSelf(ToolsService.getInstance(mcpServerActorId.userId).getAllDownstreamToolsSpec()) {
       case scala.util.Success(Right(toolSpecSeq)) => DownstreamRefreshStatus(Right((toolSpecSeq)))
       case scala.util.Success(Left(error)) => DownstreamRefreshStatus(Left(ProcessingError(error.toString)))
       case scala.util.Failure(error) => DownstreamRefreshStatus(Left(ProcessingError(error.getMessage)))

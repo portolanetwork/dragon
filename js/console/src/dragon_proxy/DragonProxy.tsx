@@ -15,6 +15,8 @@ import {
     RemoveMcpServerRequest,
     AddMcpServerRequest,
     TransportType,
+    LoadToolsForMcpServerRequest,
+    UnloadToolsForMcpServerRequest,
 } from "../proto/dragon/turnstile/v1/turnstile_service";
 
 export interface McpServerRow {
@@ -259,6 +261,58 @@ class DragonProxy {
             console.log("MCP server logout successful");
         } catch (error: any) {
             console.error("Error logging out from MCP server: ", error.message);
+            throw error;
+        }
+    }
+
+    public async loadToolsForMcpServer(user: User, uuid: string): Promise<void> {
+        try {
+            const accessToken = await this.getAccessToken(user);
+            return await this.loadToolsForMcpServerWithToken(user.uid, accessToken, uuid);
+        } catch (error: any) {
+            console.error("Error loading tools for MCP server: ", error.message);
+            throw error;
+        }
+    }
+
+    public async loadToolsForMcpServerWithToken(userId: string, accessToken: string, uuid: string): Promise<void> {
+        try {
+            const metadata = { Authorization: `Bearer ${accessToken}` };
+
+            await this.client.loadToolsForMcpServer(
+                LoadToolsForMcpServerRequest.create({ uuid }),
+                { meta: metadata }
+            );
+
+            console.log("MCP server tools loaded successfully");
+        } catch (error: any) {
+            console.error("Error loading tools for MCP server: ", error.message);
+            throw error;
+        }
+    }
+
+    public async unloadToolsForMcpServer(user: User, uuid: string): Promise<void> {
+        try {
+            const accessToken = await this.getAccessToken(user);
+            return await this.unloadToolsForMcpServerWithToken(user.uid, accessToken, uuid);
+        } catch (error: any) {
+            console.error("Error unloading tools for MCP server: ", error.message);
+            throw error;
+        }
+    }
+
+    public async unloadToolsForMcpServerWithToken(userId: string, accessToken: string, uuid: string): Promise<void> {
+        try {
+            const metadata = { Authorization: `Bearer ${accessToken}` };
+
+            await this.client.unloadToolsForMcpServer(
+                UnloadToolsForMcpServerRequest.create({ uuid }),
+                { meta: metadata }
+            );
+
+            console.log("MCP server tools unloaded successfully");
+        } catch (error: any) {
+            console.error("Error unloading tools for MCP server: ", error.message);
             throw error;
         }
     }

@@ -59,8 +59,8 @@ message AddMcpServerRequest {
 
 message ListMcpServersRequest {
     string user_id = 10;
-    //string page_size = 20;
-    //string page_token = 30;
+    //string cursor = 20;
+    //string page_size = 30;
 }
 
 message RemoveMcpServerRequest {
@@ -69,6 +69,7 @@ message RemoveMcpServerRequest {
 
 message McpServerList {
     repeated McpServer mcp_server = 10;
+    //string next_cursor = 20;
 }
 
 // OAuth configuration details (non-sensitive fields only)

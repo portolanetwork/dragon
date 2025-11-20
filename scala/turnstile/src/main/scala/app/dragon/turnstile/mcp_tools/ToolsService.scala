@@ -20,9 +20,11 @@ package app.dragon.turnstile.mcp_tools
 
 import app.dragon.turnstile.db.{DbInterface, DbNotFound, McpServerRow}
 import app.dragon.turnstile.mcp_client.McpClientActor
+import app.dragon.turnstile.mcp_client.McpClientActor.McpClientError
 import app.dragon.turnstile.mcp_tools.impl.{EchoTool, NamespacedTool, StreamingDemoTool, SystemInfoTool}
 import app.dragon.turnstile.utils.ActorLookup
 import io.modelcontextprotocol.common.McpTransportContext
+import io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification
 import io.modelcontextprotocol.server.{McpAsyncServerExchange, McpServerFeatures}
 import io.modelcontextprotocol.spec.McpSchema
 import org.apache.pekko.actor.typed.ActorSystem
@@ -100,21 +102,9 @@ class ToolsService(
 
   logger.info(s"ToolsService initialized for user=$userId with ${defaultTools.size} default tools: ${defaultTools.map(_.getName()).mkString(", ")}")
 
-  /**
-   * Get all tools for a user.
-   * Currently returns default tools for all users.
-   *
-   * @return List of McpTool instances
-   */
-  private def getDefaultTools: List[McpTool] = {
-    defaultTools
-  }
 
-  def getDefaultToolsSpec(): List[McpServerFeatures.AsyncToolSpecification] = {
-    val defaultTools = getDefaultTools
+  def getDefaultToolsSpec(): List[AsyncToolSpecification] =
     convertToAsyncToolSpec(defaultTools)
-  }
-
 
   def getAllDownstreamToolsSpec(
     tenant: String = "default"
@@ -122,8 +112,7 @@ class ToolsService(
     system: ActorSystem[?],
     timeout: Timeout = 30.seconds,
     db: Database
-  ): Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]] = {
-
+  ): Future[Either[McpClientError, List[AsyncToolSpecification]]] = {
     logger.info(s"Fetching all downstream tools for user=$userId, tenant=$tenant")
 
     // Fetch all MCP servers for this user from the database and fetch tools for each
@@ -132,7 +121,7 @@ class ToolsService(
         logger.info(s"Found ${servers.size} MCP servers for user=$userId, fetching tools from each")
 
         // Sequence per-server futures and collect successful tool specs
-        val toolsFutures: Seq[Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]]] = {
+        val toolsFutures: Seq[Future[Either[McpClientError, List[AsyncToolSpecification]]]] = {
           servers.map(server => getDownstreamToolsSpec(server))
         }
 
@@ -169,7 +158,7 @@ class ToolsService(
   )(implicit
     system: ActorSystem[?],
     timeout: Timeout
-  ): Future[Either[McpClientActor.McpClientError, List[McpTool]]] = {
+  ): Future[Either[McpClientError, List[McpTool]]] = {
     implicit val sharding: ClusterSharding = ClusterSharding(system)
 
     logger.info(s"Fetching namespaced tools from MCP client actor: ${mcpServerRow.uuid} (${mcpServerRow.name}) for user=$userId")
@@ -225,7 +214,7 @@ class ToolsService(
     system: ActorSystem[?],
     timeout: Timeout = 30.seconds,
     db: Database
-  ): Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]] = {
+  ): Future[Either[McpClientError, List[AsyncToolSpecification]]] = {
     logger.info(s"Fetching downstream tools for MCP server UUID: $uuid for user=$userId")
 
     DbInterface.findMcpServerByUuid(UUID.fromString(uuid)).flatMap {
@@ -248,7 +237,7 @@ class ToolsService(
   )(implicit
     system: ActorSystem[?],
     timeout: Timeout
-  ): Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]] = {
+  ): Future[Either[McpClientError, List[AsyncToolSpecification]]] = {
     getDownstreamTools(mcpServerRow).map {
       case Right(tools) =>
         val toolSpecs = convertToAsyncToolSpec(tools)
@@ -266,7 +255,7 @@ class ToolsService(
    */
   private def convertToAsyncToolSpec(
     tools: List[McpTool]
-  ): List[McpServerFeatures.AsyncToolSpecification] = {
+  ): List[AsyncToolSpecification] = {
     tools.map { tool =>
       // Log schema
       logger.debug(s"Converting tool to AsyncToolSpecification: ${tool.getName()} with schema: ${tool.getSchema()}")
