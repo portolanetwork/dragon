@@ -20,6 +20,9 @@ package app.dragon.turnstile.mgmt
 
 import app.dragon.turnstile.auth.{ClientAuthService, ServerAuthService}
 import app.dragon.turnstile.db.*
+import app.dragon.turnstile.mcp_server.{McpServerActor, McpServerActorId}
+import app.dragon.turnstile.mcp_tools.ToolsService
+import app.dragon.turnstile.utils.ActorLookup
 import app.dragon.turnstile.utils.ServiceValidationUtil.*
 import com.google.protobuf.empty.Empty
 import dragon.turnstile.api.v1.*
@@ -336,6 +339,47 @@ class MgmtServiceImpl(authEnabled: Boolean)(
   }
 
   /**
+   * Load tools from a downstream MCP server and add them to the user's MCP server actor.
+   *
+   * @param in       LoadToolsForMcpServerRequest containing the uuid of the downstream MCP server
+   * @param metadata Request metadata containing authentication info
+   * @return Future[Empty] on successful tool loading
+   */
+  override def loadToolsForMcpServer(
+    in: LoadToolsForMcpServerRequest,
+    metadata: Metadata
+  ): Future[Empty] = {
+    // Validate request and load tools
+    for {
+      authContext <- ServerAuthService.authenticate(metadata, authEnabled)
+      _ = logger.info(s"Received LoadToolsForMcpServer request for uuid: ${in.uuid} from userId: ${authContext.userId}")
+      _ <- validateNotEmpty(in.uuid, "uuid")
+      // Fetch the tool specifications for the given MCP server UUID
+      toolsResult <- ToolsService.getInstance(authContext.userId).getDownstreamToolsSpec(in.uuid)
+
+    } yield {
+      toolsResult match {
+        case Right(toolSpecs) =>
+          logger.info(s"Successfully fetched ${toolSpecs.size} tools for MCP server UUID: ${in.uuid}")
+
+          // Send AddTools message to the actor (fire and forget)
+          ActorLookup.getMcpServerActor(McpServerActorId(authContext.userId)) ! McpServerActor.AddTools(toolSpecs)
+
+          logger.info(s"Sent ${toolSpecs.size} tools to MCP server actor for user ${authContext.userId}")
+          Empty()
+
+        case Left(error) =>
+          logger.error(s"Failed to fetch tools for MCP server UUID: ${in.uuid}: ${error}")
+          throw new GrpcServiceException(Status.INTERNAL,
+            MetadataBuilder().addText("TOOL_FETCH_FAILED", s"Failed to fetch tools: ${error}").build())
+      }
+    }
+  }
+
+
+  // Private helper methods below
+
+  /**
    * Determines the LoginStatus enum value based on auth type and authentication state.
    */
   private def determineLoginStatus(
@@ -385,5 +429,6 @@ class MgmtServiceImpl(authEnabled: Boolean)(
     case TransportType.TRANSPORT_TYPE_STREAMING_HTTP => "streaming_http"
     case TransportType.TRANSPORT_TYPE_UNSPECIFIED | TransportType.Unrecognized(_) => "streaming_http"
   }
+
 
 }

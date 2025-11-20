@@ -18,7 +18,7 @@
 
 package app.dragon.turnstile.mcp_tools
 
-import app.dragon.turnstile.db.{DbInterface, McpServerRow}
+import app.dragon.turnstile.db.{DbInterface, DbNotFound, McpServerRow}
 import app.dragon.turnstile.mcp_client.McpClientActor
 import app.dragon.turnstile.mcp_tools.impl.{EchoTool, NamespacedTool, StreamingDemoTool, SystemInfoTool}
 import app.dragon.turnstile.utils.ActorLookup
@@ -31,6 +31,7 @@ import org.apache.pekko.util.Timeout
 import org.slf4j.{Logger, LoggerFactory}
 import slick.jdbc.JdbcBackend.Database
 
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import scala.concurrent.duration.*
 import scala.concurrent.{ExecutionContext, Future}
@@ -40,8 +41,8 @@ import scala.jdk.FunctionConverters.enrichAsJavaBiFunction
 /**
  * Type alias for MCP tool handler functions
  */
- type SyncToolHandler = (McpTransportContext, McpSchema.CallToolRequest) => McpSchema.CallToolResult
- type AsyncToolHandler = (McpAsyncServerExchange, McpSchema.CallToolRequest) => reactor.core.publisher.Mono[McpSchema.CallToolResult]
+type SyncToolHandler = (McpTransportContext, McpSchema.CallToolRequest) => McpSchema.CallToolResult
+type AsyncToolHandler = (McpAsyncServerExchange, McpSchema.CallToolRequest) => reactor.core.publisher.Mono[McpSchema.CallToolResult]
 
 /**
  * Service for managing MCP tools.
@@ -109,10 +110,11 @@ class ToolsService(
     defaultTools
   }
 
-  def getDefaultToolsSpec: List[McpServerFeatures.AsyncToolSpecification] = {
+  def getDefaultToolsSpec(): List[McpServerFeatures.AsyncToolSpecification] = {
     val defaultTools = getDefaultTools
     convertToAsyncToolSpec(defaultTools)
   }
+
 
   def getAllDownstreamToolsSpec(
     tenant: String = "default"
@@ -150,6 +152,7 @@ class ToolsService(
     }
   }
 
+
   /**
    * Get namespaced tools from an MCP client actor.
    *
@@ -157,18 +160,18 @@ class ToolsService(
    * and returns them as NamespacedTool instances that proxy calls to the remote server.
    *
    * @param mcpServerUuid The ID of the MCP client actor
-   * @param system The actor system (implicit)
-   * @param timeout The timeout for the actor query (implicit, default 30 seconds)
+   * @param system        The actor system (implicit)
+   * @param timeout       The timeout for the actor query (implicit, default 30 seconds)
    * @return A Future containing either an error or a list of namespaced tools
    */
   private[mcp_tools] def getDownstreamTools(
     mcpServerRow: McpServerRow
   )(implicit
     system: ActorSystem[?],
-    timeout: Timeout = 30.seconds
+    timeout: Timeout
   ): Future[Either[McpClientActor.McpClientError, List[McpTool]]] = {
     implicit val sharding: ClusterSharding = ClusterSharding(system)
-    
+
     logger.info(s"Fetching namespaced tools from MCP client actor: ${mcpServerRow.uuid} (${mcpServerRow.name}) for user=$userId")
 
     ActorLookup.getMcpClientActor(userId, mcpServerRow.uuid.toString) ! McpClientActor.Initialize(mcpServerRow)
@@ -176,31 +179,67 @@ class ToolsService(
     // Query the actor for its tools
     ActorLookup.getMcpClientActor(userId, mcpServerRow.uuid.toString)
       .ask[Either[McpClientActor.McpClientError, McpSchema.ListToolsResult]](
-      replyTo => McpClientActor.McpListTools(replyTo)
-    ).map {
-      case Right(listResult) =>
-        val tools = listResult.tools().asScala.toList
+        replyTo => McpClientActor.McpListTools(replyTo)
+      ).map {
+        case Right(listResult) =>
+          val tools = listResult.tools().asScala.toList
 
-        logger.info(s"Received ${tools.size} tools from MCP client actor ${mcpServerRow.uuid.toString} for user=$userId")
+          logger.info(s"Received ${tools.size} tools from MCP client actor ${mcpServerRow.uuid.toString} for user=$userId")
 
-        // Convert each tool schema to a NamespacedTool
-        val downstreamTools = tools.map { downstreamToolSchema =>
-          val turnstileToolSchema = McpSchema.Tool.builder()
-            .name(s"${mcpServerRow.name}.${downstreamToolSchema.name()}")
-            .description(downstreamToolSchema.description())
-            .inputSchema(downstreamToolSchema.inputSchema())
-            .outputSchema(downstreamToolSchema.outputSchema())
-            .annotations(downstreamToolSchema.annotations())
-            .build()
+          // Convert each tool schema to a NamespacedTool
+          val downstreamTools = tools.map { downstreamToolSchema =>
+            val turnstileToolSchema = McpSchema.Tool.builder()
+              .name(s"${mcpServerRow.name}.${downstreamToolSchema.name()}")
+              .description(downstreamToolSchema.description())
+              .inputSchema(downstreamToolSchema.inputSchema())
+              .outputSchema(downstreamToolSchema.outputSchema())
+              .annotations(downstreamToolSchema.annotations())
+              .build()
 
-          NamespacedTool(turnstileToolSchema, downstreamToolSchema, userId, mcpServerRow.uuid.toString)
-        }
+            NamespacedTool(turnstileToolSchema, downstreamToolSchema, userId, mcpServerRow.uuid.toString)
+          }
 
-        Right(downstreamTools)
+          Right(downstreamTools)
 
-      case Left(error) =>
-        logger.error(s"Failed to fetch tools from MCP client actor ${mcpServerRow.uuid.toString} for user=$userId: $error")
-        Left(error)
+        case Left(error) =>
+          logger.error(s"Failed to fetch tools from MCP client actor ${mcpServerRow.uuid.toString} for user=$userId: $error")
+          Left(error)
+      }
+  }
+
+  /**
+   * Get namespaced tool specifications from a downstream MCP server by UUID.
+   *
+   * This method queries the database for the MCP server with the given UUID,
+   * then fetches the tools from that server and returns them as AsyncToolSpecification instances.
+   *
+   * @param uuid    The UUID string of the MCP server
+   * @param system  The actor system (implicit)
+   * @param timeout The timeout for the actor query (implicit, default 30 seconds)
+   * @param db      The database instance (implicit)
+   * @return A Future containing either an error or a list of tool specifications
+   */
+  def getDownstreamToolsSpec(
+    uuid: String
+  )(implicit
+    system: ActorSystem[?],
+    timeout: Timeout = 30.seconds,
+    db: Database
+  ): Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]] = {
+    logger.info(s"Fetching downstream tools for MCP server UUID: $uuid for user=$userId")
+
+    DbInterface.findMcpServerByUuid(UUID.fromString(uuid)).flatMap {
+      case Right(mcpServerRow) =>
+        logger.info(s"Found MCP server ${mcpServerRow.name} (${mcpServerRow.uuid}) for user=$userId")
+        getDownstreamToolsSpec(mcpServerRow)
+      case Left(DbNotFound) =>
+        val errorMsg = s"MCP server not found with UUID: $uuid"
+        logger.error(errorMsg)
+        Future.successful(Left(McpClientActor.ProcessingError(errorMsg)))
+      case Left(dbError) =>
+        val errorMsg = s"Database error while fetching MCP server: ${dbError.message}"
+        logger.error(errorMsg)
+        Future.successful(Left(McpClientActor.ProcessingError(errorMsg)))
     }
   }
 
@@ -208,7 +247,7 @@ class ToolsService(
     mcpServerRow: McpServerRow
   )(implicit
     system: ActorSystem[?],
-    timeout: Timeout = 30.seconds
+    timeout: Timeout
   ): Future[Either[McpClientActor.McpClientError, List[McpServerFeatures.AsyncToolSpecification]]] = {
     getDownstreamTools(mcpServerRow).map {
       case Right(tools) =>

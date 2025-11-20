@@ -97,7 +97,7 @@ object Guardian {
           implicit val db: Database = Database.forConfig("", ApplicationConfig.db)
 
           // Initialize sharding and actors here
-          McpServerActor.initSharding(context.system)
+          McpServerActor.initSharding(context.system, db)
           McpClientActor.initSharding(context.system, db)
           McpSessionMapActor.initSharding(context.system)
           AuthCodeFlowActor.initSharding(context.system)

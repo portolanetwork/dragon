@@ -70,7 +70,7 @@ object TurnstileClientExample {
   def main(args: Array[String]): Unit = {
     // Parse arguments
     //val serverUrl = args.headOption.getOrElse("https://mcp.stripe.com")
-    val serverUrl = args.headOption.getOrElse("http://localhost:8082")
+    val serverUrl = args.headOption.getOrElse("http://localhost:8082/mcp")
     //val serverUrl = args.headOption.getOrElse("https://mcp.deepwiki.com/mcp")
     val endpoint = args.lift(1).getOrElse("/mcp")
     //val endpoint = args.lift(1).getOrElse("/")
@@ -83,7 +83,7 @@ object TurnstileClientExample {
     logger.info("")
 
     // Create the client using TurnstileStreamingHttpAsyncMcpClient
-    val client = McpStreamingHttpAsyncClient(serverUrl, endpoint)
+    val client = McpStreamingHttpAsyncClient(serverUrl)//, endpoint)
 
     // Execute the workflow
     val workflow: Future[Unit] = for {

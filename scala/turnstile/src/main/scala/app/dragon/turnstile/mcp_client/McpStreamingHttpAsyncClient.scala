@@ -49,10 +49,22 @@ object McpStreamingHttpAsyncClient {
    */
   def apply(
     serverUrl: String,
-    endpoint: String = "/",
+    //endpoint: String,
     authTokenProvider: Option[() => Future[String]] = None
-  )(implicit ec: ExecutionContext): McpStreamingHttpAsyncClient =
-    new McpStreamingHttpAsyncClient(clientName, clientVersion, serverUrl, endpoint, authTokenProvider).start()
+  )(implicit ec: ExecutionContext): McpStreamingHttpAsyncClient = {
+    // Parse serverUrl into baseUrl and endpoint
+    // Expected format: "http://localhost:8080/mcp" or "http://localhost:8080"
+    val url = new java.net.URL(serverUrl)
+    val baseUrl = s"${url.getProtocol}://${url.getAuthority}"
+    val endpoint = url.getPath match {
+      case "" | "/" => "/"
+      case path => path
+    }
+      
+      //if (url.getPath.isEmpty || url.getPath == "/") "/mcp" else url.getPath
+  
+    new McpStreamingHttpAsyncClient(clientName, clientVersion, baseUrl, endpoint, authTokenProvider).start()
+  }
 }
 
 /**
