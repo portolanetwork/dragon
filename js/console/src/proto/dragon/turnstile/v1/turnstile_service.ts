@@ -43,8 +43,8 @@ export interface ListMcpServersRequest {
     /**
      * @generated from protobuf field: string user_id = 10;
      */
-    userId: string; // string page_size = 20;
-    // string page_token = 30;
+    userId: string; // string cursor = 20;
+    // string page_size = 30;
 }
 /**
  * @generated from protobuf message dragon.turnstile.v1.RemoveMcpServerRequest
@@ -62,7 +62,7 @@ export interface McpServerList {
     /**
      * @generated from protobuf field: repeated dragon.turnstile.v1.McpServer mcp_server = 10;
      */
-    mcpServer: McpServer[];
+    mcpServer: McpServer[]; // string next_cursor = 20;
 }
 /**
  * OAuth configuration details (non-sensitive fields only)
