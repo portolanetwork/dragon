@@ -14,6 +14,8 @@ import {
     Alert,
 } from '@mui/material';
 import { useAuth0 } from '@auth0/auth0-react';
+import { useFormik } from 'formik';
+import * as Yup from 'yup';
 import DragonProxy from "../../dragon_proxy/DragonProxy";
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SaveIcon from '@mui/icons-material/Save';
@@ -23,16 +25,68 @@ interface AddMcpServerProps {
     onGoBack: () => void;
 }
 
+const validationSchema = Yup.object({
+    name: Yup.string()
+        .required('Name is required')
+        .matches(/^[a-zA-Z0-9_-]+$/, 'Name can only contain letters, numbers, underscores, and hyphens'),
+    url: Yup.string()
+        .required('URL is required')
+        .url('Must be a valid URL'),
+    authType: Yup.mixed<AuthType>().required('Authentication type is required'),
+    transportType: Yup.mixed<TransportType>().required('Transport type is required'),
+    staticToken: Yup.string().when('authType', {
+        is: AuthType.STATIC_HEADER,
+        then: (schema) => schema.required('Static token is required when using Static Header authentication'),
+        otherwise: (schema) => schema,
+    }),
+});
+
 const AddMcpServer = ({ onGoBack }: AddMcpServerProps) => {
     const { user, isLoading, isAuthenticated, getAccessTokenSilently } = useAuth0();
-    const [name, setName] = useState('');
-    const [url, setUrl] = useState('');
-    const [authType, setAuthType] = useState<AuthType>(AuthType.NONE);
-    const [transportType, setTransportType] = useState<TransportType>(TransportType.STREAMING_HTTP);
-    const [staticToken, setStaticToken] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
+
+    const formik = useFormik({
+        initialValues: {
+            name: '',
+            url: '',
+            authType: AuthType.NONE,
+            transportType: TransportType.STREAMING_HTTP,
+            staticToken: '',
+        },
+        validationSchema: validationSchema,
+        onSubmit: async (values) => {
+            setError(null);
+            setSuccess(false);
+
+            try {
+                setSubmitting(true);
+                const accessToken = await getAccessTokenSilently();
+
+                await DragonProxy.getInstance().addMcpServerWithToken(
+                    user!.sub!,
+                    accessToken,
+                    values.name,
+                    values.url,
+                    values.authType,
+                    values.transportType,
+                    values.authType === AuthType.STATIC_HEADER ? values.staticToken : undefined
+                );
+
+                setSuccess(true);
+                // Wait a moment to show success message, then go back
+                setTimeout(() => {
+                    onGoBack();
+                }, 1000);
+            } catch (error: any) {
+                console.error("Error adding MCP server: ", error.message);
+                setError(`Failed to add MCP server: ${error.message}`);
+            } finally {
+                setSubmitting(false);
+            }
+        },
+    });
 
     if (isLoading) {
         return <div>Loading...</div>;
@@ -41,48 +95,6 @@ const AddMcpServer = ({ onGoBack }: AddMcpServerProps) => {
     if (!isAuthenticated || !user) {
         return <div>User not logged in</div>;
     }
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError(null);
-        setSuccess(false);
-
-        if (!name || !url) {
-            setError('Name and URL are required');
-            return;
-        }
-
-        if (authType === AuthType.STATIC_HEADER && !staticToken) {
-            setError('Static token is required when using Static Header authentication');
-            return;
-        }
-
-        try {
-            setSubmitting(true);
-            const accessToken = await getAccessTokenSilently();
-
-            await DragonProxy.getInstance().addMcpServerWithToken(
-                user.sub!,
-                accessToken,
-                name,
-                url,
-                authType,
-                transportType,
-                authType === AuthType.STATIC_HEADER ? staticToken : undefined
-            );
-
-            setSuccess(true);
-            // Wait a moment to show success message, then go back
-            setTimeout(() => {
-                onGoBack();
-            }, 1000);
-        } catch (error: any) {
-            console.error("Error adding MCP server: ", error.message);
-            setError(`Failed to add MCP server: ${error.message}`);
-        } finally {
-            setSubmitting(false);
-        }
-    };
 
     const getAuthTypeLabel = (type: AuthType): string => {
         switch (type) {
@@ -138,40 +150,52 @@ const AddMcpServer = ({ onGoBack }: AddMcpServerProps) => {
                         </Alert>
                     )}
 
-                    <Box component="form" onSubmit={handleSubmit} sx={{ mt: 3 }}>
+                    <Box component="form" onSubmit={formik.handleSubmit} sx={{ mt: 3 }}>
                         <Box mb={2}>
                             <TextField
                                 fullWidth
+                                id="name"
+                                name="name"
                                 label="Name"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                required
+                                value={formik.values.name}
+                                onChange={formik.handleChange}
+                                onBlur={formik.handleBlur}
+                                error={formik.touched.name && Boolean(formik.errors.name)}
+                                helperText={formik.touched.name && formik.errors.name ? formik.errors.name : "A friendly name for this MCP server (letters, numbers, _, - only)"}
                                 disabled={submitting}
-                                helperText="A friendly name for this MCP server"
                             />
                         </Box>
 
                         <Box mb={2}>
                             <TextField
                                 fullWidth
+                                id="url"
+                                name="url"
                                 label="URL"
-                                value={url}
-                                onChange={(e) => setUrl(e.target.value)}
-                                required
-                                disabled={submitting}
-                                helperText="The URL of the MCP server"
+                                value={formik.values.url}
+                                onChange={formik.handleChange}
+                                onBlur={formik.handleBlur}
+                                error={formik.touched.url && Boolean(formik.errors.url)}
+                                helperText={formik.touched.url && formik.errors.url ? formik.errors.url : "The URL of the MCP server"}
                                 placeholder="https://example.com/mcp"
+                                disabled={submitting}
                             />
                         </Box>
 
                         <Box mb={2}>
-                            <FormControl fullWidth>
+                            <FormControl
+                                fullWidth
+                                error={formik.touched.authType && Boolean(formik.errors.authType)}
+                            >
                                 <InputLabel id="auth-type-label">Authentication Type</InputLabel>
                                 <Select
                                     labelId="auth-type-label"
-                                    value={authType}
+                                    id="authType"
+                                    name="authType"
+                                    value={formik.values.authType}
                                     label="Authentication Type"
-                                    onChange={(e) => setAuthType(e.target.value as AuthType)}
+                                    onChange={formik.handleChange}
+                                    onBlur={formik.handleBlur}
                                     disabled={submitting}
                                 >
                                     <MenuItem value={AuthType.NONE}>
@@ -188,13 +212,19 @@ const AddMcpServer = ({ onGoBack }: AddMcpServerProps) => {
                         </Box>
 
                         <Box mb={2}>
-                            <FormControl fullWidth>
+                            <FormControl
+                                fullWidth
+                                error={formik.touched.transportType && Boolean(formik.errors.transportType)}
+                            >
                                 <InputLabel id="transport-type-label">Transport Type</InputLabel>
                                 <Select
                                     labelId="transport-type-label"
-                                    value={transportType}
+                                    id="transportType"
+                                    name="transportType"
+                                    value={formik.values.transportType}
                                     label="Transport Type"
-                                    onChange={(e) => setTransportType(e.target.value as TransportType)}
+                                    onChange={formik.handleChange}
+                                    onBlur={formik.handleBlur}
                                     disabled={submitting}
                                 >
                                     <MenuItem value={TransportType.STREAMING_HTTP}>
@@ -204,17 +234,20 @@ const AddMcpServer = ({ onGoBack }: AddMcpServerProps) => {
                             </FormControl>
                         </Box>
 
-                        {authType === AuthType.STATIC_HEADER && (
+                        {formik.values.authType === AuthType.STATIC_HEADER && (
                             <Box mb={2}>
                                 <TextField
                                     fullWidth
+                                    id="staticToken"
+                                    name="staticToken"
                                     label="Static Token"
-                                    value={staticToken}
-                                    onChange={(e) => setStaticToken(e.target.value)}
-                                    required={authType === AuthType.STATIC_HEADER}
-                                    disabled={submitting}
-                                    helperText="The static authentication token for this server"
+                                    value={formik.values.staticToken}
+                                    onChange={formik.handleChange}
+                                    onBlur={formik.handleBlur}
+                                    error={formik.touched.staticToken && Boolean(formik.errors.staticToken)}
+                                    helperText={formik.touched.staticToken && formik.errors.staticToken ? formik.errors.staticToken : "The static authentication token for this server"}
                                     type="password"
+                                    disabled={submitting}
                                 />
                             </Box>
                         )}
