@@ -4,6 +4,8 @@
 import type { RpcTransport } from "@protobuf-ts/runtime-rpc";
 import type { ServiceInfo } from "@protobuf-ts/runtime-rpc";
 import { TurnstileService } from "./turnstile_service";
+import type { UnloadToolsForMcpServerRequest } from "./turnstile_service";
+import type { LoadToolsForMcpServerRequest } from "./turnstile_service";
 import type { LogoutMcpServerRequest } from "./turnstile_service";
 import type { McpServerLoginUrl } from "./turnstile_service";
 import type { LoginMcpServerRequest } from "./turnstile_service";
@@ -46,6 +48,14 @@ export interface ITurnstileServiceClient {
      * @generated from protobuf rpc: LogoutMcpServer(dragon.turnstile.v1.LogoutMcpServerRequest) returns (google.protobuf.Empty);
      */
     logoutMcpServer(input: LogoutMcpServerRequest, options?: RpcOptions): UnaryCall<LogoutMcpServerRequest, Empty>;
+    /**
+     * @generated from protobuf rpc: LoadToolsForMcpServer(dragon.turnstile.v1.LoadToolsForMcpServerRequest) returns (google.protobuf.Empty);
+     */
+    loadToolsForMcpServer(input: LoadToolsForMcpServerRequest, options?: RpcOptions): UnaryCall<LoadToolsForMcpServerRequest, Empty>;
+    /**
+     * @generated from protobuf rpc: UnloadToolsForMcpServer(dragon.turnstile.v1.UnloadToolsForMcpServerRequest) returns (google.protobuf.Empty);
+     */
+    unloadToolsForMcpServer(input: UnloadToolsForMcpServerRequest, options?: RpcOptions): UnaryCall<UnloadToolsForMcpServerRequest, Empty>;
 }
 /**
  * @generated from protobuf service dragon.turnstile.v1.TurnstileService
@@ -97,5 +107,19 @@ export class TurnstileServiceClient implements ITurnstileServiceClient, ServiceI
     logoutMcpServer(input: LogoutMcpServerRequest, options?: RpcOptions): UnaryCall<LogoutMcpServerRequest, Empty> {
         const method = this.methods[5], opt = this._transport.mergeOptions(options);
         return stackIntercept<LogoutMcpServerRequest, Empty>("unary", this._transport, method, opt, input);
+    }
+    /**
+     * @generated from protobuf rpc: LoadToolsForMcpServer(dragon.turnstile.v1.LoadToolsForMcpServerRequest) returns (google.protobuf.Empty);
+     */
+    loadToolsForMcpServer(input: LoadToolsForMcpServerRequest, options?: RpcOptions): UnaryCall<LoadToolsForMcpServerRequest, Empty> {
+        const method = this.methods[6], opt = this._transport.mergeOptions(options);
+        return stackIntercept<LoadToolsForMcpServerRequest, Empty>("unary", this._transport, method, opt, input);
+    }
+    /**
+     * @generated from protobuf rpc: UnloadToolsForMcpServer(dragon.turnstile.v1.UnloadToolsForMcpServerRequest) returns (google.protobuf.Empty);
+     */
+    unloadToolsForMcpServer(input: UnloadToolsForMcpServerRequest, options?: RpcOptions): UnaryCall<UnloadToolsForMcpServerRequest, Empty> {
+        const method = this.methods[7], opt = this._transport.mergeOptions(options);
+        return stackIntercept<UnloadToolsForMcpServerRequest, Empty>("unary", this._transport, method, opt, input);
     }
 }

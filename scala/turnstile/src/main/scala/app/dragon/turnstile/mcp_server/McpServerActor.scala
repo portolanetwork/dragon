@@ -133,6 +133,10 @@ object McpServerActor {
     toolSpecSeq: Seq[AsyncToolSpecification]
   ) extends Message
 
+  final case class RemoveTools(
+    toolNames: Seq[String]
+  ) extends Message
+
   // Remove WrappedGetResponse, use only WrappedHttpResponse for all handlers
   private final case class WrappedHttpResponse(
     result: scala.util.Try[HttpResponse],
@@ -209,6 +213,7 @@ class McpServerActor(
         .orElse(handleMcpPostRequest(turnstileMcpServer))
         .orElse(handleMcpDeleteRequest(turnstileMcpServer))
         .orElse(handleAddTools(turnstileMcpServer))
+        .orElse(handleRemoveTools(turnstileMcpServer))
         .orElse(handleWrappedHttpResponse())
     }.receiveSignal {
       case (_, org.apache.pekko.actor.typed.PostStop) =>
@@ -298,6 +303,20 @@ class McpServerActor(
           context.log.info(s"Adding tool to MCP server for actor $mcpServerActorId: ${toolSpec.tool().name()}")
           turnstileMcpServer.addTool(toolSpec)
 
+      }
+
+      Behaviors.same
+  }
+
+  def handleRemoveTools(
+    turnstileMcpServer: McpStreamingHttpServer
+  ): PartialFunction[Message, Behavior[Message]] = {
+    case RemoveTools(toolNames) =>
+      context.log.info(s"Removing ${toolNames.size} tools from MCP server for actor $mcpServerActorId")
+
+      toolNames.foreach { toolName =>
+          context.log.info(s"Removing tool from MCP server for actor $mcpServerActorId: $toolName")
+          turnstileMcpServer.removeTool(toolName)
       }
 
       Behaviors.same

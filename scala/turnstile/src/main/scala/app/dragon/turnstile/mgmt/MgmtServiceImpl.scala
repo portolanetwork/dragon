@@ -356,7 +356,6 @@ class MgmtServiceImpl(authEnabled: Boolean)(
       _ <- validateNotEmpty(in.uuid, "uuid")
       // Fetch the tool specifications for the given MCP server UUID
       toolsResult <- ToolsService.getInstance(authContext.userId).getDownstreamToolsSpec(in.uuid)
-
     } yield {
       toolsResult match {
         case Right(toolSpecs) =>
@@ -366,6 +365,45 @@ class MgmtServiceImpl(authEnabled: Boolean)(
           ActorLookup.getMcpServerActor(McpServerActorId(authContext.userId)) ! McpServerActor.AddTools(toolSpecs)
 
           logger.info(s"Sent ${toolSpecs.size} tools to MCP server actor for user ${authContext.userId}")
+          Empty()
+
+        case Left(error) =>
+          logger.error(s"Failed to fetch tools for MCP server UUID: ${in.uuid}: ${error}")
+          throw new GrpcServiceException(Status.INTERNAL,
+            MetadataBuilder().addText("TOOL_FETCH_FAILED", s"Failed to fetch tools: ${error}").build())
+      }
+    }
+  }
+
+  /**
+   * Unload tools from a downstream MCP server and remove them from the user's MCP server actor.
+   *
+   * @param in       UnloadToolsForMcpServerRequest containing the uuid of the downstream MCP server
+   * @param metadata Request metadata containing authentication info
+   * @return Future[Empty] on successful tool unloading
+   */
+  override def unloadToolsForMcpServer(
+    in: UnloadToolsForMcpServerRequest,
+    metadata: Metadata
+  ): Future[Empty] = {
+    // Validate request and unload tools
+    for {
+      authContext <- ServerAuthService.authenticate(metadata, authEnabled)
+      _ = logger.info(s"Received UnloadToolsForMcpServer request for uuid: ${in.uuid} from userId: ${authContext.userId}")
+      _ <- validateNotEmpty(in.uuid, "uuid")
+      // Fetch the tool specifications for the given MCP server UUID
+      toolsResult <- ToolsService.getInstance(authContext.userId).getDownstreamToolsSpec(in.uuid)
+    } yield {
+      toolsResult match {
+        case Right(toolSpecs) =>
+          // Extract tool names from specifications
+          val toolNames = toolSpecs.map(_.tool().name())
+          logger.info(s"Successfully fetched ${toolNames.size} tool names for removal from MCP server UUID: ${in.uuid}")
+
+          // Send RemoveTools message to the actor (fire and forget)
+          ActorLookup.getMcpServerActor(McpServerActorId(authContext.userId)) ! McpServerActor.RemoveTools(toolNames)
+
+          logger.info(s"Sent ${toolNames.size} tool names for removal to MCP server actor for user ${authContext.userId}")
           Empty()
 
         case Left(error) =>

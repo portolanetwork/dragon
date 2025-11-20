@@ -46,6 +46,7 @@ service TurnstileService {
     rpc LogoutMcpServer (LogoutMcpServerRequest) returns (google.protobuf.Empty) {}
 
     rpc LoadToolsForMcpServer (LoadToolsForMcpServerRequest) returns (google.protobuf.Empty) {}
+    rpc UnloadToolsForMcpServer (UnloadToolsForMcpServerRequest) returns (google.protobuf.Empty) {}
 }
 
 // MCP Servers
@@ -115,5 +116,9 @@ message LogoutMcpServerRequest {
 }
 
 message LoadToolsForMcpServerRequest {
+    string uuid = 10;
+}
+
+message UnloadToolsForMcpServerRequest {
     string uuid = 10;
 }

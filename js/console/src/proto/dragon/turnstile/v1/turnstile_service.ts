@@ -182,6 +182,24 @@ export interface LogoutMcpServerRequest {
     uuid: string;
 }
 /**
+ * @generated from protobuf message dragon.turnstile.v1.LoadToolsForMcpServerRequest
+ */
+export interface LoadToolsForMcpServerRequest {
+    /**
+     * @generated from protobuf field: string uuid = 10;
+     */
+    uuid: string;
+}
+/**
+ * @generated from protobuf message dragon.turnstile.v1.UnloadToolsForMcpServerRequest
+ */
+export interface UnloadToolsForMcpServerRequest {
+    /**
+     * @generated from protobuf field: string uuid = 10;
+     */
+    uuid: string;
+}
+/**
  * Authentication types for MCP servers
  *
  * @generated from protobuf enum dragon.turnstile.v1.AuthType
@@ -900,6 +918,100 @@ class LogoutMcpServerRequest$Type extends MessageType<LogoutMcpServerRequest> {
  * @generated MessageType for protobuf message dragon.turnstile.v1.LogoutMcpServerRequest
  */
 export const LogoutMcpServerRequest = new LogoutMcpServerRequest$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class LoadToolsForMcpServerRequest$Type extends MessageType<LoadToolsForMcpServerRequest> {
+    constructor() {
+        super("dragon.turnstile.v1.LoadToolsForMcpServerRequest", [
+            { no: 10, name: "uuid", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<LoadToolsForMcpServerRequest>): LoadToolsForMcpServerRequest {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.uuid = "";
+        if (value !== undefined)
+            reflectionMergePartial<LoadToolsForMcpServerRequest>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: LoadToolsForMcpServerRequest): LoadToolsForMcpServerRequest {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* string uuid */ 10:
+                    message.uuid = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: LoadToolsForMcpServerRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* string uuid = 10; */
+        if (message.uuid !== "")
+            writer.tag(10, WireType.LengthDelimited).string(message.uuid);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message dragon.turnstile.v1.LoadToolsForMcpServerRequest
+ */
+export const LoadToolsForMcpServerRequest = new LoadToolsForMcpServerRequest$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class UnloadToolsForMcpServerRequest$Type extends MessageType<UnloadToolsForMcpServerRequest> {
+    constructor() {
+        super("dragon.turnstile.v1.UnloadToolsForMcpServerRequest", [
+            { no: 10, name: "uuid", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<UnloadToolsForMcpServerRequest>): UnloadToolsForMcpServerRequest {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.uuid = "";
+        if (value !== undefined)
+            reflectionMergePartial<UnloadToolsForMcpServerRequest>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: UnloadToolsForMcpServerRequest): UnloadToolsForMcpServerRequest {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* string uuid */ 10:
+                    message.uuid = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: UnloadToolsForMcpServerRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* string uuid = 10; */
+        if (message.uuid !== "")
+            writer.tag(10, WireType.LengthDelimited).string(message.uuid);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message dragon.turnstile.v1.UnloadToolsForMcpServerRequest
+ */
+export const UnloadToolsForMcpServerRequest = new UnloadToolsForMcpServerRequest$Type();
 /**
  * @generated ServiceType for protobuf service dragon.turnstile.v1.TurnstileService
  */
@@ -909,5 +1021,7 @@ export const TurnstileService = new ServiceType("dragon.turnstile.v1.TurnstileSe
     { name: "RemoveMcpServer", options: {}, I: RemoveMcpServerRequest, O: Empty },
     { name: "GetLoginStatusForMcpServer", options: {}, I: GetLoginStatusForMcpServerRequest, O: McpServerLoginStatus },
     { name: "LoginMcpServer", options: {}, I: LoginMcpServerRequest, O: McpServerLoginUrl },
-    { name: "LogoutMcpServer", options: {}, I: LogoutMcpServerRequest, O: Empty }
+    { name: "LogoutMcpServer", options: {}, I: LogoutMcpServerRequest, O: Empty },
+    { name: "LoadToolsForMcpServer", options: {}, I: LoadToolsForMcpServerRequest, O: Empty },
+    { name: "UnloadToolsForMcpServer", options: {}, I: UnloadToolsForMcpServerRequest, O: Empty }
 ]);

@@ -178,6 +178,19 @@ class McpStreamingHttpServer(
     }
   }
 
+  def removeTool(
+    toolName: String
+  ): Unit = {
+    mcpAsyncServer.foreach { server =>
+      logger.info(s"[$serverName] Removing tool: $toolName")
+      server
+        .removeTool(toolName)
+        .doOnSuccess(_ => logger.debug(s"[$serverName] Tool removed: $toolName"))
+        .doOnError(ex => logger.error(s"[$serverName] Failed to remove tool: $toolName", ex))
+        .subscribe()
+    }
+  }
+
   def stop(): Unit = {
     mcpAsyncServer.foreach { server =>
       logger.info(s"Stopping MCP server: $serverName v$serverVersion")
