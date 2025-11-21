@@ -19,16 +19,16 @@
 package app.dragon.turnstile.db
 
 import com.github.tminglei.slickpg.*
-import play.api.libs.json.{JsValue, Json}
+import io.circe.{Json, parser}
 import slick.basic.Capability
-import slick.jdbc.{JdbcCapabilities, PositionedParameters, PositionedResult}
+import slick.jdbc.JdbcCapabilities
 
 /**
  * Custom Postgres profile with JSON support via slick-pg.
  *
  * This profile extends the standard PostgresProfile with:
  * - JSONB support for native PostgreSQL JSON columns
- * - Play JSON integration for JSON serialization/deserialization
+ * - Circe JSON integration for JSON serialization/deserialization
  * - Array support
  *
  * Usage:
@@ -36,13 +36,13 @@ import slick.jdbc.{JdbcCapabilities, PositionedParameters, PositionedResult}
  * import app.dragon.turnstile.db.TurnstilePostgresProfile.api._
  *
  * class MyTable(tag: Tag) extends Table[MyRow](tag, "my_table") {
- *   def jsonColumn = column[JsValue]("json_data")
+ *   def jsonColumn = column[Json]("json_data")
  * }
  * }}}
  */
 trait TurnstilePostgresProfile extends ExPostgresProfile
     with PgArraySupport
-    with PgPlayJsonSupport {
+    with PgCirceJsonSupport {
 
   // Add JSON array support
   def pgjson = "jsonb"
@@ -52,7 +52,7 @@ trait TurnstilePostgresProfile extends ExPostgresProfile
 
   object TurnstileAPI extends ExtPostgresAPI
       with ArrayImplicits
-      with PlayJsonImplicits
+      with CirceImplicits
 
   // Configure capabilities
   override protected def computeCapabilities: Set[Capability] =

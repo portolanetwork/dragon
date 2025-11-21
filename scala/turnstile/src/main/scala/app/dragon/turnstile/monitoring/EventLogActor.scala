@@ -18,13 +18,12 @@
 
 package app.dragon.turnstile.monitoring
 
-import app.dragon.turnstile.db.TurnstilePostgresProfile.api.*
-import app.dragon.turnstile.db.{EventLogRow, Tables}
+import app.dragon.turnstile.db.{DbInterface, EventLogRow}
 import app.dragon.turnstile.serializer.TurnstileSerializable
+import io.circe.syntax.*
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, TimerScheduler}
 import org.apache.pekko.actor.typed.{ActorSystem, Behavior}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityTypeKey}
-import play.api.libs.json.{JsObject, Json}
 import slick.jdbc.JdbcBackend.Database
 
 import java.sql.Timestamp
@@ -39,7 +38,7 @@ import scala.concurrent.duration.*
  * @param description Human-readable event description
  * @param sourceType Source type (e.g., mcp_server, system, client) for event origin classification
  * @param sourceUuid UUID reference to the source entity (no FK constraint for flexibility)
- * @param rawData Additional raw data about the event (stored as JSONB)
+ * @param rawData Event-specific data (sealed trait with type-safe variants)
  */
 case class AuditEvent(
   tenant: String,
@@ -48,18 +47,14 @@ case class AuditEvent(
   description: Option[String] = None,
   sourceType: Option[String] = None,
   sourceUuid: Option[java.util.UUID] = None,
-  rawData: Map[String, String] = Map.empty
+  rawData: EventData = EventData.EmptyData
 ) extends TurnstileSerializable {
 
   /**
    * Convert this AuditEvent to an EventLogRow for database persistence
    */
   def toEventLogRow: EventLogRow = {
-    val rawDataJson = if (rawData.nonEmpty) {
-      Json.toJson(rawData).as[JsObject]
-    } else {
-      play.api.libs.json.JsNull
-    }
+    import EventData.*
 
     EventLogRow(
       tenant = tenant,
@@ -68,7 +63,7 @@ case class AuditEvent(
       description = description,
       sourceType = sourceType,
       sourceUuid = sourceUuid,
-      rawData = rawDataJson,
+      rawData = rawData.asJson,
       createdAt = new Timestamp(System.currentTimeMillis())
     )
   }
@@ -213,7 +208,7 @@ private class EventLogActor(
 
   /**
    * Flushes the batch of events to the database.
-   * Persists events using batch insert for efficiency.
+   * Persists events using batch insert via DbInterface for efficiency.
    *
    * @param batch The batch of events to flush
    */
@@ -225,15 +220,17 @@ private class EventLogActor(
     // Convert AuditEvents to EventLogRows
     val eventLogRows = batch.map(_.toEventLogRow)
 
-    // Batch insert into database
-    val insertAction = Tables.eventLogs ++= eventLogRows
-    val future = db.run(insertAction)
+    // Batch insert into database via DbInterface
+    val future = DbInterface.insertEventLogs(eventLogRows)(db, ec)
 
     // Pipe result back to self
     context.pipeToSelf(future) {
-      case scala.util.Success(result) =>
-        context.log.info(s"EventLogActor $tenant successfully persisted ${result.getOrElse(batch.size)} events")
+      case scala.util.Success(Right(count)) =>
+        context.log.info(s"EventLogActor $tenant successfully persisted $count events")
         FlushResult(success = true)
+      case scala.util.Success(Left(dbError)) =>
+        context.log.error(s"EventLogActor $tenant failed to persist events: ${dbError.message}")
+        FlushResult(success = false, error = Some(dbError.message))
       case scala.util.Failure(ex) =>
         context.log.error(s"EventLogActor $tenant failed to persist events: ${ex.getMessage}", ex)
         FlushResult(success = false, error = Some(ex.getMessage))

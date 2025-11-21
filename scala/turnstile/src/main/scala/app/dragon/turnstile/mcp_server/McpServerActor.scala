@@ -287,6 +287,8 @@ class McpServerActor(
 
   def handleWrappedHttpResponse(): PartialFunction[Message, Behavior[Message]] = {
     case WrappedHttpResponse(result, replyTo) =>
+      import app.dragon.turnstile.monitoring.EventData
+
       result match {
         case scala.util.Success(response) =>
           ActorLookup.getEventLogActor() ! EventLogActor.EventLog(
@@ -297,6 +299,11 @@ class McpServerActor(
               description = Some(s"MCP server actor ${mcpServerActorId.mcpServerActorId} processed a request successfully."),
               sourceType = Some("mcp_server"),
               sourceUuid = None,
+              rawData = EventData.McpRequestData(
+                method = "POST",
+                uri = "/mcp",
+                statusCode = Some(response.status.intValue())
+              )
             )
           )
           replyTo ! Right(response)
@@ -308,7 +315,12 @@ class McpServerActor(
               eventType = "MCP_REQUEST_FAILED",
               description = Some(s"MCP server actor ${mcpServerActorId.mcpServerActorId} failed to process a request: ${exception.getMessage}"),
               sourceType = Some("mcp_server"),
-              sourceUuid = None
+              sourceUuid = None,
+              rawData = EventData.McpRequestData(
+                method = "POST",
+                uri = "/mcp",
+                errorMessage = Some(exception.getMessage)
+              )
             )
           )
           replyTo ! Left(ProcessingError(exception.getMessage))

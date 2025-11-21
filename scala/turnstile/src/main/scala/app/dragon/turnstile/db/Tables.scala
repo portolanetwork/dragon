@@ -19,7 +19,9 @@
 package app.dragon.turnstile.db
 
 import app.dragon.turnstile.db.TurnstilePostgresProfile.api.*
-import play.api.libs.json.JsValue
+import app.dragon.turnstile.monitoring.EventData
+import io.circe.Json
+import io.circe.syntax.*
 
 import java.sql.Timestamp
 import java.util.UUID
@@ -137,7 +139,7 @@ class McpServersTable(
  * @param description Human-readable event description
  * @param sourceType Source type (e.g., mcp_server, system, client) for event origin classification
  * @param sourceUuid UUID reference to the source entity (no FK constraint)
- * @param rawData Extensible JSONB field for event-specific data (JsNull for empty)
+ * @param rawData Extensible JSONB field for event-specific data (stored as Circe Json)
  * @param createdAt Creation timestamp
  */
 case class EventLogRow(
@@ -149,20 +151,20 @@ case class EventLogRow(
   description: Option[String] = None,
   sourceType: Option[String] = None,
   sourceUuid: Option[UUID] = None,
-  rawData: JsValue = play.api.libs.json.JsNull,
+  rawData: Json = Json.obj(),
   createdAt: Timestamp = new Timestamp(System.currentTimeMillis())
 )
 
 /**
  * Slick table definition for event_log
  *
- * Uses custom JSONB support from TurnstilePostgresProfile with PGobject for proper JSONB handling.
+ * Uses slick-pg Circe JSONB support from TurnstilePostgresProfile.
  */
 class EventLogTable(
   tag: Tag
 ) extends Table[EventLogRow](tag, "event_log") {
-  // Explicitly import JSONB type mapper
-  import app.dragon.turnstile.db.TurnstilePostgresProfile.TurnstileAPI.playJsonTypeMapper
+  // Explicitly import JSONB type mapper for Circe Json
+  import app.dragon.turnstile.db.TurnstilePostgresProfile.TurnstileAPI.circeJsonTypeMapper
 
   def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
   def uuid = column[UUID]("uuid", O.Default(java.util.UUID.randomUUID()))
@@ -172,7 +174,7 @@ class EventLogTable(
   def description = column[Option[String]]("description")
   def sourceType = column[Option[String]]("source_type")
   def sourceUuid = column[Option[UUID]]("source_uuid")
-  def rawData = column[JsValue]("raw_data")
+  def rawData = column[Json]("raw_data")
   def createdAt = column[Timestamp]("created_at")
 
   // Index on tenant for fast lookup

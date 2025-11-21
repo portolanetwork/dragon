@@ -101,8 +101,7 @@ class ToolsService(
   )
 
   logger.info(s"ToolsService initialized for user=$userId with ${defaultTools.size} default tools: ${defaultTools.map(_.getName()).mkString(", ")}")
-
-
+  
   def getDefaultToolsSpec(): List[AsyncToolSpecification] =
     convertToAsyncToolSpec(defaultTools)
 

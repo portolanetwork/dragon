@@ -249,4 +249,28 @@ object DbInterface {
       case NonFatal(t) => Left(mapDbError(t))
     }
   }
+
+  /**
+   * Batch inserts event log rows into the database.
+   * @param events Sequence of EventLogRow instances to insert
+   * @param db The database instance
+   * @param ec ExecutionContext
+   * @return `Future[Either[DbError, Int]]` number of rows inserted or DbError
+   */
+  def insertEventLogs(
+    events: Seq[EventLogRow]
+  )(
+    implicit db: Database, ec: ExecutionContext
+  ): Future[Either[DbError, Int]] = {
+    if (events.isEmpty) {
+      Future.successful(Right(0))
+    } else {
+      val insertAction = Tables.eventLogs ++= events
+      db.run(insertAction).map { result =>
+        Right(result.getOrElse(events.size)): Either[DbError, Int]
+      }.recover {
+        case NonFatal(t) => Left(mapDbError(t))
+      }
+    }
+  }
 }
