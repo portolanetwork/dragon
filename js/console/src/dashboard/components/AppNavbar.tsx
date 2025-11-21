@@ -4,7 +4,6 @@ import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
 import MuiToolbar from '@mui/material/Toolbar';
 import {tabsClasses} from '@mui/material/Tabs';
-import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded';
 import portolaAppIcon from '../../assets/portola_icon.png';
 import dragonAppDarkerLogo from '../../assets/dragon_logo_darker.png';
