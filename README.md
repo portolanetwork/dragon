@@ -118,6 +118,7 @@ npm run dev
 
 The gateway starts with:
 - gRPC API: `localhost:8082` (server management)
+- grpc-web API: ``localhost:8081`` (server management from UI)
 - MCP Gateway: `localhost:8082/mcp` (MCP protocol endpoint)
 
 ### Register a Downstream MCP Server
