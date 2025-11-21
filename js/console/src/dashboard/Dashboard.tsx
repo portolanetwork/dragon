@@ -98,8 +98,6 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
         setSelectedMenuItem(['MCP Servers']);
     };
 
-
-
     return (
     <AppTheme {...props} themeComponents={xThemeComponents}>
         {  // Some padding behind the app bar

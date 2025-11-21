@@ -1,18 +1,8 @@
 import * as React from 'react';
 import Stack from '@mui/material/Stack';
-import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded';
-import CustomDatePicker from './CustomDatePicker';
 import NavbarBreadcrumbs from './NavbarBreadcrumbs';
 import MenuButton from './MenuButton';
-//import Button from '@mui/material/Button';
-import ColorModeIconDropdown from '../../shared-theme/ColorModeIconDropdown';
-
-import Search from './Search';
-import {HelpOutlineRounded, HelpRounded} from "@mui/icons-material";
-import {Box} from "@mui/system";
-
-import {Button} from '@mui/material';
-import AppleIcon from "@mui/icons-material/Apple";
+import {HelpRounded} from "@mui/icons-material";
 
 interface HeaderProps {
     selectedMenuItem: string[];

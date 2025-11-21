@@ -4,9 +4,9 @@ import { gray, brand } from '../../../shared-theme/themePrimitives';
 
 /* eslint-disable import/prefer-default-export */
 export const treeViewCustomizations: TreeViewComponents<Theme> = {
-  MuiTreeItem2: {
+  MuiTreeItem: {
     styleOverrides: {
-      root: ({ theme }) => ({
+      root: ({ theme }: { theme: Theme }) => ({
         position: 'relative',
         boxSizing: 'border-box',
         padding: theme.spacing(0, 1),
@@ -26,7 +26,7 @@ export const treeViewCustomizations: TreeViewComponents<Theme> = {
           },
         },
       }),
-      content: ({ theme }) => ({
+      content: ({ theme }: { theme: Theme }) => ({
         marginTop: theme.spacing(1),
         padding: theme.spacing(0.5, 1),
         overflow: 'clip',

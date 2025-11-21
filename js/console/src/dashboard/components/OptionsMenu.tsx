@@ -10,6 +10,8 @@ import ListItemIcon, {listItemIconClasses} from '@mui/material/ListItemIcon';
 import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded';
 import MenuButton from './MenuButton';
 import {useAuth0} from '@auth0/auth0-react';
+import { Logout } from "@mui/icons-material";
+
 
 
 
@@ -66,13 +68,6 @@ export default function OptionsMenu() {
                     },
                 }}
             >
-                {/* Menu items
-                <MenuItem onClick={handleClose}>Profile</MenuItem>
-                <MenuItem onClick={handleClose}>My account</MenuItem>
-                <Divider/>
-                <MenuItem onClick={handleClose}>Add another account</MenuItem>
-                <MenuItem onClick={handleClose}>Settings</MenuItem>
-                */}
                 <Divider/>
                 <MenuItem
                     onClick={handleLogout}
@@ -85,11 +80,6 @@ export default function OptionsMenu() {
                     }}
                 >
                     <ListItemText>Logout</ListItemText>
-                    {/* Logout icon
-                    <ListItemIcon>
-                        <LogoutRoundedIcon fontSize="small"/>
-                    </ListItemIcon>
-                    */}
                 </MenuItem>
             </Menu>
         </React.Fragment>
