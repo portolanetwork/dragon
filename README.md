@@ -10,19 +10,30 @@ Dragon is built on Apache Pekko's actor system, providing a foundation for scala
 
 Dragon is a distributed MCP hub that aggregates tools from multiple downstream MCP servers and exposes them through a unified, user-scoped API. It routes requests between AI applications and tool providers.
 
+Dragon provides a robust foundation for self-hosting and managing MCP connections.
+
+- **Self-Hostable & Distributed**: Run on a single machine or scale horizontally across a cluster using its native Apache Pekko foundation.
+- **Protocol Support**: Full support for the Model Context Protocol (MCP) specification (2025-06-18).
+- **Connectivity**: gRPC and HTTP APIs for both management and high-throughput MCP operations.
+- **Auth**: OAuth2/OIDC authentication with JWT validation, Authorization Code Flow with PKCE, Dynamic Client Registration (DCR), and automatic token refresh
+- **Reliable Persistence**: PostgreSQL-backed configuration management using Flyway for database migrations.
+- **Open Source**: Released under the permissive Apache 2.0 license.
+
 ## Capabilities
 
 ### Current
 - **MCP Server Aggregation**: Aggregate multiple MCP servers into one
 - **Tenant/User level isolation**: Route requests to user-specific MCP server instances
-- **Spec compliant**: Full support for streaming HTTP spec
+- **Spec compliant**: Full support for streaming HTTP spec (2025-06-18)
 - **Auth**: OAuth2/OIDC authentication via third-party IDPs (Auth0)
+- **Console UI**: Web based console UI
 
 ### Planned
-- **Console UI**: Web based console UI
 - **Policy Based Enforcement**: Manage tool access via policies
-- **Monitoring**: Monitor tool usage via event logging
+- **Monitoring**: Comprehensive audit logging to provide usage visibility
 - **Compliance**: Compliance for enterprise use-cases
+- **Lazy loading**: Lazy loading of tool specs to mitigate context bloat
+- **No-code datasource integration**: Ability to create your custom datasources from APIs
 
 ## Modern & Extensible Tech Stack
 
@@ -32,19 +43,6 @@ Dragon is a distributed MCP hub that aggregates tools from multiple downstream M
 - gRPC API for server management
 - PostgreSQL DB
 - Comprehensive logging and error handling
-
-
-## Key Features (0.1.x)
-
-For the first developer release, Dragon provides a robust foundation for self-hosting and managing MCP connections.
-
-- **Self-Hostable & Distributed**: Run on a single machine or scale horizontally across a cluster using its native Apache Pekko foundation.
-- **Protocol Support**: Full support for the Model Context Protocol (MCP) specification (2025-06-18).
-- **Connectivity**: gRPC and HTTP APIs for both management and high-throughput MCP operations.
-- **Auth**: OAuth2/OIDC authentication with JWT validation, Authorization Code Flow with PKCE, Dynamic Client Registration (DCR), and automatic token refresh
-- **Observability**: TBD
-- **Reliable Persistence**: PostgreSQL-backed configuration management using Flyway for database migrations.
-- **Open Source**: Released under the permissive Apache 2.0 license.
 
 ## Why Dragon?
 
@@ -67,7 +65,7 @@ Dragon is founded on the principles of the Reactive Manifesto and built atop Apa
 
 ## Architecture 
 
-TBD
+Documentation coming soon.
 
 ## Getting Started
 
@@ -78,6 +76,9 @@ TBD
 
 ### Running Locally
 
+NOTE: This setup doc is work-in-progress. I will be updating this to be more comprehensive in the future releases. If you'd like help setting this up, reach out to me at: sami.malik@portolanetwork.io 
+
+
 ```bash
 # Clone the repository
 git clone https://github.com/portola-labs/dragon.git
@@ -86,13 +87,24 @@ cd dragon/scala/turnstile
 # Create a database (Use neon.dev and updated env vars in .env file)
 export DEPLOYMENT_NAME=default
 export DATABASE_URL=<db-url>
+export DATABASE_USER=<db-user>
 export DATABASE_PASSWORD=<db-password>
 
 # Configure Auth0 (see scala/turnstile/docs/auth-with-auth0.md for setup)
-# Update application.conf with your Auth0 settings
+export AUTH0_DOMAIN=<auth0-domain>
+export AUTH0_AUDIENCE=<auth0-audience>
+export AUTH0_CLIENT_AUDIENCE=<auth0-client-audience> # Auth0 requires this to issue refresh-tokens
 
 # Start the gateway (migrations run automatically)
 sbt "runMain app.dragon.turnstile.main.Turnstile"
+
+# Start UI
+cd dragon/js/console
+npm install
+npm run dev
+
+# Navigate to localhost:5173 and login.
+
 
 # Connect using MCP Inspector with following settings
 ## Transport Type: Streamable HTTP
@@ -126,20 +138,6 @@ grpcurl -plaintext \
 # For servers requiring OAuth, initiate login:
 # GET http://localhost:8081/login?uuid=<server-uuid>
 ```
-
-### Connect an MCP Client
-
-Point your MCP client to the gateway. Setup MCP Inspector with following:
-
-- Transport Type: Streamable HTTP
-- URL: http://127.0.0.1:8082/mcp
-- Connection Type: Via Proxy
-
-Steps:
-
-- Click: Connect
-- Click: Tools -> List Tools
-- You can create breakpoints to examine how individual example tools are called under: app.dragon.turnstile.service.tools
 
 
 ## Documentation

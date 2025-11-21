@@ -24,7 +24,7 @@ import app.dragon.turnstile.db.DatabaseMigration
 import app.dragon.turnstile.mcp_client.McpClientActor
 import app.dragon.turnstile.mcp_gateway.{McpGatewayServer, McpSessionMapActor}
 import app.dragon.turnstile.mcp_server.McpServerActor
-import app.dragon.turnstile.mgmt.MgmtGrpcServer
+import app.dragon.turnstile.mgmt.{MgmtGrpcServer, MgmtGrpcWebServer}
 import com.typesafe.config.Config
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorSystem, Behavior}
@@ -44,13 +44,15 @@ import slick.jdbc.JdbcBackend.Database
  *    - McpClientActor: Client connections to downstream MCP servers
  *    - McpSessionMapActor: Session management and routing
  * 3. gRPC Server - Starts the gRPC service for server registration/management
- * 4. MCP Gateway - Starts the HTTP-based MCP protocol gateway
+ * 4. gRPC-Web Server - Starts the grpc-web service for browser-based clients
+ * 5. MCP Gateway - Starts the HTTP-based MCP protocol gateway
  *
  * Initialization Sequence:
  * 1. Run database migrations (fail-fast if migration fails)
  * 2. Initialize cluster sharding for all actor types
  * 3. Start gRPC server for API access
- * 4. Start MCP Gateway if enabled in configuration
+ * 4. Start gRPC-Web server if enabled in configuration
+ * 5. Start MCP Gateway if enabled in configuration
  *
  * Failure Handling:
  * - Database migration failure → terminates the system
@@ -63,6 +65,7 @@ object Guardian {
   val logger: Logger = LoggerFactory.getLogger(this.getClass.getSimpleName)
 
   val grpcConfig: Config = ApplicationConfig.grpcConfig
+  val grpcWebConfig: Config = ApplicationConfig.grpcWebConfig
   val mcpStreamingConfig: Config = ApplicationConfig.mcpStreaming
   val databaseConfig: Config = ApplicationConfig.db
   val authConfig: Config = ApplicationConfig.auth
@@ -94,13 +97,22 @@ object Guardian {
           implicit val db: Database = Database.forConfig("", ApplicationConfig.db)
 
           // Initialize sharding and actors here
-          McpServerActor.initSharding(context.system)
+          McpServerActor.initSharding(context.system, db)
           McpClientActor.initSharding(context.system, db)
           McpSessionMapActor.initSharding(context.system)
           AuthCodeFlowActor.initSharding(context.system)
 
           // Start GRPC server (hosting both GreeterService and TurnstileService)
           MgmtGrpcServer.start(grpcHost, grpcPort, context.system)
+
+          // Start GRPC-Web server if enabled
+          if (grpcWebConfig.getBoolean("enabled")) {
+            val grpcWebHost = grpcWebConfig.getString("host")
+            val grpcWebPort = grpcWebConfig.getInt("port")
+            MgmtGrpcWebServer.start(grpcWebHost, grpcWebPort, context.system)
+          } else {
+            context.log.info("gRPC-Web server is disabled")
+          }
 
           // Start MCP Streaming HTTP server if enabled
           if (mcpStreamingConfig.getBoolean("enabled")) {

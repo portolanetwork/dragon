@@ -21,6 +21,7 @@ package app.dragon.turnstile.mcp_server
 import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.mcp_tools.ToolsService
 import io.modelcontextprotocol.json.McpJsonMapper
+import io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification
 import io.modelcontextprotocol.server.transport.WebFluxStreamableServerTransportProvider
 import io.modelcontextprotocol.server.{McpAsyncServer, McpServer}
 import io.modelcontextprotocol.spec.McpSchema
@@ -31,8 +32,8 @@ import org.springframework.http.server.reactive.HttpHandler
 import org.springframework.web.reactive.function.server.RouterFunctions
 import slick.jdbc.JdbcBackend.Database
 
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.*
-import scala.concurrent.{ExecutionContext, Future}
 
 /**
  * Factory for creating user-scoped MCP server instances.
@@ -154,15 +155,7 @@ class McpStreamingHttpServer(
         .completions()
         .build())
       .build()
-
-    ToolsService.getInstance(userId).getDefaultToolsSpec.foreach { toolSpec =>
-      mcpServer
-        .addTool(toolSpec)
-        .doOnSuccess(_ => logger.debug(s"[$serverName] Tool registered: ${toolSpec.tool().name()}"))
-        .doOnError(ex => logger.error(s"[$serverName] Failed to register tool: ${toolSpec.tool().name()}", ex))
-        .subscribe()
-    }
-
+    
     val routerFunction = transportProvider.getRouterFunction
     val httpHandler = RouterFunctions.toHttpHandler(routerFunction)
 
@@ -171,28 +164,31 @@ class McpStreamingHttpServer(
 
     this
   }
+  
+  def addTool(
+    toolSpec: AsyncToolSpecification
+  ): Unit = {
+    mcpAsyncServer.foreach { server =>
+      logger.info(s"[$serverName] Adding tool: ${toolSpec.tool().name()}")
+      server
+        .addTool(toolSpec)
+        .doOnSuccess(_ => logger.debug(s"[$serverName] Tool registered: ${toolSpec.tool().name()}"))
+        .doOnError(ex => logger.error(s"[$serverName] Failed to register tool: ${toolSpec.tool().name()}", ex))
+        .subscribe()
+    }
+  }
 
-  def refreshDownstreamTools(): Future[Unit] = {
-    ToolsService.getInstance(userId)
-      .getAllDownstreamToolsSpec()
-      .map {
-        case Right(toolSpecs) =>
-          logger.info(s"[$serverName] Refreshing ${toolSpecs.size} namespaced tools")
-          toolSpecs.foreach { toolSpec =>
-            mcpAsyncServer.foreach { server =>
-              server
-                .addTool(toolSpec)
-                .doOnSuccess(_ => logger.debug(s"[$serverName] Namespaced tool registered: ${toolSpec.tool().name()}"))
-                .doOnError(ex => logger.error(s"[$serverName] Failed to register namespaced tool: ${toolSpec.tool().name()}", ex))
-                .subscribe()
-            }
-          }
-        case Left(error) =>
-          logger.error(s"[$serverName] Failed to fetch namespaced tools: $error")
-
-      }.recover { case ex =>
-        logger.error(s"Failed to refresh namespaced tools for MCP server: $serverName", ex)
-      }
+  def removeTool(
+    toolName: String
+  ): Unit = {
+    mcpAsyncServer.foreach { server =>
+      logger.info(s"[$serverName] Removing tool: $toolName")
+      server
+        .removeTool(toolName)
+        .doOnSuccess(_ => logger.debug(s"[$serverName] Tool removed: $toolName"))
+        .doOnError(ex => logger.error(s"[$serverName] Failed to remove tool: $toolName", ex))
+        .subscribe()
+    }
   }
 
   def stop(): Unit = {

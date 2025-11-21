@@ -139,13 +139,6 @@ class McpGatewayServiceImpl(
                       logger.info("================================================================================")
                       logger.info("🎉 OAuth Token Exchange Successful!")
                       logger.info("================================================================================")
-                      logger.info(s"Access Token: ${token.accessToken.take(50)}...")
-                      logger.info(s"Refresh Token: ${token.refreshToken.take(50)}...")
-                      token.expiresIn.foreach { exp =>
-                        logger.info(s"Expires In: $exp seconds")
-                      }
-                      logger.info("================================================================================")
-
 
                       HttpResponse(
                         status = StatusCodes.OK,
@@ -156,9 +149,7 @@ class McpGatewayServiceImpl(
                             |<body>
                             |  <h1>Authentication Successful!</h1>
                             |  <p>Your MCP server has been authenticated.</p>
-                            |  <p>Access token: ${token.accessToken.take(20)}...</p>
-                            | <p>Refresh token: ${token.refreshToken.take(20)}...</p>
-                            |  <p>Check server logs for full token details.</p>
+                            |  <p>Close this window and return to the application.</p>
                             |</body>
                             |</html>
                           """.stripMargin

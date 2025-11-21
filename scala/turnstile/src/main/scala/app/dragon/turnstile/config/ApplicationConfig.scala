@@ -99,6 +99,9 @@ object ApplicationConfig {
   /** gRPC server configuration (host, port) */
   val grpcConfig: Config = rootConfig.getConfig("turnstile.grpc")
 
+  /** gRPC-Web server configuration (host, port, enabled) */
+  val grpcWebConfig: Config = rootConfig.getConfig("turnstile.grpc-web")
+
   /** MCP streaming HTTP server configuration */
   val mcpStreaming: Config = rootConfig.getConfig("turnstile.mcp.streaming-http")
 

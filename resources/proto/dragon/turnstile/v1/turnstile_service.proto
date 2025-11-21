@@ -31,77 +31,95 @@ enum LoginStatus {
     LOGIN_STATUS_NOT_APPLICABLE = 4;      // Server does not require OAuth (AUTH_TYPE_NONE or AUTH_TYPE_STATIC_HEADER)
 }
 
+enum TransportType {
+    TRANSPORT_TYPE_UNSPECIFIED = 0;
+    TRANSPORT_TYPE_STREAMING_HTTP = 1;
+}
+
 service TurnstileService {
     rpc ListMcpServers (ListMcpServersRequest)  returns (McpServerList) {}
-    rpc CreateMcpServer (CreateMcpServerRequest) returns (McpServer) {}
-    rpc DeleteMcpServer (DeleteMcpServerRequest) returns (google.protobuf.Empty) {}
+    rpc AddMcpServer (AddMcpServerRequest) returns (McpServer) {}
+    rpc RemoveMcpServer (RemoveMcpServerRequest) returns (google.protobuf.Empty) {}
 
     rpc GetLoginStatusForMcpServer (GetLoginStatusForMcpServerRequest) returns (McpServerLoginStatus) {}
     rpc LoginMcpServer (LoginMcpServerRequest) returns (McpServerLoginUrl) {}
     rpc LogoutMcpServer (LogoutMcpServerRequest) returns (google.protobuf.Empty) {}
+
+    rpc LoadToolsForMcpServer (LoadToolsForMcpServerRequest) returns (google.protobuf.Empty) {}
+    rpc UnloadToolsForMcpServer (UnloadToolsForMcpServerRequest) returns (google.protobuf.Empty) {}
 }
 
 // MCP Servers
-message CreateMcpServerRequest {
-    string name = 1;
-    string url = 2;
-    AuthType auth_type = 3; // Authentication type
-    string static_token = 4; // Static authentication token (optional, used with AUTH_TYPE_STATIC_HEADER)
+message AddMcpServerRequest {
+    string name = 10;
+    string url = 20;
+    AuthType auth_type = 30; // Authentication type
+    string static_token = 40; // Static authentication token (optional, used with AUTH_TYPE_STATIC_HEADER)
 }
 
 message ListMcpServersRequest {
-    string user_id = 1;
-    //string page_size = 2;
-    //string page_token = 3;
+    string user_id = 10;
+    //string cursor = 20;
+    //string page_size = 30;
 }
 
-message DeleteMcpServerRequest {
-    string uuid = 1;
+message RemoveMcpServerRequest {
+    string uuid = 10;
 }
 
 message McpServerList {
-    repeated McpServer mcp_server = 1;
+    repeated McpServer mcp_server = 10;
+    //string next_cursor = 20;
 }
 
 // OAuth configuration details (non-sensitive fields only)
 message OAuthConfig {
-    string client_id = 1;           // OAuth client ID (safe to expose)
-    string token_endpoint = 2;      // OAuth token endpoint URL
-    bool has_client_secret = 3;     // Indicates if client secret is configured
-    bool has_refresh_token = 4;     // Indicates if refresh token is stored
+    string client_id = 10;           // OAuth client ID (safe to expose)
+    string token_endpoint = 20;      // OAuth token endpoint URL
+    bool has_client_secret = 30;     // Indicates if client secret is configured
+    bool has_refresh_token = 40;     // Indicates if refresh token is stored
 }
 
 message McpServer {
-    string uuid = 1;
-    string name = 2;
-    string url = 3;
-    AuthType auth_type = 4;                  // Authentication type
-    bool has_static_token = 5;               // Indicates if a static token is configured (token value not returned for security)
-    OAuthConfig oauth_config = 6;            // OAuth configuration (only present for AUTH_TYPE_DISCOVER)
-    google.protobuf.Timestamp created_at = 7; // Creation timestamp
-    google.protobuf.Timestamp updated_at = 8; // Last update timestamp
+    string uuid = 10;
+    string name = 20;
+    string url = 30;
+    AuthType auth_type = 40;                  // Authentication type
+    TransportType transport_type = 50;        // Transport type
+    bool has_static_token = 60;               // Indicates if a static token is configured (token value not returned for security)
+    OAuthConfig oauth_config = 70;            // OAuth configuration (only present for AUTH_TYPE_DISCOVER)
+    google.protobuf.Timestamp created_at = 80; // Creation timestamp
+    google.protobuf.Timestamp updated_at = 90; // Last update timestamp
 }
 
 
 
 message GetLoginStatusForMcpServerRequest {
-    string uuid = 1;  // UUID of the MCP server to check login status for
+    string uuid = 10;  // UUID of the MCP server to check login status for
 }
 
 message McpServerLoginStatus {
-    string uuid = 1;                              // UUID of the MCP server
-    LoginStatus status = 2;                       // Current login status
-    AuthType auth_type = 3;                       // Authentication type of the server
+    string uuid = 10;                              // UUID of the MCP server
+    LoginStatus status = 20;                       // Current login status
+    AuthType auth_type = 30;                       // Authentication type of the server
 }
 
 message LoginMcpServerRequest {
-    string uuid = 1;
+    string uuid = 10;
 }
 
 message McpServerLoginUrl {
-    string login_url = 1;
+    string login_url = 10;
 }
 
 message LogoutMcpServerRequest {
-    string uuid = 1;
+    string uuid = 10;
+}
+
+message LoadToolsForMcpServerRequest {
+    string uuid = 10;
+}
+
+message UnloadToolsForMcpServerRequest {
+    string uuid = 10;
 }

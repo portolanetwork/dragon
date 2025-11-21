@@ -35,7 +35,7 @@ object Dependencies {
   val jwtScalaVersion = "10.0.1"
   val auth0JwksRsaVersion = "0.22.1"
   val protobufJavaUtilVersion = "3.25.6"
-  val mcpSdkVersion = "0.14.1"
+  val mcpSdkVersion = "0.16.0"
   val slickVersion = "3.5.2"
   val slickPgVersion = "0.22.2"
   val postgresqlVersion = "42.7.4"
@@ -69,6 +69,7 @@ object Dependencies {
     "org.apache.pekko" %% "pekko-cluster-sharding-typed" % pekkoVersion,
     "org.apache.pekko" %% "pekko-http" % pekkoHttpVersion,
     "org.apache.pekko" %% "pekko-grpc-runtime" % pekkoGrpcVersion,
+    "org.apache.pekko" %% "pekko-http-cors" % pekkoHttpVersion,
     "org.apache.pekko" %% "pekko-pki" % pekkoVersion,
     "org.apache.pekko" %% "pekko-serialization-jackson" % pekkoVersion,
     "org.apache.pekko" %% "pekko-http-spray-json" % pekkoHttpVersion,

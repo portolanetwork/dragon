@@ -1,0 +1,38 @@
+import * as React from 'react';
+import * as ReactDOM from 'react-dom/client';
+import { ThemeProvider } from '@mui/material/styles';
+import { CssBaseline } from '@mui/material';
+import theme from './theme';
+import App from './dashboard/Dashboard';
+import { createBrowserRouter, RouterProvider } from 'react-router';
+import Auth0ProtectedRoute from './dashboard/components/Auth0ProtectedRoute';
+import {Auth0Provider} from "@auth0/auth0-react";
+
+const router = createBrowserRouter([
+    {
+        path: '/',
+        element: (
+            <Auth0Provider
+                domain={import.meta.env.VITE_AUTH0_DOMAIN}
+                clientId={import.meta.env.VITE_AUTH0_CLIENT_ID}
+                authorizationParams={{
+                    redirect_uri: window.location.origin,
+                }}
+            >
+                <Auth0ProtectedRoute>
+                    <App />
+                </Auth0ProtectedRoute>
+            </Auth0Provider>
+        ),
+    }
+]);
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+        { /* <App /> */}
+        <RouterProvider router={router} />
+    </ThemeProvider>
+  </React.StrictMode>,
+);

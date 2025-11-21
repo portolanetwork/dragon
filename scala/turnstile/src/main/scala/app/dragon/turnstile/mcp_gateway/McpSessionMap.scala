@@ -107,7 +107,10 @@ class McpSessionMap()(
   }
 
   private def generateMcpServerActorId(userId: String): McpServerActorId = {
-    McpServerActorId(userId, Random.generateUuid())
+    //McpServerActorId(userId, Random.generateUuid())
+    // TODO: For now, we will use a singleton MCP server actor per user
+    //        This may change in the future to support multiple sessions per user
+    McpServerActorId(userId)  
   }
 }
 
