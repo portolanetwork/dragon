@@ -19,7 +19,7 @@
 import sbt.*
 
 object Dependencies {
-  val pekkoVersion = "1.2.1"
+  val pekkoVersion = "1.3.0"
   val pekkoHttpVersion = "1.2.0"
   val pekkoGrpcVersion = "1.1.1"
   val akkaManagementVersion = "1.1.1"
