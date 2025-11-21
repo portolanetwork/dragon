@@ -20,7 +20,9 @@ package app.dragon.turnstile.mcp_server
 
 import app.dragon.turnstile.mcp_server.{McpStreamingHttpServer, PekkoToSpringRequestAdapter, SpringToPekkoResponseAdapter}
 import app.dragon.turnstile.mcp_tools.ToolsService
+import app.dragon.turnstile.monitoring.{AuditEvent, EventLogActor}
 import app.dragon.turnstile.serializer.TurnstileSerializable
+import app.dragon.turnstile.utils.ActorLookup
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
@@ -180,6 +182,7 @@ class McpServerActor(
   implicit val system: ActorSystem[Nothing] = context.system
   implicit val ec: scala.concurrent.ExecutionContext = context.executionContext
   implicit val database: Database = db
+  implicit val sharding: ClusterSharding = ClusterSharding(system)
 
   /**
    * State while waiting for the MCP server to start.
@@ -286,8 +289,28 @@ class McpServerActor(
     case WrappedHttpResponse(result, replyTo) =>
       result match {
         case scala.util.Success(response) =>
+          ActorLookup.getEventLogActor() ! EventLogActor.EventLog(
+            AuditEvent(
+              tenant = "default",
+              userId = Some(mcpServerActorId.userId),
+              eventType = "MCP_REQUEST_PROCESSED",
+              description = Some(s"MCP server actor ${mcpServerActorId.mcpServerActorId} processed a request successfully."),
+              sourceType = Some("mcp_server"),
+              sourceUuid = None,
+            )
+          )
           replyTo ! Right(response)
         case scala.util.Failure(exception) =>
+          ActorLookup.getEventLogActor() ! EventLogActor.EventLog(
+            AuditEvent(
+              tenant = "default",
+              userId = Some(mcpServerActorId.userId),
+              eventType = "MCP_REQUEST_FAILED",
+              description = Some(s"MCP server actor ${mcpServerActorId.mcpServerActorId} failed to process a request: ${exception.getMessage}"),
+              sourceType = Some("mcp_server"),
+              sourceUuid = None
+            )
+          )
           replyTo ! Left(ProcessingError(exception.getMessage))
       }
       Behaviors.same

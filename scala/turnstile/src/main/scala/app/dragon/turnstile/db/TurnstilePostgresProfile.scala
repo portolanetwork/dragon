@@ -21,7 +21,7 @@ package app.dragon.turnstile.db
 import com.github.tminglei.slickpg.*
 import play.api.libs.json.{JsValue, Json}
 import slick.basic.Capability
-import slick.jdbc.JdbcCapabilities
+import slick.jdbc.{JdbcCapabilities, PositionedParameters, PositionedResult}
 
 /**
  * Custom Postgres profile with JSON support via slick-pg.

@@ -22,6 +22,7 @@ import app.dragon.turnstile.auth.AuthCodeFlowActor
 import app.dragon.turnstile.mcp_client.{McpClientActor, McpClientActorId}
 import app.dragon.turnstile.mcp_gateway.McpSessionMapActor
 import app.dragon.turnstile.mcp_server.{McpServerActor, McpServerActorId}
+import app.dragon.turnstile.monitoring.EventLogActor
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, EntityRef}
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -124,4 +125,11 @@ object ActorLookup {
     implicit sharding: ClusterSharding
   ): EntityRef[AuthCodeFlowActor.Message] =
     sharding.entityRefFor(AuthCodeFlowActor.TypeKey, flowId)
+    
+  def getEventLogActor(
+    tenant: String = "default" // For now
+  )(
+    implicit sharding: ClusterSharding
+  ): EntityRef[EventLogActor.Message] =
+    sharding.entityRefFor(EventLogActor.TypeKey, tenant)
 }
