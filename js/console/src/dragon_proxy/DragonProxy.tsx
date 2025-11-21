@@ -75,7 +75,6 @@ class DragonProxy {
                 { meta: metadata }
             );
 
-            console.log("MCP Server list: ", unaryCall.response.mcpServer);
             return unaryCall.response.mcpServer.map((server) => ({
                 uuid: server.uuid,
                 name: server.name,
@@ -137,7 +136,6 @@ class DragonProxy {
             );
 
             const server = unaryCall.response;
-            console.log("MCP server created successfully: ", server);
 
             return {
                 uuid: server.uuid,
@@ -177,8 +175,6 @@ class DragonProxy {
                 RemoveMcpServerRequest.create({ uuid }),
                 { meta: metadata }
             );
-
-            console.log("MCP server deleted successfully");
         } catch (error: any) {
             console.error("Error deleting MCP server: ", error.message);
             throw error;
@@ -204,7 +200,6 @@ class DragonProxy {
                 { meta: metadata }
             );
 
-            console.log("MCP server login status: ", unaryCall.response);
             return unaryCall.response;
         } catch (error: any) {
             console.error("Error getting login status for MCP server: ", error.message);
@@ -231,7 +226,6 @@ class DragonProxy {
                 { meta: metadata }
             );
 
-            console.log("MCP server login URL: ", unaryCall.response.loginUrl);
             return unaryCall.response.loginUrl;
         } catch (error: any) {
             console.error("Error logging in to MCP server: ", error.message);
@@ -257,8 +251,6 @@ class DragonProxy {
                 LogoutMcpServerRequest.create({ uuid }),
                 { meta: metadata }
             );
-
-            console.log("MCP server logout successful");
         } catch (error: any) {
             console.error("Error logging out from MCP server: ", error.message);
             throw error;
@@ -283,8 +275,6 @@ class DragonProxy {
                 LoadToolsForMcpServerRequest.create({ uuid }),
                 { meta: metadata }
             );
-
-            console.log("MCP server tools loaded successfully");
         } catch (error: any) {
             console.error("Error loading tools for MCP server: ", error.message);
             throw error;
@@ -309,8 +299,6 @@ class DragonProxy {
                 UnloadToolsForMcpServerRequest.create({ uuid }),
                 { meta: metadata }
             );
-
-            console.log("MCP server tools unloaded successfully");
         } catch (error: any) {
             console.error("Error unloading tools for MCP server: ", error.message);
             throw error;

@@ -41,7 +41,7 @@ export default function AppNavbar() {
     };
 
     const handleMenuItemClick = (menuItem: string) => {
-        console.log(`Menu item clicked: ${menuItem}`);
+        // Menu item click handler
     };
 
     // <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
@@ -62,8 +62,7 @@ export default function AppNavbar() {
                 top: 'var(--template-frame-height, 0px)',
             }}
         >
-            { // TODO:  Make a component out of this
-                <Box
+            {<Box
                     sx={{
                         width: '100%',
                         display: 'flex',
@@ -87,36 +86,6 @@ export default function AppNavbar() {
                     </div>
                 </Box>
             }
-            {/* <Toolbar variant="dense">
-            <Toolbar variant="regular">
-                <Stack
-                    direction="row"
-                    sx={{
-                        alignItems: 'center',
-                        flexGrow: 1,
-                        width: '100%',
-                        gap: 1,
-                    }}
-                >
-                    <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{justifyContent: 'center', mr: 'auto'}}
-                    >
-                        <CustomIcon/>
-                        <Typography variant="h4" component="h1" sx={{color: 'text.primary'}}>
-                            Dashboard
-                        </Typography>
-                    </Stack>
-                    <ColorModeIconDropdown/>
-                    <MenuButton aria-label="menu" onClick={toggleDrawer(true)}>
-                        <MenuRoundedIcon/>
-                    </MenuButton>
-                    <SideMenuMobile open={open} toggleDrawer={toggleDrawer} onMenuItemClick={handleMenuItemClick}/>
-
-                </Stack>
-            </Toolbar>
-            */}
         </AppBar>
     );
 }

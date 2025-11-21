@@ -18,8 +18,6 @@ class TurnstileServiceInterface {
                 baseUrl = `${window.location.protocol}//${window.location.hostname.replace('console', 'turnstile')}`;
             }
 
-            console.log(`turnstile baseUrl: ${baseUrl}`);
-
             const transport = new GrpcWebFetchTransport({
                 baseUrl: baseUrl,
                 format: 'binary',

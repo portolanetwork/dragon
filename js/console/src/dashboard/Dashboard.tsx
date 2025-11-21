@@ -63,7 +63,6 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
     };
 
     const handleMenuItemClick = (menuItem: string[]) => {
-        console.log(`Menu item clicked: ${menuItem}`);
         setSelectedMenuItem(menuItem);
     };
 
@@ -100,9 +99,7 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
 
     return (
     <AppTheme {...props} themeComponents={xThemeComponents}>
-        {  // Some padding behind the app bar
-            <Box sx={{ height: '6vh'}}></Box>
-        }
+        <Box sx={{ height: '6vh'}}></Box>
       <CssBaseline enableColorScheme />
       <Box sx={{ display: 'flex', mt: 0 }}>
         <SideMenu
@@ -134,8 +131,7 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
                     spacing={2}
                     sx={{
                         alignItems: 'center',
-                        mx: 3, // Right margin
-                        //pb: 5,
+                        mx: 3,
                         mt: { xs: 8, md: 0 },
                     }}
                 >
@@ -159,27 +155,17 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
         </Box>
 
           <Drawer
-              ////variant="permanent"
               variant="persistent"
               anchor="right"
-              //open={drawerOpen}
-
-              //variant="permanent"
               sx={{
                   width: drawerWidth,
                   flexShrink: 0,
                   mt: 1,
                   [`& .MuiDrawer-paper`]: { width: drawerWidth, boxSizing: 'border-box' },
               }}
-
-              //open={isHelpDrawerOpen}
-              //onClose={toggleHelpDrawer(false)}
               open={drawerOpen}
           >
               <Box sx={{ height: '10vh'}}></Box>
-
-              { /* <Toolbar /> */ }
-
               <Box sx={{ overflow: 'auto', ml: 2, mr: 2 }}>
                   <HelpContent selectedMenuItem={selectedMenuItem} />
               </Box>
