@@ -1,3 +1,10 @@
+# [0.3.0](https://github.com/portolanetwork/dragon/compare/v0.2.1...v0.3.0) (2025-11-21)
+
+
+### Features
+
+* Implement Basic UI ([#12](https://github.com/portolanetwork/dragon/issues/12)) ([726fd4e](https://github.com/portolanetwork/dragon/commit/726fd4e242205bcac1886b70fd72398b668c5d94))
+
 ## [0.2.1](https://github.com/portolanetwork/dragon/compare/v0.2.0...v0.2.1) (2025-11-17)
 
 
