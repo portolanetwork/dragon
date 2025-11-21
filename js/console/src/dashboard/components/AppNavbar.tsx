@@ -9,8 +9,8 @@ import Typography from '@mui/material/Typography';
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded';
 import portolaAppIcon from '../../assets/portola_icon.png';
-import portolaAppDarkerLogo from '../../assets/portola_logo_darker.png';
-import portolaAppWhiteLogo from '../../assets/portola_logo_white.png';
+import dragonAppDarkerLogo from '../../assets/dragon_logo_darker.png';
+
 
 import { useTheme } from '@mui/material/styles';
 
@@ -80,7 +80,7 @@ export default function AppNavbar() {
                     <div style={{ display: 'flex', alignItems: 'center' }}>
                         <img src={portolaAppIcon} id="banner-logo" style={{ height: '34px' }} />
                         <img
-                            src={isDarkMode ? portolaAppWhiteLogo : portolaAppDarkerLogo}
+                            src={dragonAppDarkerLogo}
                             id="banner-logo"
                             style={{ height: '34px' }}
                         />
