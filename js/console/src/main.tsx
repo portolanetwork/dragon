@@ -13,12 +13,10 @@ const router = createBrowserRouter([
         path: '/',
         element: (
             <Auth0Provider
-                domain="portola-dev.us.auth0.com"
-                clientId="sfxhXr2jMA0arQ0C3kAGatI1z0k4j8rt"
+                domain={import.meta.env.VITE_AUTH0_DOMAIN}
+                clientId={import.meta.env.VITE_AUTH0_CLIENT_ID}
                 authorizationParams={{
-                    //audience: "https://dragonpi.app/api",
-                    redirect_uri: 'http://localhost:5173',//window.location.origin,
-                    //scope: 'openid profile email',
+                    redirect_uri: window.location.origin,
                 }}
             >
                 <Auth0ProtectedRoute>
