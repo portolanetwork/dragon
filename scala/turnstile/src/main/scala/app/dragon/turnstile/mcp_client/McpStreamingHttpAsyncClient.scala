@@ -60,8 +60,6 @@ object McpStreamingHttpAsyncClient {
       case "" | "/" => "/"
       case path => path
     }
-      
-      //if (url.getPath.isEmpty || url.getPath == "/") "/mcp" else url.getPath
   
     new McpStreamingHttpAsyncClient(clientName, clientVersion, baseUrl, endpoint, authTokenProvider).start()
   }
