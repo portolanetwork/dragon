@@ -225,7 +225,7 @@ class Struct$Type extends MessageType<Struct> {
     private binaryReadMap1(map: Struct["fields"], reader: IBinaryReader, options: BinaryReadOptions): void {
         let len = reader.uint32(), end = reader.pos + len, key: keyof Struct["fields"] | undefined, val: Struct["fields"][any] | undefined;
         while (reader.pos < end) {
-            let [fieldNo, wireType] = reader.tag();
+            let [fieldNo] = reader.tag();
             switch (fieldNo) {
                 case 1:
                     key = reader.string();
