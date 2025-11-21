@@ -76,6 +76,9 @@ Documentation coming soon.
 
 ### Running Locally
 
+NOTE: This setup doc is work-in-progress. I will be updating this to be more comprehensive in the future releases. If you'd like help setting this up, reach out to me at: sami.malik@portolanetwork.io 
+
+
 ```bash
 # Clone the repository
 git clone https://github.com/portola-labs/dragon.git
