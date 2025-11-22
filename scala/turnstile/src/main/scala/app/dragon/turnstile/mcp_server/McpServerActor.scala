@@ -33,6 +33,7 @@ import slick.jdbc.JdbcBackend.Database
 
 import scala.concurrent.Future
 import scala.jdk.FutureConverters.*
+import scala.util.{Success, Failure, Try}
 
 /**
  * Entity ID for McpServerActor instances.
@@ -141,7 +142,7 @@ object McpServerActor {
 
   // Remove WrappedGetResponse, use only WrappedHttpResponse for all handlers
   private final case class WrappedHttpResponse(
-    result: scala.util.Try[HttpResponse],
+    result: Try[HttpResponse],
     replyTo: ActorRef[Either[McpActorError, HttpResponse]]
   ) extends Message
 
@@ -200,9 +201,9 @@ class McpServerActor(
 
     // Pipe the result to self
     context.pipeToSelf(ToolsService.getInstance(mcpServerActorId.userId).getAllDownstreamToolsSpec()) {
-      case scala.util.Success(Right(toolSpecSeq)) => DownstreamRefreshStatus(Right((toolSpecSeq)))
-      case scala.util.Success(Left(error)) => DownstreamRefreshStatus(Left(ProcessingError(error.toString)))
-      case scala.util.Failure(error) => DownstreamRefreshStatus(Left(ProcessingError(error.getMessage)))
+      case Success(Right(toolSpecSeq)) => DownstreamRefreshStatus(Right((toolSpecSeq)))
+      case Success(Left(error)) => DownstreamRefreshStatus(Left(ProcessingError(error.toString)))
+      case Failure(error) => DownstreamRefreshStatus(Left(ProcessingError(error.getMessage)))
     }
 
     Behaviors.receiveMessagePartial(handleDownstreamRefresh(turnstileMcpServer))
@@ -254,8 +255,8 @@ class McpServerActor(
     case McpGetRequest(request, replyTo) =>
       context.log.info(s"MCP Actor $mcpServerActorId handling GET request")
       context.pipeToSelf(handlePekkoRequest(request, turnstileMcpServer)) {
-        case scala.util.Success(response) => WrappedHttpResponse(scala.util.Success(response), replyTo)
-        case scala.util.Failure(exception) => WrappedHttpResponse(scala.util.Failure(exception), replyTo)
+        case Success(response) => WrappedHttpResponse(Success(response), replyTo)
+        case Failure(exception) => WrappedHttpResponse(Failure(exception), replyTo)
       }
       Behaviors.same
   }
@@ -267,8 +268,8 @@ class McpServerActor(
       context.log.info(s"Handling MCP POST request for user ${mcpServerActorId.userId}, actor ${mcpServerActorId.mcpServerActorId}: ${request.uri}")
 
       context.pipeToSelf(handlePekkoRequest(request, turnstileMcpServer)) {
-        case scala.util.Success(response) => WrappedHttpResponse(scala.util.Success(response), replyTo)
-        case scala.util.Failure(exception) => WrappedHttpResponse(scala.util.Failure(exception), replyTo)
+        case Success(response) => WrappedHttpResponse(Success(response), replyTo)
+        case Failure(exception) => WrappedHttpResponse(Failure(exception), replyTo)
       }
       Behaviors.same
   }
@@ -279,8 +280,8 @@ class McpServerActor(
     case McpDeleteRequest(request, replyTo) =>
       context.log.info(s"Handling MCP DELETE request: ${request.uri}")
       context.pipeToSelf(handlePekkoRequest(request, turnstileMcpServer)) {
-        case scala.util.Success(response) => WrappedHttpResponse(scala.util.Success(response), replyTo)
-        case scala.util.Failure(exception) => WrappedHttpResponse(scala.util.Failure(exception), replyTo)
+        case Success(response) => WrappedHttpResponse(Success(response), replyTo)
+        case Failure(exception) => WrappedHttpResponse(Failure(exception), replyTo)
       }
       Behaviors.same
   }
@@ -290,39 +291,9 @@ class McpServerActor(
       import app.dragon.turnstile.monitoring.EventData
 
       result match {
-        case scala.util.Success(response) =>
-          ActorLookup.getEventLogActor() ! EventLogActor.EventLog(
-            AuditEvent(
-              tenant = "default",
-              userId = Some(mcpServerActorId.userId),
-              eventType = "MCP_REQUEST_PROCESSED",
-              description = Some(s"MCP server actor ${mcpServerActorId.mcpServerActorId} processed a request successfully."),
-              sourceType = Some("mcp_server"),
-              sourceUuid = None,
-              rawData = EventData.McpRequestData(
-                method = "POST",
-                uri = "/mcp",
-                statusCode = Some(response.status.intValue())
-              )
-            )
-          )
+        case Success(response) =>
           replyTo ! Right(response)
-        case scala.util.Failure(exception) =>
-          ActorLookup.getEventLogActor() ! EventLogActor.EventLog(
-            AuditEvent(
-              tenant = "default",
-              userId = Some(mcpServerActorId.userId),
-              eventType = "MCP_REQUEST_FAILED",
-              description = Some(s"MCP server actor ${mcpServerActorId.mcpServerActorId} failed to process a request: ${exception.getMessage}"),
-              sourceType = Some("mcp_server"),
-              sourceUuid = None,
-              rawData = EventData.McpRequestData(
-                method = "POST",
-                uri = "/mcp",
-                errorMessage = Some(exception.getMessage)
-              )
-            )
-          )
+        case Failure(exception) =>
           replyTo ! Left(ProcessingError(exception.getMessage))
       }
       Behaviors.same

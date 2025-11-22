@@ -27,7 +27,7 @@ import java.sql.Timestamp
 import java.util.UUID
 
 /**
- * Slick table definitions for MCP server persistence.
+ * Slick table definitions for MCP server persistence and event logging.
  *
  * Database Schema:
  * - mcp_server: Stores user-registered MCP servers
@@ -47,11 +47,26 @@ import java.util.UUID
  *   - created_at: Timestamp of creation
  *   - updated_at: Timestamp of last update
  *
+ * - event_log: Stores audit events and system logs
+ *   - id: Auto-incrementing primary key
+ *   - uuid: Event UUID (globally unique)
+ *   - tenant: Tenant identifier
+ *   - user_id: User identifier (nullable for system events)
+ *   - event_type: Event type (e.g., TOOL_EXECUTED, MCP_REQUEST_PROCESSED)
+ *   - description: Human-readable event description
+ *   - metadata: JSONB field for event-specific structured data
+ *   - created_at: Timestamp when event occurred
+ *
  * Indexes:
  * - idx_mcp_servers_tenant: Fast lookup by tenant
  * - idx_mcp_servers_tenant_user: Lookup by tenant and user
  * - idx_mcp_servers_uuid: Unique constraint on uuid
  * - idx_mcp_servers_tenant_user_name: Unique constraint on (tenant, user_id, name)
+ * - idx_event_log_tenant: Fast lookup by tenant
+ * - idx_event_log_tenant_user: Lookup by tenant and user
+ * - idx_event_log_event_type: Lookup by event type
+ * - idx_event_log_created_at: Time-based queries
+ * - idx_event_log_metadata: GIN index for JSONB searches
  */
 
 /**
@@ -135,11 +150,9 @@ class McpServersTable(
  * @param uuid Event UUID (globally unique)
  * @param tenant Tenant identifier
  * @param userId User identifier (nullable for system events)
- * @param eventType Event type (e.g., fetch_tools, get, post, login, client_connected)
+ * @param eventType Event type (e.g., TOOL_EXECUTED, MCP_REQUEST_PROCESSED, etc.)
  * @param description Human-readable event description
- * @param sourceType Source type (e.g., mcp_server, system, client) for event origin classification
- * @param sourceUuid UUID reference to the source entity (no FK constraint)
- * @param rawData Extensible JSONB field for event-specific data (stored as Circe Json)
+ * @param metadata Extensible JSONB field for event-specific structured data (stored as Circe Json)
  * @param createdAt Creation timestamp
  */
 case class EventLogRow(
@@ -149,9 +162,7 @@ case class EventLogRow(
   userId: Option[String] = None,
   eventType: String,
   description: Option[String] = None,
-  sourceType: Option[String] = None,
-  sourceUuid: Option[UUID] = None,
-  rawData: Json = Json.obj(),
+  metadata: Json = Json.obj(),
   createdAt: Timestamp = new Timestamp(System.currentTimeMillis())
 )
 
@@ -172,9 +183,7 @@ class EventLogTable(
   def userId = column[Option[String]]("user_id")
   def eventType = column[String]("event_type")
   def description = column[Option[String]]("description")
-  def sourceType = column[Option[String]]("source_type")
-  def sourceUuid = column[Option[UUID]]("source_uuid")
-  def rawData = column[Json]("raw_data")
+  def metadata = column[Json]("metadata")
   def createdAt = column[Timestamp]("created_at")
 
   // Index on tenant for fast lookup
@@ -186,19 +195,13 @@ class EventLogTable(
   // Index on event_type
   def idxEventType = index("idx_event_log_event_type", eventType)
 
-  // Index on source_type
-  def idxSourceType = index("idx_event_log_source_type", sourceType)
-
-  // Index on source_uuid
-  def idxSourceUuid = index("idx_event_log_source_uuid", sourceUuid)
-
   // Index on created_at
   def idxCreatedAt = index("idx_event_log_created_at", createdAt)
 
   // Unique index on uuid (globally unique)
   def idxUuid = index("idx_event_log_uuid", uuid, unique = true)
 
-  def * = (id, uuid, tenant, userId, eventType, description, sourceType, sourceUuid, rawData, createdAt).mapTo[EventLogRow]
+  def * = (id, uuid, tenant, userId, eventType, description, metadata, createdAt).mapTo[EventLogRow]
 }
 
 /**

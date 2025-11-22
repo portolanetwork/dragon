@@ -34,20 +34,16 @@ import scala.concurrent.duration.*
  *
  * @param tenant Tenant identifier
  * @param userId User who performed the action (optional for system events)
- * @param eventType Event type (e.g., fetch_tools, get, post, login, client_connected)
+ * @param eventType Event type (e.g., TOOL_EXECUTED, MCP_REQUEST_PROCESSED, etc.)
  * @param description Human-readable event description
- * @param sourceType Source type (e.g., mcp_server, system, client) for event origin classification
- * @param sourceUuid UUID reference to the source entity (no FK constraint for flexibility)
- * @param rawData Event-specific data (sealed trait with type-safe variants)
+ * @param metadata Event-specific structured data (sealed trait with type-safe variants)
  */
 case class AuditEvent(
   tenant: String,
   userId: Option[String] = None,
   eventType: String,
   description: Option[String] = None,
-  sourceType: Option[String] = None,
-  sourceUuid: Option[java.util.UUID] = None,
-  rawData: EventData = EventData.EmptyData
+  metadata: EventData = EventData.EmptyData
 ) extends TurnstileSerializable {
 
   /**
@@ -61,9 +57,7 @@ case class AuditEvent(
       userId = userId,
       eventType = eventType,
       description = description,
-      sourceType = sourceType,
-      sourceUuid = sourceUuid,
-      rawData = rawData.asJson,
+      metadata = metadata.asJson,
       createdAt = new Timestamp(System.currentTimeMillis())
     )
   }
