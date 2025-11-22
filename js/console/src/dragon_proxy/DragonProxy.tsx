@@ -17,6 +17,7 @@ import {
     EventLogList,
     Filter,
 } from "../proto/dragon/turnstile/v1/turnstile_service";
+import { Struct } from "../proto/google/protobuf/struct";
 
 export interface McpServerRow {
     uuid: string;
@@ -347,7 +348,7 @@ class DragonProxy {
                 userId: event.userId,
                 eventType: event.eventType,
                 description: event.description,
-                metadata: event.metadata,
+                metadata: event.metadata ? Struct.toJson(event.metadata) : undefined,
                 createdAt: event.createdAt
                     ? new Date(Number(event.createdAt.seconds) * 1000).toISOString()
                     : new Date().toISOString(),
