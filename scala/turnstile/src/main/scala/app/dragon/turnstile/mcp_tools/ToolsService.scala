@@ -84,7 +84,7 @@ object ToolsService {
     ec: ExecutionContext,
     system: ActorSystem[?],
     sharding: ClusterSharding,
-    timeout: Timeout,
+    timeout: Timeout = 30.seconds,
     db: Database
   ): ToolsService = {
     require(userId != null && userId.nonEmpty, "userId cannot be empty")
@@ -119,11 +119,6 @@ class ToolsService(
 
   def getAllDownstreamToolsSpec(
     tenant: String = "default"
-  )(implicit
-    system: ActorSystem[?],
-    sharding: ClusterSharding,
-    timeout: Timeout = 30.seconds,
-    db: Database
   ): Future[Either[McpClientError, List[AsyncToolSpecification]]] = {
     logger.info(s"Fetching all downstream tools for user=$userId, tenant=$tenant")
 
@@ -160,18 +155,12 @@ class ToolsService(
    * This method queries a specific MCP client actor for its available tools
    * and returns them as NamespacedTool instances that proxy calls to the remote server.
    *
-   * @param mcpServerUuid The ID of the MCP client actor
-   * @param system        The actor system (implicit)
-   * @param timeout       The timeout for the actor query (implicit, default 30 seconds)
+   * @param mcpServerRow The MCP server row from the database
    * @return A Future containing either an error or a list of namespaced tools
    */
   private[mcp_tools] def getDownstreamTools(
     mcpServerRow: McpServerRow
-  )(implicit
-    system: ActorSystem[?],
-    timeout: Timeout
   ): Future[Either[McpClientError, List[McpTool]]] = {
-    implicit val sharding: ClusterSharding = ClusterSharding(system)
 
     logger.info(s"Fetching namespaced tools from MCP client actor: ${mcpServerRow.uuid} (${mcpServerRow.name}) for user=$userId")
 
@@ -214,19 +203,11 @@ class ToolsService(
    * This method queries the database for the MCP server with the given UUID,
    * then fetches the tools from that server and returns them as AsyncToolSpecification instances.
    *
-   * @param uuid    The UUID string of the MCP server
-   * @param system  The actor system (implicit)
-   * @param timeout The timeout for the actor query (implicit, default 30 seconds)
-   * @param db      The database instance (implicit)
+   * @param uuid The UUID string of the MCP server
    * @return A Future containing either an error or a list of tool specifications
    */
   def getDownstreamToolsSpec(
     uuid: String
-  )(implicit
-    system: ActorSystem[?],
-    sharding: ClusterSharding,
-    timeout: Timeout = 30.seconds,
-    db: Database
   ): Future[Either[McpClientError, List[AsyncToolSpecification]]] = {
     logger.info(s"Fetching downstream tools for MCP server UUID: $uuid for user=$userId")
 
@@ -247,10 +228,6 @@ class ToolsService(
 
   private def getDownstreamToolsSpec(
     mcpServerRow: McpServerRow
-  )(implicit
-    system: ActorSystem[?],
-    sharding: ClusterSharding,
-    timeout: Timeout
   ): Future[Either[McpClientError, List[AsyncToolSpecification]]] = {
     getDownstreamTools(mcpServerRow).map {
       case Right(tools) =>
@@ -271,8 +248,6 @@ class ToolsService(
     tools: List[McpTool],
     withLogging: Boolean,
     tenant: String = "default"
-  )(
-    implicit sharding: ClusterSharding
   ): List[AsyncToolSpecification] = {
     tools.map { tool =>
       // Log schema

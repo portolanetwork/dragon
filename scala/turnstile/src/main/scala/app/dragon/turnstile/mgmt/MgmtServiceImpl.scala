@@ -376,6 +376,63 @@ class MgmtServiceImpl(authEnabled: Boolean)(
     }
   }
 
+  /**
+   * Get event logs with optional filtering and pagination.
+   *
+   * @param in       GetEventLogRequest containing filter criteria and pagination info
+   * @param metadata Request metadata containing authentication info
+   * @return Future[EventLogList] containing list of event logs
+   */
+  override def getEventLog(
+    in: GetEventLogRequest,
+    metadata: Metadata
+  ): Future[EventLogList] = {
+    // Validate request and fetch event logs
+    for {
+      authContext <- ServerAuthService.authenticate(metadata, authEnabled)
+      _ = logger.info(s"Received GetEventLog request from userId: ${authContext.userId}")
+
+      // Parse filter parameters
+      filter = in.filter.getOrElse(Filter())
+      eventType = if (filter.eventType.isEmpty) None else Some(filter.eventType)
+      
+      // Determine page size (default: 100, max: 1000)
+      pageSize = if (in.pageSize <= 0) 100 else Math.min(in.pageSize, 1000)
+
+      // Fetch event logs from database
+      listResult <- DbInterface.listEventLogs(
+        tenant = authContext.tenant,
+        userId = Some(authContext.userId),
+        eventType = eventType,
+        pageSize = pageSize
+      )
+    } yield {
+      listResult match {
+        case Left(dbError) =>
+          logger.error(s"Failed to fetch event logs: ${dbError.message}")
+          throw new GrpcServiceException(Status.INTERNAL,
+            MetadataBuilder().addText("DATABASE_ERROR", dbError.message).build())
+
+        case Right(rows) =>
+          // Convert rows to proto messages
+          val eventLogs = rows.map(rowToEventLog)
+
+          // Calculate next cursor (timestamp of last event)
+          val nextCursor = if (rows.size >= pageSize) {
+            rows.lastOption.map(_.createdAt.getTime.toString).getOrElse("")
+          } else {
+            "" // No more pages
+          }
+
+          logger.info(s"Returning ${eventLogs.size} event logs for userId: ${authContext.userId}")
+          EventLogList(
+            eventLog = eventLogs,
+            nextCursor = nextCursor
+          )
+      }
+    }
+  }
+
 
   // Private helper methods below
 
@@ -460,6 +517,51 @@ class MgmtServiceImpl(authEnabled: Boolean)(
       updatedAt = Some(com.google.protobuf.timestamp.Timestamp(
         seconds = row.updatedAt.getTime / 1000,
         nanos = ((row.updatedAt.getTime % 1000) * 1000000).toInt
+      ))
+    )
+  }
+
+  /**
+   * Converts an EventLogRow to an EventLog proto message.
+   */
+  private def rowToEventLog(row: EventLogRow): dragon.turnstile.api.v1.EventLog = {
+    import com.google.protobuf.struct.{Struct, Value}
+    import scala.jdk.CollectionConverters.*
+
+    // Convert Circe Json to google.protobuf.Struct
+    val metadata: Struct = {
+      def circeJsonToProtoValue(json: io.circe.Json): Value = {
+        json.fold(
+          Value(Value.Kind.NullValue(com.google.protobuf.struct.NullValue.NULL_VALUE)),
+          bool => Value(Value.Kind.BoolValue(bool)),
+          num => Value(Value.Kind.NumberValue(num.toDouble)),
+          str => Value(Value.Kind.StringValue(str)),
+          arr => Value(Value.Kind.ListValue(com.google.protobuf.struct.ListValue(arr.map(circeJsonToProtoValue).toSeq))),
+          obj => Value(Value.Kind.StructValue(Struct(
+            obj.toMap.view.mapValues(circeJsonToProtoValue).toMap
+          )))
+        )
+      }
+
+      row.metadata.asObject match {
+        case Some(jsonObject) =>
+          Struct(jsonObject.toMap.view.mapValues(circeJsonToProtoValue).toMap)
+        case None =>
+          Struct()
+      }
+    }
+
+    dragon.turnstile.api.v1.EventLog(
+      id = row.id,
+      uuid = row.uuid.toString,
+      tenant = row.tenant,
+      userId = row.userId.getOrElse(""),
+      eventType = row.eventType,
+      description = row.description.getOrElse(""),
+      metadata = Some(metadata),
+      createdAt = Some(com.google.protobuf.timestamp.Timestamp(
+        seconds = row.createdAt.getTime / 1000,
+        nanos = ((row.createdAt.getTime % 1000) * 1000000).toInt
       ))
     )
   }
