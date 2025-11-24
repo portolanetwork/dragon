@@ -27,20 +27,30 @@ const EventLogGrid = ({ refreshTrigger }: EventLogGridProps) => {
         return <div>User not logged in</div>;
     }
 
-    const fetchEventLogs = async () => {
-        try {
-            const accessToken = await getAccessTokenSilently();
-            const result = await DragonProxy.getInstance().getEventLogWithToken(user.sub!, accessToken);
-            setEventLogRows(result.events);
-            setNextCursor(result.nextCursor);
-        } catch (error: any) {
-            console.error("Error fetching event logs: ", error.message);
-        }
-    };
+
+
+
+
+
+
+
+
+
+
 
     useEffect(() => {
+        const fetchEventLogs = async () => {
+            try {
+                const accessToken = await getAccessTokenSilently();
+                const result = await DragonProxy.getInstance().getEventLogWithToken(user.sub!, accessToken);
+                setEventLogRows(result.events);
+                setNextCursor(result.nextCursor);
+            } catch (error: any) {
+                console.error("Error fetching event logs: ", error.message);
+            }
+        };
         fetchEventLogs();
-    }, [user, refreshTrigger]);
+    }, [user, refreshTrigger, getAccessTokenSilently]);
 
     const getEventTypeColor = (eventType: string): "default" | "primary" | "secondary" | "success" | "error" | "info" | "warning" => {
         if (eventType.includes("ERROR") || eventType.includes("FAILED")) return "error";
