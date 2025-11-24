@@ -6,6 +6,15 @@ While initially supporting MCP spec, Dragon's architecture is protocol-agnostic 
 
 Dragon is built on Apache Pekko's actor system, providing a foundation for scalable MCP routing and tool aggregation. It runs on a single machine or scales horizontally across a cluster.
 
+## Usecases
+
+Dragon is built to solve following usecases:
+
+- Easy integration with Claude, OpenAI ... It implement the MCP Server spec so you can add a single MCP Server to your foundational model. You can then proceed to add all other MCP Servers to Dragon. This provides a single integration point for your data that allows you to contorl and monitor your access patterns.
+- Control and monitor what data your model sees. You can implement data=loss controls inside dragon such that you don't inadvertendly leak your data to a model.
+- Maintin control over token usage by progressive discovery of tools.
+- Framework to implement your own tools
+
 ## What is Dragon?
 
 Dragon is a distributed MCP hub that aggregates tools from multiple downstream MCP servers and exposes them through a unified, user-scoped API. It routes requests between AI applications and tool providers.
