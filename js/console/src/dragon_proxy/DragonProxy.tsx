@@ -322,7 +322,7 @@ class DragonProxy {
             return await this.getEventLogWithToken(user.uid, accessToken, eventType, cursor, pageSize);
         } catch (error: any) {
             console.error("Error getting event log: ", error.message);
-            return { events: [], nextCursor: "" };
+            throw error;
         }
     }
 
@@ -360,7 +360,7 @@ class DragonProxy {
             };
         } catch (error: any) {
             console.error("Error getting event log: ", error.message);
-            return { events: [], nextCursor: "" };
+            throw error;
         }
     }
 }
