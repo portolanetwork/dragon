@@ -253,10 +253,11 @@ class ToolsService(
       // Log schema
       logger.debug(s"Converting tool to AsyncToolSpecification: ${tool.getName()} with schema: ${tool.getSchema()}")
 
-      val handler = withLogging && sharding != null match {
-        case true => tool.getAsyncHandlerWithLogging(userId, tenant).asJava
-        case false => tool.getAsyncHandler().asJava
-      }
+      val handler =
+        if (withLogging && sharding != null)
+          tool.getAsyncHandlerWithLogging(userId, tenant).asJava
+        else
+          tool.getAsyncHandler().asJava
 
       McpServerFeatures.AsyncToolSpecification.builder()
         .tool(tool.getSchema())
