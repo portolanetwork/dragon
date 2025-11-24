@@ -26,11 +26,11 @@ Dragon uses a multi-language, distributed architecture:
 ### Backend (Scala)
 - **Language**: Scala 3.7.3 (modern Scala with minimal boilerplate)
 - **Build Tool**: sbt 1.11+
-- **Actor System**: Apache Pekko 1.2.1 (Akka fork)
+- **Actor System**: Apache Pekko 1.3.0 (Akka fork)
 - **HTTP/gRPC**: Apache Pekko HTTP and gRPC
 - **Database**: PostgreSQL with Slick 3.5.2 for database access
 - **Migrations**: Flyway for database schema management
-- **MCP SDK**: MCP Java SDK 0.14.1
+- **MCP SDK**: MCP Java SDK 0.16.0
 - **Reactive HTTP**: Spring WebFlux (embedded)
 - **Auth**: JWT/Auth0 for OAuth2/OIDC
 
