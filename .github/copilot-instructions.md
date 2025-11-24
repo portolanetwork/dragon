@@ -156,10 +156,9 @@ dragon/
 │   │   │   │       ├── mgmt/           # Management API
 │   │   │   │       ├── main/           # Application entry points
 │   │   │   │       └── utils/          # Utilities
-│   │   │   ├── resources/
-│   │   │   │   ├── application.conf    # Application configuration
-│   │   │   │   └── db/migration/       # Flyway migrations
-│   │   │   └── protobuf/               # Local protobuf definitions
+│   │   │   └── resources/
+│   │   │       ├── application.conf    # Application configuration
+│   │   │       └── db/migration/       # Flyway migrations
 │   │   └── test/scala/          # Test code
 │   ├── build.sbt                # SBT build definition
 │   └── Makefile                 # Build automation
@@ -245,5 +244,5 @@ All code is released under the Apache License 2.0.
 
 - [Configuration Reference](scala/turnstile/src/main/resources/application.conf)
 - [Database Schema](scala/turnstile/src/main/resources/db/migration/)
-- [API Documentation](scala/turnstile/src/main/protobuf/)
+- [API Documentation](resources/proto/)
 - [Auth0 Setup Guide](scala/turnstile/docs/auth-with-auth0.md)
