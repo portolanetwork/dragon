@@ -1,0 +1,66 @@
+---
+# JMX Prometheus Exporter Configuration for Turnstile
+# Exposes JMX metrics on port 9404 for Prometheus scraping
+
+# Lowercase metric names for consistency
+lowercaseOutputName: true
+lowercaseOutputLabelNames: true
+
+# Whitelist patterns for JMX metrics to export
+whitelistObjectNames:
+  # JVM metrics
+  - "java.lang:type=Memory"
+  - "java.lang:type=GarbageCollector,*"
+  - "java.lang:type=Threading"
+  - "java.lang:type=Runtime"
+  - "java.lang:type=OperatingSystem"
+  - "java.lang:type=Compilation"
+  - "java.lang:type=MemoryPool,*"
+
+  # Pekko metrics
+  - "pekko:*"
+  - "pekko.cluster:*"
+  - "pekko.dispatch:*"
+  - "pekko.remote:*"
+
+  # Application metrics
+  - "app.dragon.turnstile:*"
+
+# Rules for transforming JMX metrics to Prometheus format
+rules:
+  # JVM Memory
+  - pattern: 'java.lang<type=Memory><(.*)>: (\d+)'
+    name: jvm_memory_$1
+    value: $2
+    type: GAUGE
+
+  # JVM Garbage Collection
+  - pattern: 'java.lang<type=GarbageCollector, name=(.*)><(.*)>: (\d+)'
+    name: jvm_gc_$2
+    value: $3
+    labels:
+      gc: $1
+    type: GAUGE
+
+  # JVM Threading
+  - pattern: 'java.lang<type=Threading><(.*)>: (\d+)'
+    name: jvm_threads_$1
+    value: $2
+    type: GAUGE
+
+  # JVM Runtime
+  - pattern: 'java.lang<type=Runtime><(.*)>: (\d+)'
+    name: jvm_runtime_$1
+    value: $2
+    type: GAUGE
+
+  # Pekko Actor System
+  - pattern: 'pekko<type=(.*)><(.*)>: (.*)'
+    name: pekko_$1_$2
+    value: $3
+    type: GAUGE
+
+  # Default rule for unmatched metrics
+  - pattern: '.*'
+    name: jmx_unmatched
+    type: UNTYPED
