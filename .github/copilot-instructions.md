@@ -210,7 +210,7 @@ When adding new features:
 
 ## API Endpoints
 
-- **gRPC API**: `localhost:8082` (server management)
+- **gRPC API**: `localhost:8080` (server management)
 - **gRPC-Web API**: `localhost:8081` (server management from UI)
 - **MCP Gateway**: `localhost:8082/mcp` (MCP protocol endpoint)
 
