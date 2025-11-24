@@ -57,13 +57,13 @@ const EventLogGrid = ({ refreshTrigger }: EventLogGridProps) => {
         {
             field: 'uuid',
             headerName: 'UUID',
-            width: 200,
+            width: 120,
             renderCell: (params) => <UUIDDisplay uuid={params.value} />,
         },
         {
             field: 'eventType',
             headerName: 'Event Type',
-            width: 200,
+            width: 150,
             renderCell: (params) => (
                 <Chip
                     label={params.value}
@@ -75,13 +75,13 @@ const EventLogGrid = ({ refreshTrigger }: EventLogGridProps) => {
         {
             field: 'description',
             headerName: 'Description',
-            width: 350
+            width: 450
         },
         {
             field: 'metadata',
             headerName: 'Metadata',
             flex: 1,
-            minWidth: 350,
+            minWidth: 300,
             renderCell: (params) => {
                 if (!params.value) return <Typography variant="body2" color="text.secondary">-</Typography>;
 
@@ -152,7 +152,7 @@ const EventLogGrid = ({ refreshTrigger }: EventLogGridProps) => {
         {
             field: 'createdAt',
             headerName: 'Created At',
-            width: 180,
+            width: 200,
             renderCell: (params) => params.value ? new Date(params.value).toLocaleString() : '',
         },
     ];
