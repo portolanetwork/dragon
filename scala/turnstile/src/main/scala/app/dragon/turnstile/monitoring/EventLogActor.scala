@@ -170,6 +170,12 @@ private class EventLogActor(
       if (newBatch.size >= BATCH_SIZE) {
         context.log.info(s"EventLogActor $tenant batch size reached ($BATCH_SIZE), flushing ${newBatch.size} events")
         flushToDb(newBatch)
+        // TODO: Data loss risk - batch is cleared immediately before DB write completes.
+        // If the DB write fails, these events are lost permanently with no retry mechanism.
+        // This will be addressed in a later release with:
+        // 1. Retry mechanism for failed flushes
+        // 2. Dead letter queue for failed events
+        // 3. Keep batch until flush confirmation
         activeState(Vector.empty)
       } else {
         activeState(newBatch)
@@ -183,6 +189,12 @@ private class EventLogActor(
       if (batch.nonEmpty) {
         context.log.info(s"EventLogActor $tenant flush timer fired, flushing ${batch.size} events")
         flushToDb(batch)
+        // TODO: Data loss risk - batch is cleared immediately before DB write completes.
+        // If the DB write fails, these events are lost permanently with no retry mechanism.
+        // This will be addressed in a later release with:
+        // 1. Retry mechanism for failed flushes
+        // 2. Dead letter queue for failed events
+        // 3. Keep batch until flush confirmation
         activeState(Vector.empty)
       } else {
         context.log.debug(s"EventLogActor $tenant flush timer fired but batch is empty")
@@ -203,6 +215,13 @@ private class EventLogActor(
   /**
    * Flushes the batch of events to the database.
    * Persists events using batch insert via DbInterface for efficiency.
+   *
+   * TODO: Current implementation has data loss risk - caller clears batch before this async
+   * operation completes. If DB write fails, events are permanently lost with no retry.
+   * Future improvements needed:
+   * - Implement retry mechanism for failed DB writes
+   * - Add dead letter queue for persistently failing events
+   * - Modify state management to keep batch until flush confirmation
    *
    * @param batch The batch of events to flush
    */
