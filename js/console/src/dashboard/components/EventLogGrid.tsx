@@ -27,28 +27,21 @@ const EventLogGrid = ({ refreshTrigger }: EventLogGridProps) => {
         return <div>User not logged in</div>;
     }
 
-
-
-
-
-
-
-
-
-
+    // Define fetchEventLogs at component scope so it can be reused by useEffect and refreshAll
+    const fetchEventLogs = async () => {
+        try {
+            const accessToken = await getAccessTokenSilently();
+            const result = await DragonProxy.getInstance().getEventLogWithToken(user.sub!, accessToken);
+            setEventLogRows(result.events);
+            setNextCursor(result.nextCursor);
+        } catch (error: any) {
+            console.error("Error fetching event logs: ", error?.message ?? error);
+        }
+    };
 
 
     useEffect(() => {
-        const fetchEventLogs = async () => {
-            try {
-                const accessToken = await getAccessTokenSilently();
-                const result = await DragonProxy.getInstance().getEventLogWithToken(user.sub!, accessToken);
-                setEventLogRows(result.events);
-                setNextCursor(result.nextCursor);
-            } catch (error: any) {
-                console.error("Error fetching event logs: ", error.message);
-            }
-        };
+        // call the component-scoped fetchEventLogs
         fetchEventLogs();
     }, [user, refreshTrigger, getAccessTokenSilently]);
 
