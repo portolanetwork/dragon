@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useEffect, useState } from 'react';
 import { GridColDef, GridRowParams } from '@mui/x-data-grid';
-import { Box, Chip, Divider, Typography, Card, CardContent, Button, Tooltip, IconButton } from '@mui/material';
+import { Box, Chip, Divider, Typography, Card, CardContent, Button, Tooltip } from '@mui/material';
 import { useAuth0 } from '@auth0/auth0-react';
 import DragonProxy, { EventLogRow } from "../../dragon_proxy/DragonProxy";
 import StyledDataGrid from "./StyledDataGrid";
