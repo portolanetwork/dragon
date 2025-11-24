@@ -1,75 +1,64 @@
-# Dragon MCP Hub
+# Dragon MCP Gateway
 
-An open-source, cloud-native, distributed hub for Model Context Protocol (MCP).
+**Dragon is a cloud-native, distributed gateway for the Model Context Protocol (MCP), unifying multiple downstream MCP servers into a single, user-scoped API for AI applications.** 
 
-While initially supporting MCP spec, Dragon's architecture is protocol-agnostic and built to support emerging connectivity standards as AI ecosystem evolves.
+Dragon serves as the central control plane between AI applications (like Claude, ChatGPT, etc.) and your internal or external tool providers. While initially supporting the MCP spec, its core architecture is protocol-agnostic, built to support emerging connectivity standards as the AI ecosystem evolves.
 
-Dragon is built on Apache Pekko's actor system, providing a foundation for scalable MCP routing and tool aggregation. It runs on a single machine or scales horizontally across a cluster.
+---
 
-## Usecases
+## ✨ Key Use Cases / Why Dragon?
 
-Dragon is built to solve following usecases:
+* **Simplify Integration:** Provide a single MCP endpoint to AI applications and manage all your tool/data access patterns centrally.
+* **Prevent Data Leaks:** Implement fine-grained Data Loss Prevention (DLP) controls to ensure models only access approved data.
+* **Gain Visibility:** Utilize comprehensive usage monitoring for auditing, debugging, and identifying patterns or misuse by AI agents.
+* **Ensure Compliance:** Centralize enterprise compliance controls (e.g., GDPR, HIPAA) across all model-accessed data.
+* **Optimize Token Usage:** Implement advanced optimizations, such as progressive tool discovery, to mitigate context bloat and control costs.
+* **Extend Functionality:** Use the integrated framework to easily implement and manage your own custom tool providers.
 
-- Easy integration with Claude, OpenAI ... It implement the MCP Server spec so you can add a single MCP Server to your foundational model. You can then proceed to add all other MCP Servers to Dragon. This provides a single integration point for your data that allows you to contorl and monitor your access patterns.
-- Control and monitor what data your model sees. You can implement data=loss controls inside dragon such that you don't inadvertendly leak your data to a model.
-- Maintin control over token usage by progressive discovery of tools.
-- Framework to implement your own tools
+---
 
-## What is Dragon?
-
-Dragon is a distributed MCP hub that aggregates tools from multiple downstream MCP servers and exposes them through a unified, user-scoped API. It routes requests between AI applications and tool providers.
-
-Dragon provides a robust foundation for self-hosting and managing MCP connections.
-
-- **Self-Hostable & Distributed**: Run on a single machine or scale horizontally across a cluster using its native Apache Pekko foundation.
-- **Protocol Support**: Full support for the Model Context Protocol (MCP) specification (2025-06-18).
-- **Connectivity**: gRPC and HTTP APIs for both management and high-throughput MCP operations.
-- **Auth**: OAuth2/OIDC authentication with JWT validation, Authorization Code Flow with PKCE, Dynamic Client Registration (DCR), and automatic token refresh
-- **Reliable Persistence**: PostgreSQL-backed configuration management using Flyway for database migrations.
-- **Open Source**: Released under the permissive Apache 2.0 license.
-
-## Capabilities
+## 🛠️ Capabilities
 
 ### Current
-- **MCP Server Aggregation**: Aggregate multiple MCP servers into one
-- **Tenant/User level isolation**: Route requests to user-specific MCP server instances
-- **Spec compliant**: Full support for streaming HTTP spec (2025-06-18)
-- **Auth**: OAuth2/OIDC authentication via third-party IDPs (Auth0)
-- **Console UI**: Web based console UI
+* **MCP Server Aggregation**: Aggregate multiple downstream MCP servers into one unified gateway.
+* **Tenant/User Isolation**: Route requests to user-specific MCP server instances for multi-tenancy.
+* **Spec Compliant**: Full support for the streaming HTTP MCP specification (2025-06-18).
+* **Auth**: OAuth2/OIDC authentication via third-party IDPs (e.g., Auth0) with JWT validation.
+* **Console UI**: Web-based administrative console.
 
 ### Planned
-- **Policy Based Enforcement**: Manage tool access via policies
-- **Monitoring**: Comprehensive audit logging to provide usage visibility
-- **Compliance**: Compliance for enterprise use-cases
-- **Lazy loading**: Lazy loading of tool specs to mitigate context bloat
-- **No-code datasource integration**: Ability to create your custom datasources from APIs
+* **Policy Based Enforcement**: Manage tool access and permissions via declarative policies.
+* **Monitoring**: Comprehensive audit logging and metrics for complete usage visibility.
+* **Compliance Module**: Built-in modules for enterprise-specific compliance mandates.
+* **Lazy Loading**: Lazy loading of tool specifications to mitigate context bloat and improve latency.
+* **No-Code Datasource Integration**: Ability to create custom tools/datasources directly from APIs without writing code.
 
-## Modern & Extensible Tech Stack
+---
 
-- Extensible in any JVM based languages
-- Async programming using Apache Pekko (Akka fork)
-- MCP implementation uses official MCP SDK
-- gRPC API for server management
-- PostgreSQL DB
-- Comprehensive logging and error handling
+## 🏗️ Tech Stack
 
-## Why Dragon?
+Dragon is built on a modern, robust, and asynchronous foundation, prioritizing resilience and speed.
 
-Dragon is engineered to address the demanding requirements of AI infrastructure with an emphasis on scalability, resilience, and high throughput.
+* **Core Framework:** **Apache Pekko** (Akka fork) actor system for asynchronous, event-driven computing.
+* **Language:** **Scala 3** (Extensible in any JVM-based language like Java/Kotlin).
+* **Persistence:** **PostgreSQL** database with configuration management via **Flyway** migrations.
+* **APIs:** **gRPC** (for server management) and **HTTP** (for high-throughput MCP operations).
+* **Protocol Support:** Built on the official Model Context Protocol (MCP) SDK.
 
-### Built for Scale and Resilience
+---
 
-Dragon is founded on the principles of the Reactive Manifesto and built atop Apache Pekko.
+## ⚡ Built for Scale and Resilience (Reactive Principles)
 
-- **Actor-Based Architecture**: Uses Apache Pekko for natural isolation, fault tolerance, and distribution (including automatic recovery and rebalancing).
-- **Horizontally Scalable**: Easily scales across multiple nodes with cluster sharding and service discovery.
-- **Asynchronous Design**: A fully asynchronous, event-driven model from HTTP to database access, enabling high throughput and minimizing resource usage for idle connections.
-- **Reactive Streaming**: Implements reactive streams with backpressure handling for stable, streaming MCP operations.
+Dragon is founded on the principles of the **Reactive Manifesto**, providing an inherently distributed and resilient architecture.
 
-### Modern & Extensible Foundation
-
-- **Protocol-Agnostic Core**: The architecture is designed for rapid iteration and easy extension to new protocols and connectivity standards beyond MCP.
-- **Scala 3**: Written in modern Scala 3 with minimal boilerplate, leveraging its strong type system to catch errors at compile time and running reliably on the JVM.
+* **Actor-Based Architecture:** Uses Apache Pekko for natural isolation, fault tolerance (automatic recovery and rebalancing), and distribution.
+* **Horizontally Scalable:** Easily scales across multiple nodes with native support for cluster sharding and service discovery.
+* **Asynchronous Design:** A fully asynchronous, event-driven model from API to database access, enabling high throughput and minimal resource usage.
+* **Reactive Streaming:** Implements reactive streams with backpressure handling for stable, high-performance MCP streaming operations.
+* **Self-Hostable & Distributed:** Run on a single machine or scale horizontally across a cluster using its native Apache Pekko foundation.
+* **Protocol-Agnostic Core:** The architecture is designed for rapid extension to new protocols and connectivity standards beyond MCP.
+* **Open Source:** Released under the permissive **Apache 2.0 license**.
+---
 
 
 ## Architecture 
