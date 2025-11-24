@@ -1,3 +1,10 @@
+# [0.4.0](https://github.com/portolanetwork/dragon/compare/v0.3.0...v0.4.0) (2025-11-24)
+
+
+### Features
+
+* **event-log:** Feature/implement monitoring ([#20](https://github.com/portolanetwork/dragon/issues/20)) ([bb31035](https://github.com/portolanetwork/dragon/commit/bb310358e2f69c15b1dc9f3ee5725bbe7abf83c4))
+
 # [0.3.0](https://github.com/portolanetwork/dragon/compare/v0.2.1...v0.3.0) (2025-11-21)
 
 
