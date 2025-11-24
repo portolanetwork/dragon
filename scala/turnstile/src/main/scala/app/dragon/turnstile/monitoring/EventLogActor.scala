@@ -18,6 +18,7 @@
 
 package app.dragon.turnstile.monitoring
 
+import app.dragon.turnstile.config.ApplicationConfig
 import app.dragon.turnstile.db.{DbInterface, EventLogRow}
 import app.dragon.turnstile.serializer.TurnstileSerializable
 import io.circe.syntax.*
@@ -98,8 +99,9 @@ object EventLogActor {
     EntityTypeKey[EventLogActor.Message]("EventLogActor")
 
   // Configuration constants
-  private val BATCH_SIZE: Int = 10
-  private val BATCH_FLUSH_SEC: Int = 10
+  val eventLogConfig = ApplicationConfig.eventLog
+  val batchSize = eventLogConfig.getInt("batch-size")
+  val batchFlushSec = eventLogConfig.getInt("batch-flush-sec")
 
   def initSharding(
     system: ActorSystem[?],
@@ -124,7 +126,7 @@ object EventLogActor {
         context.log.info(s"Starting EventLogActor for entity $tenant")
 
         // Start fixed-rate timer that fires every BATCH_FLUSH_SEC seconds
-        timers.startTimerAtFixedRate(FlushTimer, FlushTimer, BATCH_FLUSH_SEC.seconds)
+        timers.startTimerAtFixedRate(FlushTimer, FlushTimer, batchFlushSec.seconds)
 
         new EventLogActor(context, timers, tenant, db).activeState(Vector.empty)
       }
@@ -167,8 +169,8 @@ private class EventLogActor(
       context.log.debug(s"EventLogActor $tenant received event: ${event.eventType} by ${event.userId.getOrElse("system")}")
       val newBatch = batch :+ event
 
-      if (newBatch.size >= BATCH_SIZE) {
-        context.log.info(s"EventLogActor $tenant batch size reached ($BATCH_SIZE), flushing ${newBatch.size} events")
+      if (newBatch.size >= batchSize) {
+        context.log.info(s"EventLogActor $tenant batch size reached ($batchSize), flushing ${newBatch.size} events")
         flushToDb(newBatch)
         // TODO: Data loss risk - batch is cleared immediately before DB write completes.
         // If the DB write fails, these events are lost permanently with no retry mechanism.

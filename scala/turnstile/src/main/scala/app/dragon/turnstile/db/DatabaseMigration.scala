@@ -97,7 +97,7 @@ object DatabaseMigration {
     logger.info("Validating database migrations...")
 
     Try {
-      val dbConfig = config.getConfig("turnstile.database.db")
+      val dbConfig = config.getConfig("turnstile.db.pgsql")
       val url = dbConfig.getString("url")
       val user = dbConfig.getString("user")
       val password = dbConfig.getString("password")
@@ -122,7 +122,7 @@ object DatabaseMigration {
     config: Config
   ): Try[String] = {
     Try {
-      val dbConfig = config.getConfig("turnstile.database.db")
+      val dbConfig = config.getConfig("turnstile.db.pgsql")
       val url = dbConfig.getString("url")
       val user = dbConfig.getString("user")
       val password = dbConfig.getString("password")
@@ -164,7 +164,7 @@ object DatabaseMigration {
     logger.warn("CLEANING DATABASE - This will drop all objects!")
 
     Try {
-      val dbConfig = config.getConfig("turnstile.database.db")
+      val dbConfig = config.getConfig("turnstile.db.pgsql")
       val url = dbConfig.getString("url")
       val user = dbConfig.getString("user")
       val password = dbConfig.getString("password")

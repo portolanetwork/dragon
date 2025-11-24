@@ -22,8 +22,8 @@ import app.dragon.turnstile.auth.{ClientAuthService, ServerAuthService}
 import app.dragon.turnstile.db.*
 import app.dragon.turnstile.mcp_server.{McpServerActor, McpServerActorId}
 import app.dragon.turnstile.mcp_tools.ToolsService
-import app.dragon.turnstile.utils.{ActorLookup, ConversionUtils}
 import app.dragon.turnstile.utils.ServiceValidationUtil.*
+import app.dragon.turnstile.utils.{ActorLookup, ConversionUtils}
 import com.google.protobuf.empty.Empty
 import dragon.turnstile.api.v1.*
 import io.grpc.Status
@@ -390,20 +390,24 @@ class MgmtServiceImpl(authEnabled: Boolean)(
     // Validate request and fetch event logs
     for {
       authContext <- ServerAuthService.authenticate(metadata, authEnabled)
-      _ = logger.info(s"Received GetEventLog request from userId: ${authContext.userId}")
+      _ = logger.info(s"Received GetEventLog request from userId: ${authContext.userId}, cursor: ${in.cursor}, pageSize: ${in.pageSize}")
 
       // Parse filter parameters
       filter = in.filter.getOrElse(Filter())
       eventType = if (filter.eventType.isEmpty) None else Some(filter.eventType)
-      
+
       // Determine page size (default: 100, max: 1000)
       pageSize = if (in.pageSize <= 0) 100 else Math.min(in.pageSize, 1000)
+
+      // Parse cursor (timestamp in milliseconds)
+      cursorTimestamp = if (in.cursor.isEmpty) { None } else { Some(new java.sql.Timestamp(in.cursor.toLong))}
 
       // Fetch event logs from database
       listResult <- DbInterface.listEventLogs(
         tenant = authContext.tenant,
         userId = Some(authContext.userId),
         eventType = eventType,
+        cursorTimestamp = cursorTimestamp,
         pageSize = pageSize
       )
     } yield {
@@ -424,7 +428,7 @@ class MgmtServiceImpl(authEnabled: Boolean)(
             "" // No more pages
           }
 
-          logger.info(s"Returning ${eventLogs.size} event logs for userId: ${authContext.userId}")
+          logger.info(s"Returning ${eventLogs.size} event logs for userId: ${authContext.userId}, nextCursor: $nextCursor")
           EventLogList(
             eventLog = eventLogs,
             nextCursor = nextCursor
