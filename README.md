@@ -25,10 +25,10 @@ Dragon serves as the central control plane between AI applications (like Claude,
 * **Spec Compliant**: Full support for the streaming HTTP MCP specification (2025-06-18).
 * **Auth**: OAuth2/OIDC authentication via third-party IDPs (e.g., Auth0) with JWT validation.
 * **Console UI**: Web-based administrative console.
+* **Monitoring**: Comprehensive audit logging and event tracking for tool executions and system events.
 
 ### Planned
 * **Policy Based Enforcement**: Manage tool access and permissions via declarative policies.
-* **Monitoring**: Comprehensive audit logging and metrics for complete usage visibility.
 * **Compliance Module**: Built-in modules for enterprise-specific compliance mandates.
 * **Lazy Loading**: Lazy loading of tool specifications to mitigate context bloat and improve latency.
 * **No-Code Datasource Integration**: Ability to create custom tools/datasources directly from APIs without writing code.
