@@ -13,7 +13,11 @@ import {
     TransportType,
     LoadToolsForMcpServerRequest,
     UnloadToolsForMcpServerRequest,
+    GetEventLogRequest,
+    EventLogList,
+    Filter,
 } from "../proto/dragon/turnstile/v1/turnstile_service";
+import { Struct } from "../proto/google/protobuf/struct";
 
 export interface McpServerRow {
     uuid: string;
@@ -24,6 +28,17 @@ export interface McpServerRow {
     hasStaticToken: boolean;
     createdAt?: string;
     updatedAt?: string;
+}
+
+export interface EventLogRow {
+    id: string;
+    uuid: string;
+    tenant: string;
+    userId: string;
+    eventType: string;
+    description: string;
+    metadata?: any;
+    createdAt: string;
 }
 
 class DragonProxy {
@@ -297,6 +312,54 @@ class DragonProxy {
             );
         } catch (error: any) {
             console.error("Error unloading tools for MCP server: ", error.message);
+            throw error;
+        }
+    }
+
+    public async getEventLog(user: User, eventType?: string, cursor?: string, pageSize?: number): Promise<{ events: EventLogRow[], nextCursor: string }> {
+        try {
+            const accessToken = await this.getAccessToken(user);
+            return await this.getEventLogWithToken(user.uid, accessToken, eventType, cursor, pageSize);
+        } catch (error: any) {
+            console.error("Error getting event log: ", error.message);
+            throw error;
+        }
+    }
+
+    public async getEventLogWithToken(userId: string, accessToken: string, eventType?: string, cursor?: string, pageSize?: number): Promise<{ events: EventLogRow[], nextCursor: string }> {
+        try {
+            const metadata = { Authorization: `Bearer ${accessToken}` };
+
+            const filter = eventType ? Filter.create({ eventType }) : undefined;
+
+            const unaryCall = await this.client.getEventLog(
+                GetEventLogRequest.create({
+                    filter,
+                    cursor: cursor || "",
+                    pageSize: pageSize || 100,
+                }),
+                { meta: metadata }
+            );
+
+            const events = unaryCall.response.eventLog.map((event) => ({
+                id: event.id.toString(),
+                uuid: event.uuid,
+                tenant: event.tenant,
+                userId: event.userId,
+                eventType: event.eventType,
+                description: event.description,
+                metadata: event.metadata ? Struct.toJson(event.metadata) : undefined,
+                createdAt: event.createdAt
+                    ? new Date(Number(event.createdAt.seconds) * 1000).toISOString()
+                    : new Date().toISOString(),
+            }));
+
+            return {
+                events,
+                nextCursor: unaryCall.response.nextCursor,
+            };
+        } catch (error: any) {
+            console.error("Error getting event log: ", error.message);
             throw error;
         }
     }

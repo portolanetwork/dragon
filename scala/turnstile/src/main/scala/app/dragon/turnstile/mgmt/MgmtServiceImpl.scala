@@ -22,8 +22,8 @@ import app.dragon.turnstile.auth.{ClientAuthService, ServerAuthService}
 import app.dragon.turnstile.db.*
 import app.dragon.turnstile.mcp_server.{McpServerActor, McpServerActorId}
 import app.dragon.turnstile.mcp_tools.ToolsService
-import app.dragon.turnstile.utils.ActorLookup
 import app.dragon.turnstile.utils.ServiceValidationUtil.*
+import app.dragon.turnstile.utils.{ActorLookup, ConversionUtils}
 import com.google.protobuf.empty.Empty
 import dragon.turnstile.api.v1.*
 import io.grpc.Status
@@ -87,7 +87,7 @@ class MgmtServiceImpl(authEnabled: Boolean)(
         userId = authContext.userId,
         name = in.name,
         url = in.url,
-        authType = authTypeToString(in.authType),
+        authType = ConversionUtils.authTypeToString(in.authType),
         staticToken = if (in.staticToken.isEmpty) None else Some(in.staticToken),
         createdAt = now,
         updatedAt = now
@@ -105,7 +105,7 @@ class MgmtServiceImpl(authEnabled: Boolean)(
 
           // Note: Tool servers will need to be notified of new server registrations at runtime
 
-          rowToMcpServer(row)
+          ConversionUtils.rowToMcpServer(row)
       }
     }
   }
@@ -139,7 +139,7 @@ class MgmtServiceImpl(authEnabled: Boolean)(
           logger.error(s"Failed to list MCP servers from DB: ${dbError.message}")
           throw new GrpcServiceException(Status.UNKNOWN, MetadataBuilder().addText("UNHANDLED_ERROR", dbError.message).build())
         case Right(rows) =>
-          val servers = rows.map(rowToMcpServer)
+          val servers = rows.map(ConversionUtils.rowToMcpServer)
           logger.info(s"Returning ${servers.size} MCP servers for userId: ${in.userId}")
           McpServerList(mcpServer = servers)
       }
@@ -247,8 +247,8 @@ class MgmtServiceImpl(authEnabled: Boolean)(
           
           McpServerLoginStatus(
             uuid = statusInfo.uuid,
-            status = determineLoginStatus(statusInfo.loginStatusEnum),
-            authType = stringToAuthType(statusInfo.authType)
+            status = ConversionUtils.determineLoginStatus(statusInfo.loginStatusEnum),
+            authType = ConversionUtils.stringToAuthType(statusInfo.authType)
           )
         case Left(ClientAuthService.ServerNotFound(msg)) =>
           logger.warn(s"MCP server not found: $msg")
@@ -376,92 +376,65 @@ class MgmtServiceImpl(authEnabled: Boolean)(
     }
   }
 
-
-  // Private helper methods below
-
   /**
-   * Determines the LoginStatus enum value based on auth type and authentication state.
+   * Get event logs with optional filtering and pagination.
+   *
+   * @param in       GetEventLogRequest containing filter criteria and pagination info
+   * @param metadata Request metadata containing authentication info
+   * @return Future[EventLogList] containing list of event logs
    */
-  private def determineLoginStatus(
-    loginStatusEnum: ClientAuthService.LoginStatusEnum
-  ): LoginStatus = {
-    loginStatusEnum match {
-      case ClientAuthService.LoginStatusEnum.AUTHENTICATED => LoginStatus.LOGIN_STATUS_AUTHENTICATED
-      case ClientAuthService.LoginStatusEnum.EXPIRED => LoginStatus.LOGIN_STATUS_EXPIRED
-      case ClientAuthService.LoginStatusEnum.NOT_APPLICABLE => LoginStatus.LOGIN_STATUS_NOT_APPLICABLE
-      case ClientAuthService.LoginStatusEnum.NOT_AUTHENTICATED => LoginStatus.LOGIN_STATUS_NOT_AUTHENTICATED
-      case ClientAuthService.LoginStatusEnum.UNSPECIFIED => LoginStatus.LOGIN_STATUS_UNSPECIFIED
+  override def getEventLog(
+    in: GetEventLogRequest,
+    metadata: Metadata
+  ): Future[EventLogList] = {
+    // Validate request and fetch event logs
+    for {
+      authContext <- ServerAuthService.authenticate(metadata, authEnabled)
+      _ = logger.info(s"Received GetEventLog request from userId: ${authContext.userId}, cursor: ${in.cursor}, pageSize: ${in.pageSize}")
+
+      // Parse filter parameters
+      filter = in.filter.getOrElse(Filter())
+      eventType = if (filter.eventType.isEmpty) None else Some(filter.eventType)
+
+      // Determine page size (default: 100, max: 1000)
+      pageSize = if (in.pageSize <= 0) 100 else Math.min(in.pageSize, 1000)
+
+      // Parse cursor (timestamp in milliseconds)
+      cursorTimestamp = if (in.cursor.isEmpty) { None } else { Some(new java.sql.Timestamp(in.cursor.toLong))}
+
+      // Fetch event logs from database
+      listResult <- DbInterface.listEventLogs(
+        tenant = authContext.tenant,
+        userId = Some(authContext.userId),
+        eventType = eventType,
+        cursorTimestamp = cursorTimestamp,
+        pageSize = pageSize
+      )
+    } yield {
+      listResult match {
+        case Left(dbError) =>
+          logger.error(s"Failed to fetch event logs: ${dbError.message}")
+          throw new GrpcServiceException(Status.INTERNAL,
+            MetadataBuilder().addText("DATABASE_ERROR", dbError.message).build())
+
+        case Right(rows) =>
+          // Convert rows to proto messages
+          val eventLogs = rows.map(ConversionUtils.rowToEventLog)
+
+          // Calculate next cursor (timestamp of last event)
+          val nextCursor = if (rows.size >= pageSize) {
+            rows.lastOption.map(_.createdAt.getTime.toString).getOrElse("")
+          } else {
+            "" // No more pages
+          }
+
+          logger.info(s"Returning ${eventLogs.size} event logs for userId: ${authContext.userId}, nextCursor: $nextCursor")
+          EventLogList(
+            eventLog = eventLogs,
+            nextCursor = nextCursor
+          )
+      }
     }
-  }
-
-  /**
-   * Converts a database authType string to proto AuthType enum.
-   */
-  private def stringToAuthType(authType: String): AuthType = authType.toLowerCase match {
-    case "none" => AuthType.AUTH_TYPE_NONE
-    case "discover" => AuthType.AUTH_TYPE_DISCOVER
-    case "static_auth_header" => AuthType.AUTH_TYPE_STATIC_HEADER
-    case _ => AuthType.AUTH_TYPE_UNSPECIFIED
-  }
-
-  /**
-   * Converts a proto AuthType enum to database authType string.
-   */
-  private def authTypeToString(authType: AuthType): String = authType match {
-    case AuthType.AUTH_TYPE_NONE => "none"
-    case AuthType.AUTH_TYPE_DISCOVER => "discover"
-    case AuthType.AUTH_TYPE_STATIC_HEADER => "static_auth_header"
-    case AuthType.AUTH_TYPE_UNSPECIFIED | AuthType.Unrecognized(_) => "none"
-  }
-
-  /**
-   * Converts a database transportType string to proto TransportType enum.
-   */
-  private def stringToTransportType(transportType: String): TransportType = transportType.toLowerCase match {
-    case "streaming_http" => TransportType.TRANSPORT_TYPE_STREAMING_HTTP
-    case _ => TransportType.TRANSPORT_TYPE_UNSPECIFIED
-  }
-
-  /**
-   * Converts a proto TransportType enum to database transportType string.
-   */
-  private def transportTypeToString(transportType: TransportType): String = transportType match {
-    case TransportType.TRANSPORT_TYPE_STREAMING_HTTP => "streaming_http"
-    case TransportType.TRANSPORT_TYPE_UNSPECIFIED | TransportType.Unrecognized(_) => "streaming_http"
-  }
-  
-  /**
-   * Converts a database row to a McpServer proto message.
-   */
-  private def rowToMcpServer(row: McpServerRow): McpServer = {
-    val authType = stringToAuthType(row.authType)
-
-    McpServer(
-      uuid = row.uuid.toString,
-      name = row.name,
-      url = row.url,
-      authType = authType,
-      transportType = stringToTransportType(row.transportType),
-      hasStaticToken = row.staticToken.isDefined,
-      oauthConfig = authType match {
-        case AuthType.AUTH_TYPE_DISCOVER =>
-          Some(OAuthConfig(
-            clientId = row.clientId.getOrElse(""),
-            tokenEndpoint = row.tokenEndpoint.getOrElse(""),
-            hasClientSecret = row.clientSecret.isDefined,
-            hasRefreshToken = row.refreshToken.isDefined
-          ))
-        case _ => None
-      },
-      createdAt = Some(com.google.protobuf.timestamp.Timestamp(
-        seconds = row.createdAt.getTime / 1000,
-        nanos = ((row.createdAt.getTime % 1000) * 1000000).toInt
-      )),
-      updatedAt = Some(com.google.protobuf.timestamp.Timestamp(
-        seconds = row.updatedAt.getTime / 1000,
-        nanos = ((row.updatedAt.getTime % 1000) * 1000000).toInt
-      ))
-    )
   }
 
 }

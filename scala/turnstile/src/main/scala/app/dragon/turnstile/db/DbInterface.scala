@@ -249,4 +249,91 @@ object DbInterface {
       case NonFatal(t) => Left(mapDbError(t))
     }
   }
+
+  /**
+   * Batch inserts event log rows into the database.
+   * @param events Sequence of EventLogRow instances to insert
+   * @param db The database instance
+   * @param ec ExecutionContext
+   * @return `Future[Either[DbError, Int]]` number of rows inserted or DbError
+   */
+  def insertEventLogs(
+    events: Seq[EventLogRow]
+  )(
+    implicit db: Database, ec: ExecutionContext
+  ): Future[Either[DbError, Int]] = {
+    if (events.isEmpty) {
+      Future.successful(Right(0))
+    } else {
+      val insertAction = Tables.eventLogs ++= events
+      db.run(insertAction).map { result =>
+        Right(result.getOrElse(events.size)): Either[DbError, Int]
+      }.recover {
+        case NonFatal(t) => Left(mapDbError(t))
+      }
+    }
+  }
+
+  /**
+   * Lists event logs with optional filtering and pagination.
+   * @param tenant The tenant identifier
+   * @param userId Optional user identifier filter
+   * @param eventType Optional event type filter
+   * @param startTime Optional start time filter (inclusive)
+   * @param endTime Optional end time filter (exclusive)
+   * @param cursorTimestamp Optional cursor timestamp for pagination
+   * @param pageSize Number of events to return (default: 100, max: 1000)
+   * @param db The database instance
+   * @param ec ExecutionContext
+   * @return `Future[Either[DbError, Seq[EventLogRow]]]` with event logs or DbError
+   */
+  def listEventLogs(
+    tenant: String,
+    userId: Option[String] = None,
+    eventType: Option[String] = None,
+    startTime: Option[java.sql.Timestamp] = None,
+    endTime: Option[java.sql.Timestamp] = None,
+    cursorTimestamp: Option[java.sql.Timestamp] = None,
+    pageSize: Int = 100
+  )(
+    implicit db: Database, ec: ExecutionContext
+  ): Future[Either[DbError, Seq[EventLogRow]]] = {
+    // Enforce max page size
+    val effectivePageSize = Math.min(pageSize, 1000)
+
+    // Build query with filters
+    var query = Tables.eventLogs.filter(_.tenant === tenant)
+
+    userId.foreach { uid =>
+      query = query.filter(_.userId === Some(uid))
+    }
+
+    eventType.foreach { et =>
+      query = query.filter(_.eventType === et)
+    }
+
+    startTime.foreach { st =>
+      query = query.filter(_.createdAt >= st)
+    }
+
+    endTime.foreach { et =>
+      query = query.filter(_.createdAt < et)
+    }
+
+    cursorTimestamp.foreach { ct =>
+      query = query.filter(_.createdAt < ct)
+    }
+
+    // Order by created_at descending (newest first) and limit
+    val finalQuery = query
+      .sortBy(_.createdAt.desc)
+      .take(effectivePageSize)
+      .result
+
+    db.run(finalQuery)
+      .map(Right(_): Either[DbError, Seq[EventLogRow]])
+      .recover {
+        case NonFatal(t) => Left(mapDbError(t))
+      }
+  }
 }

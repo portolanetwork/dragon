@@ -47,6 +47,8 @@ service TurnstileService {
 
     rpc LoadToolsForMcpServer (LoadToolsForMcpServerRequest) returns (google.protobuf.Empty) {}
     rpc UnloadToolsForMcpServer (UnloadToolsForMcpServerRequest) returns (google.protobuf.Empty) {}
+
+    rpc GetEventLog (GetEventLogRequest) returns (EventLogList) {}
 }
 
 // MCP Servers
@@ -60,7 +62,7 @@ message AddMcpServerRequest {
 message ListMcpServersRequest {
     string user_id = 10;
     //string cursor = 20;
-    //string page_size = 30;
+    //int32 page_size = 30;
 }
 
 message RemoveMcpServerRequest {
@@ -122,4 +124,34 @@ message LoadToolsForMcpServerRequest {
 
 message UnloadToolsForMcpServerRequest {
     string uuid = 10;
+}
+
+// Filter for event log queries
+message Filter {
+   string event_type = 30;
+}
+
+// Request to get event logs with filtering and pagination
+message GetEventLogRequest {
+   Filter filter = 10;
+   string cursor = 20;      // Cursor for pagination (timestamp-based)
+   int32 page_size = 30;    // Number of events per page (default: 100, max: 1000)
+}
+
+// Response containing list of event logs
+message EventLogList {
+  repeated EventLog event_log = 10;
+  string next_cursor = 20;  // Cursor for next page
+}
+
+// Individual event log entry
+message EventLog {
+   int64 id = 10;                            // Database primary key
+   string uuid = 20;                         // Globally unique event identifier
+   string tenant = 30;                       // Tenant identifier
+   string user_id = 40;                      // User who performed the action (optional for system events)
+   string event_type = 50;                   // Event type (e.g., TOOL_EXECUTED, MCP_REQUEST_PROCESSED)
+   string description = 60;                  // Human-readable event description
+   google.protobuf.Struct metadata = 70;     // Event-specific structured data (JSONB)
+   google.protobuf.Timestamp created_at = 80; // Event creation timestamp
 }

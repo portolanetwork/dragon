@@ -43,7 +43,7 @@ import org.slf4j.{Logger, LoggerFactory}
  * Configuration Sections:
  * - turnstile.grpc: gRPC server settings (host, port)
  * - turnstile.mcp-streaming: MCP gateway settings (enabled, host, port, server-name, etc.)
- * - turnstile.database.db: Database connection settings (url, user, password)
+ * - turnstile.db.pgsql: Database connection settings (url, user, password)
  * - pekko.*: Actor system, cluster, remoting, management
  *
  * All configuration files should follow the structure defined in application.conf.
@@ -106,7 +106,10 @@ object ApplicationConfig {
   val mcpStreaming: Config = rootConfig.getConfig("turnstile.mcp.streaming-http")
 
   /** Database configuration for Slick and Flyway */
-  val db: Config = rootConfig.getConfig("turnstile.database.db")
+  val db: Config = rootConfig.getConfig("turnstile.db.pgsql")
+  
+  /** Event log configuration */
+  val eventLog: Config = rootConfig.getConfig("turnstile.event-log")
 
   logger.info(s"Configuration loaded from: $configFile")
 }

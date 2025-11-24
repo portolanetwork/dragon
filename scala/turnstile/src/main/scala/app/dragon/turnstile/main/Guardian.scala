@@ -25,6 +25,7 @@ import app.dragon.turnstile.mcp_client.McpClientActor
 import app.dragon.turnstile.mcp_gateway.{McpGatewayServer, McpSessionMapActor}
 import app.dragon.turnstile.mcp_server.McpServerActor
 import app.dragon.turnstile.mgmt.{MgmtGrpcServer, MgmtGrpcWebServer}
+import app.dragon.turnstile.monitoring.EventLogActor
 import com.typesafe.config.Config
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorSystem, Behavior}
@@ -43,6 +44,8 @@ import slick.jdbc.JdbcBackend.Database
  *    - McpServerActor: User-scoped MCP server instances
  *    - McpClientActor: Client connections to downstream MCP servers
  *    - McpSessionMapActor: Session management and routing
+ *    - AuthCodeFlowActor: OAuth authorization code flow management
+ *    - EventLogActor: Audit event logging and batching
  * 3. gRPC Server - Starts the gRPC service for server registration/management
  * 4. gRPC-Web Server - Starts the grpc-web service for browser-based clients
  * 5. MCP Gateway - Starts the HTTP-based MCP protocol gateway
@@ -101,6 +104,7 @@ object Guardian {
           McpClientActor.initSharding(context.system, db)
           McpSessionMapActor.initSharding(context.system)
           AuthCodeFlowActor.initSharding(context.system)
+          EventLogActor.initSharding(context.system, db)
 
           // Start GRPC server (hosting both GreeterService and TurnstileService)
           MgmtGrpcServer.start(grpcHost, grpcPort, context.system)

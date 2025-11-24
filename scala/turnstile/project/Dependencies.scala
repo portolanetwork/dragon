@@ -106,7 +106,7 @@ object Dependencies {
     "com.typesafe.slick" %% "slick" % slickVersion,
     "com.typesafe.slick" %% "slick-hikaricp" % slickVersion,
     "com.github.tminglei" %% "slick-pg" % slickPgVersion,
-    "com.github.tminglei" %% "slick-pg_play-json" % slickPgVersion,
+    "com.github.tminglei" %% "slick-pg_circe-json" % slickPgVersion,
     "org.postgresql" % "postgresql" % postgresqlVersion,
     "com.zaxxer" % "HikariCP" % hikariCPVersion,
     "org.flywaydb" % "flyway-core" % flywayVersion,

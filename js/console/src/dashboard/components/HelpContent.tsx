@@ -106,6 +106,46 @@ function HelpContent({selectedMenuItem}: { selectedMenuItem: string[] }) {
                     </>
                 );
 
+            case 'Event Log':
+                return (
+                    <>
+                        <Typography variant="h6">Event Log</Typography>
+                        <Typography variant="body1" paragraph>
+                            View system events and activities across your Dragon MCP Hub.
+                        </Typography>
+
+                        <Typography variant="subtitle1" sx={{ mb: 2 }}>Overview</Typography>
+                        <Typography variant="body1" paragraph>
+                            The Event Log provides a comprehensive audit trail of all activities in your account.
+                            Each event includes a unique identifier, event type, description, user information,
+                            and timestamp.
+                        </Typography>
+
+                        <Typography variant="subtitle1" sx={{ mb: 2 }}>Event Types</Typography>
+                        <Typography variant="body1" paragraph>
+                            Events are categorized by type and displayed with color-coded chips:
+                        </Typography>
+                        <Typography variant="body1" paragraph>
+                            <strong>Success/Completed:</strong> Events that completed successfully (green).
+                        </Typography>
+                        <Typography variant="body1" paragraph>
+                            <strong>Error/Failed:</strong> Events that encountered errors (red).
+                        </Typography>
+                        <Typography variant="body1" paragraph>
+                            <strong>Started/Initiated:</strong> Events that are in progress (blue).
+                        </Typography>
+                        <Typography variant="body1" paragraph>
+                            <strong>Warning:</strong> Events requiring attention (orange).
+                        </Typography>
+
+                        <Typography variant="subtitle1" sx={{ mb: 2 }}>Using the Event Log</Typography>
+                        <Typography variant="body1" paragraph>
+                            Events are sorted by creation time (newest first). Use the pagination controls
+                            to navigate through events. Click the Refresh button to fetch the latest events.
+                        </Typography>
+                    </>
+                );
+
             case 'Settings':
                 return (
                     <>

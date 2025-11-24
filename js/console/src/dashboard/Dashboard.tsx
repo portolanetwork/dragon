@@ -21,6 +21,7 @@ import { MenuItem } from './components/types/MenuContentProps';
 
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import StorageIcon from '@mui/icons-material/Storage';
+import EventNoteIcon from '@mui/icons-material/EventNote';
 
 
 
@@ -31,6 +32,7 @@ import {
 import McpServersGrid from "./components/McpServersGrid";
 import EditMcpServer from "./components/EditMcpServer";
 import AddMcpServer from "./components/AddMcpServer";
+import EventLogGrid from "./components/EventLogGrid";
 import {useEffect} from "react";
 
 
@@ -71,6 +73,7 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
     ): MenuItem[] => {
         return [
             { text: 'MCP Servers', isSelected:selectedMenuItem.at(0) == 'MCP Servers', icon: <StorageIcon />, onClick: () => onMenuItemClick(['MCP Servers']) },
+            { text: 'Event Log', isSelected:selectedMenuItem.at(0) == 'Event Log', icon: <EventNoteIcon />, onClick: () => onMenuItemClick(['Event Log']) },
         ]};
 
     const secondaryListItems = (onMenuItemClick: (menuItem: string[]) => void) => [
@@ -149,6 +152,7 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
                     {selectedMenuItem.at(0) === 'Edit MCP Server' && selectedMcpServerUuid && (
                         <EditMcpServer serverUuid={selectedMcpServerUuid} onGoBack={handleEditMcpServerBack} />
                     )}
+                    {selectedMenuItem.at(0) === 'Event Log' && <EventLogGrid />}
                     {selectedMenuItem.at(0) === 'Settings' && <Settings />}
                 </Stack>
             </Box>
