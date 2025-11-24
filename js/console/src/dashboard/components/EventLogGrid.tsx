@@ -60,7 +60,7 @@ const EventLogGrid = ({ refreshTrigger }: EventLogGridProps) => {
         {
             field: 'eventType',
             headerName: 'Event Type',
-            width: 250,
+            width: 200,
             renderCell: (params) => (
                 <Chip
                     label={params.value}
@@ -72,7 +72,7 @@ const EventLogGrid = ({ refreshTrigger }: EventLogGridProps) => {
         {
             field: 'description',
             headerName: 'Description',
-            width: 300
+            width: 350
         },
         {
             field: 'metadata',

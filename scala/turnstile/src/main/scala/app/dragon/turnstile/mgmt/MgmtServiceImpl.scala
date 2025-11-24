@@ -22,7 +22,7 @@ import app.dragon.turnstile.auth.{ClientAuthService, ServerAuthService}
 import app.dragon.turnstile.db.*
 import app.dragon.turnstile.mcp_server.{McpServerActor, McpServerActorId}
 import app.dragon.turnstile.mcp_tools.ToolsService
-import app.dragon.turnstile.utils.ActorLookup
+import app.dragon.turnstile.utils.{ActorLookup, ConversionUtils}
 import app.dragon.turnstile.utils.ServiceValidationUtil.*
 import com.google.protobuf.empty.Empty
 import dragon.turnstile.api.v1.*
@@ -87,7 +87,7 @@ class MgmtServiceImpl(authEnabled: Boolean)(
         userId = authContext.userId,
         name = in.name,
         url = in.url,
-        authType = authTypeToString(in.authType),
+        authType = ConversionUtils.authTypeToString(in.authType),
         staticToken = if (in.staticToken.isEmpty) None else Some(in.staticToken),
         createdAt = now,
         updatedAt = now
@@ -105,7 +105,7 @@ class MgmtServiceImpl(authEnabled: Boolean)(
 
           // Note: Tool servers will need to be notified of new server registrations at runtime
 
-          rowToMcpServer(row)
+          ConversionUtils.rowToMcpServer(row)
       }
     }
   }
@@ -139,7 +139,7 @@ class MgmtServiceImpl(authEnabled: Boolean)(
           logger.error(s"Failed to list MCP servers from DB: ${dbError.message}")
           throw new GrpcServiceException(Status.UNKNOWN, MetadataBuilder().addText("UNHANDLED_ERROR", dbError.message).build())
         case Right(rows) =>
-          val servers = rows.map(rowToMcpServer)
+          val servers = rows.map(ConversionUtils.rowToMcpServer)
           logger.info(s"Returning ${servers.size} MCP servers for userId: ${in.userId}")
           McpServerList(mcpServer = servers)
       }
@@ -247,8 +247,8 @@ class MgmtServiceImpl(authEnabled: Boolean)(
           
           McpServerLoginStatus(
             uuid = statusInfo.uuid,
-            status = determineLoginStatus(statusInfo.loginStatusEnum),
-            authType = stringToAuthType(statusInfo.authType)
+            status = ConversionUtils.determineLoginStatus(statusInfo.loginStatusEnum),
+            authType = ConversionUtils.stringToAuthType(statusInfo.authType)
           )
         case Left(ClientAuthService.ServerNotFound(msg)) =>
           logger.warn(s"MCP server not found: $msg")
@@ -415,7 +415,7 @@ class MgmtServiceImpl(authEnabled: Boolean)(
 
         case Right(rows) =>
           // Convert rows to proto messages
-          val eventLogs = rows.map(rowToEventLog)
+          val eventLogs = rows.map(ConversionUtils.rowToEventLog)
 
           // Calculate next cursor (timestamp of last event)
           val nextCursor = if (rows.size >= pageSize) {
@@ -431,139 +431,6 @@ class MgmtServiceImpl(authEnabled: Boolean)(
           )
       }
     }
-  }
-
-
-  // Private helper methods below
-
-  /**
-   * Determines the LoginStatus enum value based on auth type and authentication state.
-   */
-  private def determineLoginStatus(
-    loginStatusEnum: ClientAuthService.LoginStatusEnum
-  ): LoginStatus = {
-    loginStatusEnum match {
-      case ClientAuthService.LoginStatusEnum.AUTHENTICATED => LoginStatus.LOGIN_STATUS_AUTHENTICATED
-      case ClientAuthService.LoginStatusEnum.EXPIRED => LoginStatus.LOGIN_STATUS_EXPIRED
-      case ClientAuthService.LoginStatusEnum.NOT_APPLICABLE => LoginStatus.LOGIN_STATUS_NOT_APPLICABLE
-      case ClientAuthService.LoginStatusEnum.NOT_AUTHENTICATED => LoginStatus.LOGIN_STATUS_NOT_AUTHENTICATED
-      case ClientAuthService.LoginStatusEnum.UNSPECIFIED => LoginStatus.LOGIN_STATUS_UNSPECIFIED
-    }
-  }
-
-  /**
-   * Converts a database authType string to proto AuthType enum.
-   */
-  private def stringToAuthType(authType: String): AuthType = authType.toLowerCase match {
-    case "none" => AuthType.AUTH_TYPE_NONE
-    case "discover" => AuthType.AUTH_TYPE_DISCOVER
-    case "static_auth_header" => AuthType.AUTH_TYPE_STATIC_HEADER
-    case _ => AuthType.AUTH_TYPE_UNSPECIFIED
-  }
-
-  /**
-   * Converts a proto AuthType enum to database authType string.
-   */
-  private def authTypeToString(authType: AuthType): String = authType match {
-    case AuthType.AUTH_TYPE_NONE => "none"
-    case AuthType.AUTH_TYPE_DISCOVER => "discover"
-    case AuthType.AUTH_TYPE_STATIC_HEADER => "static_auth_header"
-    case AuthType.AUTH_TYPE_UNSPECIFIED | AuthType.Unrecognized(_) => "none"
-  }
-
-  /**
-   * Converts a database transportType string to proto TransportType enum.
-   */
-  private def stringToTransportType(transportType: String): TransportType = transportType.toLowerCase match {
-    case "streaming_http" => TransportType.TRANSPORT_TYPE_STREAMING_HTTP
-    case _ => TransportType.TRANSPORT_TYPE_UNSPECIFIED
-  }
-
-  /**
-   * Converts a proto TransportType enum to database transportType string.
-   */
-  private def transportTypeToString(transportType: TransportType): String = transportType match {
-    case TransportType.TRANSPORT_TYPE_STREAMING_HTTP => "streaming_http"
-    case TransportType.TRANSPORT_TYPE_UNSPECIFIED | TransportType.Unrecognized(_) => "streaming_http"
-  }
-  
-  /**
-   * Converts a database row to a McpServer proto message.
-   */
-  private def rowToMcpServer(row: McpServerRow): McpServer = {
-    val authType = stringToAuthType(row.authType)
-
-    McpServer(
-      uuid = row.uuid.toString,
-      name = row.name,
-      url = row.url,
-      authType = authType,
-      transportType = stringToTransportType(row.transportType),
-      hasStaticToken = row.staticToken.isDefined,
-      oauthConfig = authType match {
-        case AuthType.AUTH_TYPE_DISCOVER =>
-          Some(OAuthConfig(
-            clientId = row.clientId.getOrElse(""),
-            tokenEndpoint = row.tokenEndpoint.getOrElse(""),
-            hasClientSecret = row.clientSecret.isDefined,
-            hasRefreshToken = row.refreshToken.isDefined
-          ))
-        case _ => None
-      },
-      createdAt = Some(com.google.protobuf.timestamp.Timestamp(
-        seconds = row.createdAt.getTime / 1000,
-        nanos = ((row.createdAt.getTime % 1000) * 1000000).toInt
-      )),
-      updatedAt = Some(com.google.protobuf.timestamp.Timestamp(
-        seconds = row.updatedAt.getTime / 1000,
-        nanos = ((row.updatedAt.getTime % 1000) * 1000000).toInt
-      ))
-    )
-  }
-
-  /**
-   * Converts an EventLogRow to an EventLog proto message.
-   */
-  private def rowToEventLog(row: EventLogRow): dragon.turnstile.api.v1.EventLog = {
-    import com.google.protobuf.struct.{Struct, Value}
-    import scala.jdk.CollectionConverters.*
-
-    // Convert Circe Json to google.protobuf.Struct
-    val metadata: Struct = {
-      def circeJsonToProtoValue(json: io.circe.Json): Value = {
-        json.fold(
-          Value(Value.Kind.NullValue(com.google.protobuf.struct.NullValue.NULL_VALUE)),
-          bool => Value(Value.Kind.BoolValue(bool)),
-          num => Value(Value.Kind.NumberValue(num.toDouble)),
-          str => Value(Value.Kind.StringValue(str)),
-          arr => Value(Value.Kind.ListValue(com.google.protobuf.struct.ListValue(arr.map(circeJsonToProtoValue).toSeq))),
-          obj => Value(Value.Kind.StructValue(Struct(
-            obj.toMap.view.mapValues(circeJsonToProtoValue).toMap
-          )))
-        )
-      }
-
-      row.metadata.asObject match {
-        case Some(jsonObject) =>
-          Struct(jsonObject.toMap.view.mapValues(circeJsonToProtoValue).toMap)
-        case None =>
-          Struct()
-      }
-    }
-
-    dragon.turnstile.api.v1.EventLog(
-      id = row.id,
-      uuid = row.uuid.toString,
-      tenant = row.tenant,
-      userId = row.userId.getOrElse(""),
-      eventType = row.eventType,
-      description = row.description.getOrElse(""),
-      metadata = Some(metadata),
-      createdAt = Some(com.google.protobuf.timestamp.Timestamp(
-        seconds = row.createdAt.getTime / 1000,
-        nanos = ((row.createdAt.getTime % 1000) * 1000000).toInt
-      ))
-    )
   }
 
 }
