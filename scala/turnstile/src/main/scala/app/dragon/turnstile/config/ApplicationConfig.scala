@@ -81,10 +81,8 @@ object ApplicationConfig {
    * - default (or any other value) → application.conf
    */
   val configFile: String = deploymentName match {
-    case "ci" => "ci.conf"
-    case "staging" => "staging.conf"
-    case "production" => "production.conf"
-    case _ => "application.conf" // Fallback to default configuration
+    case "default" => "application.conf"
+    case deployment => deployment + ".conf"
   }
 
   /** Root configuration object loaded from the selected file */
