@@ -37,7 +37,6 @@ object DockerConfig {
   val resourceMappings = Seq(
     file("src/main/resources/jmx-prometheus.yaml") -> s"$installLocation/conf/jmx-prometheus.yaml",
     file("src/main/resources/logback.xml")         -> s"$installLocation/conf/logback.xml",
-    file("src/main/resources/certs/keystore.p12")  -> s"$installLocation/conf/keystore.p12"
   )
 
   // Exposed ports
