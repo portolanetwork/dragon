@@ -7,10 +7,15 @@ import App from './dashboard/Dashboard';
 import { createBrowserRouter, RouterProvider } from 'react-router';
 import Auth0ProtectedRoute from './dashboard/components/Auth0ProtectedRoute';
 import {Auth0Provider} from "@auth0/auth0-react";
+import { getDeploymentConfig } from './config/deploymentConfig';
 
-const deploymentConfig = (window as any).deploymentConfig || {};
+const deploymentConfig = getDeploymentConfig();
 const domain = deploymentConfig.auth0Domain || import.meta.env.VITE_AUTH0_DOMAIN;
 const clientId = deploymentConfig.auth0ClientId || import.meta.env.VITE_AUTH0_CLIENT_ID;
+
+
+console.log("Auth0 Domain:", domain);
+console.log("Auth0 Client ID:", clientId);
 
 const router = createBrowserRouter([
     {
