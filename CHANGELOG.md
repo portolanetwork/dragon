@@ -1,3 +1,10 @@
+## [0.4.1](https://github.com/portolanetwork/dragon/compare/v0.4.0...v0.4.1) (2025-11-25)
+
+
+### Bug Fixes
+
+* **config:** Added missing event-log stanza ([32c2aae](https://github.com/portolanetwork/dragon/commit/32c2aae45ec724508aa86bdaf8bb67730e134270))
+
 # [0.4.0](https://github.com/portolanetwork/dragon/compare/v0.3.0...v0.4.0) (2025-11-24)
 
 
