@@ -6,7 +6,7 @@ Dragon serves as the central control plane between AI applications (like Claude,
 
 ---
 
-## ✨ Key Use Cases / Why Dragon?
+## Key Use Cases / Why Dragon?
 
 * **Simplify Integration:** Provide a single MCP endpoint to AI applications and manage all your tool/data access patterns centrally.
 * **Prevent Data Leaks:** Implement fine-grained Data Loss Prevention (DLP) controls to ensure models only access approved data.
@@ -17,7 +17,7 @@ Dragon serves as the central control plane between AI applications (like Claude,
 
 ---
 
-## 🛠️ Capabilities
+## Capabilities
 
 ### Current
 * **MCP Server Aggregation**: Aggregate multiple downstream MCP servers into one unified gateway.
@@ -35,7 +35,7 @@ Dragon serves as the central control plane between AI applications (like Claude,
 
 ---
 
-## 🏗️ Tech Stack
+## Tech Stack
 
 Dragon is built on a modern, robust, and asynchronous foundation, prioritizing resilience and speed.
 
@@ -47,7 +47,7 @@ Dragon is built on a modern, robust, and asynchronous foundation, prioritizing r
 
 ---
 
-## ⚡ Built for Scale and Resilience (Reactive Principles)
+## Built for Scale and Resilience (Reactive Principles)
 
 Dragon is founded on the principles of the **Reactive Manifesto**, providing an inherently distributed and resilient architecture.
 
