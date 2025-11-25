@@ -132,7 +132,7 @@ grpcurl -plaintext \
     "name": "my-mcp-server",
     "url": "https://mcp.deepwiki.com/mcp1",
     "auth_type": "discover"
-  }' localhost:8080 dragon.turnstile.v1.TurnstileService/CreateMcpServer
+  }' localhost:9090 dragon.turnstile.v1.TurnstileService/CreateMcpServer
 
 # For servers requiring OAuth, initiate login:
 # GET http://localhost:8081/login?uuid=<server-uuid>
