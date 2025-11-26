@@ -1,6 +1,7 @@
 interface DeploymentConfig {
     auth0ClientId: string;
     auth0Domain: string;
+    grpcWebUrl: string;
 }
 
 declare global {
