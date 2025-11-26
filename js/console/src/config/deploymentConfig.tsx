@@ -1,6 +1,7 @@
 interface DeploymentConfig {
     auth0ClientId: string;
     auth0Domain: string;
+    auth0Audience: string;
     grpcWebUrl: string;
 }
 

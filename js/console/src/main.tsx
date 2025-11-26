@@ -12,6 +12,7 @@ import { getDeploymentConfig } from './config/deploymentConfig';
 const deploymentConfig = getDeploymentConfig();
 const domain = deploymentConfig.auth0Domain || import.meta.env.VITE_AUTH0_DOMAIN;
 const clientId = deploymentConfig.auth0ClientId || import.meta.env.VITE_AUTH0_CLIENT_ID;
+const audience = deploymentConfig.auth0Audience || import.meta.env.VITE_AUTH0_AUDIENCE;
 
 
 console.log("Auth0 Domain:", domain);
@@ -26,6 +27,7 @@ const router = createBrowserRouter([
                 clientId={clientId}
                 authorizationParams={{
                     redirect_uri: window.location.origin,
+                    audience: audience,
                 }}
             >
                 <Auth0ProtectedRoute>

@@ -1,4 +1,6 @@
 window.deploymentConfig = {
-    auth0ClientId: "",
     auth0Domain: "",
+    auth0ClientId: "",
+    auth0Audience: "",
+    grpcWebUrl: "",
 };
