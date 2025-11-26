@@ -1,5 +1,4 @@
 // src/dragon_proxy/TurnstileServiceInterface.tsx
-//import { GrpcWebFetchTransport } from '../patch/grpc-web-transport';
 import { TurnstileServiceClient } from '../proto/dragon/turnstile/v1/turnstile_service.client';
 //import {GrpcWebFetchTransport} from "@protobuf-ts/grpcweb-transport";
 import { GrpcWebFetchTransport } from '../patch/grpc-web-transport';

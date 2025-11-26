@@ -163,7 +163,7 @@ function HelpContent({selectedMenuItem}: { selectedMenuItem: string[] }) {
     };
 
     return (
-        <Typography variant="body1">{getHelpContent()}</Typography>
+        <div>{getHelpContent()}</div>
     );
 }
 

@@ -17,6 +17,7 @@ const audience = deploymentConfig.auth0Audience || import.meta.env.VITE_AUTH0_AU
 
 console.log("Auth0 Domain:", domain);
 console.log("Auth0 Client ID:", clientId);
+console.log("Auth0 Audience:", audience);
 
 const router = createBrowserRouter([
     {
