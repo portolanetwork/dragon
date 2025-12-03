@@ -19,7 +19,6 @@
 package app.dragon.turnstile.mcp_server
 
 import app.dragon.turnstile.config.ApplicationConfig
-import app.dragon.turnstile.mcp_tools.ToolsService
 import io.modelcontextprotocol.json.McpJsonMapper
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification
 import io.modelcontextprotocol.server.transport.WebFluxStreamableServerTransportProvider
@@ -43,6 +42,7 @@ object McpStreamingHttpServer {
 
   val serverName: String = ApplicationConfig.mcpStreaming.getString("server-name")
   val serverVersion: String = ApplicationConfig.mcpStreaming.getString("server-version")
+  val mcpEndpoint: String = ApplicationConfig.mcpStreaming.getString("mcp-endpoint")
 
   /**
    * Create a new MCP server instance for a specific user.
@@ -52,7 +52,7 @@ object McpStreamingHttpServer {
    * @return A new TurnstileStreamingHttpMcpServer instance
    */
   def apply(userId: String)(implicit system: ActorSystem[?]): McpStreamingHttpServer =
-    new McpStreamingHttpServer(serverName, serverVersion, userId)
+    new McpStreamingHttpServer(serverName, serverVersion, mcpEndpoint)
 }
 
 /**
@@ -97,13 +97,12 @@ object McpStreamingHttpServer {
  *
  * @param serverName The MCP server name
  * @param serverVersion The MCP server version
- * @param userId The user identifier for tool scoping
  * @param system The actor system (implicit)
  */
 class McpStreamingHttpServer(
   val serverName: String,
   val serverVersion: String,
-  val userId: String,
+  val mcpEndpoint: String,
 )(
   implicit val system: ActorSystem[?]
 ) {
@@ -141,6 +140,7 @@ class McpStreamingHttpServer(
     val transportProvider = WebFluxStreamableServerTransportProvider.builder()
       .jsonMapper(jsonMapper)
       .disallowDelete(false)
+      .messageEndpoint(if mcpEndpoint.isEmpty then "/" else mcpEndpoint)
       .build()
 
     // Build MCP async server
