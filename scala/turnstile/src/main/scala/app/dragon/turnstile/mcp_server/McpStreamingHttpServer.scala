@@ -35,7 +35,11 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.*
 
 /**
- * Factory for creating user-scoped MCP server instances.
+ * Factory for creating MCP server instances.
+ *
+ * Note: User isolation is achieved at the McpServerActor level via cluster sharding,
+ * not at this level. Each McpServerActor has its own embedded McpStreamingHttpServer
+ * instance that is invoked in-process (not network-bound).
  */
 object McpStreamingHttpServer {
   val logger: org.slf4j.Logger = LoggerFactory.getLogger(classOf[McpStreamingHttpServer])
@@ -47,26 +51,37 @@ object McpStreamingHttpServer {
   /**
    * Create a new MCP server instance for a specific user.
    *
-   * @param userId The user identifier
+   * The userId is used for logging and may be used in the future for endpoint
+   * scoping or other user-specific configuration.
+   *
+   * @param userId The user identifier (used for logging and future extensibility)
    * @param system The actor system
-   * @return A new TurnstileStreamingHttpMcpServer instance
+   * @return A new McpStreamingHttpServer instance
    */
   def apply(userId: String)(implicit system: ActorSystem[?]): McpStreamingHttpServer =
-    new McpStreamingHttpServer(serverName, serverVersion, mcpEndpoint)
+    new McpStreamingHttpServer(userId, serverName, serverVersion, mcpEndpoint)
 }
 
 /**
- * User-scoped MCP server implementation using Spring WebFlux transport.
+ * MCP server implementation using Spring WebFlux transport.
  *
- * This class wraps the MCP Java SDK's McpAsyncServer and provides user-isolated
- * MCP server instances. Each user gets their own server with custom tool sets
- * combining default (built-in) tools and tools from registered downstream MCP servers.
+ * This class wraps the MCP Java SDK's McpAsyncServer and provides MCP server instances
+ * that are embedded within McpServerActor for user isolation. Each user gets their own
+ * McpServerActor (via cluster sharding), which contains its own McpStreamingHttpServer
+ * instance with custom tool sets combining default (built-in) tools and tools from
+ * registered downstream MCP servers.
+ *
+ * User Isolation Architecture:
+ * - User isolation occurs at McpServerActor level via cluster sharding
+ * - Each McpServerActor has its own embedded McpStreamingHttpServer instance
+ * - Instances are invoked in-process via HttpHandler (not network-bound)
+ * - Gateway routes authenticated requests to correct user's actor
  *
  * Architecture:
  * - Built on MCP Java SDK (io.modelcontextprotocol.server.McpAsyncServer)
- * - Uses Spring WebFlux for HTTP/SSE transport
+ * - Uses Spring WebFlux for HTTP/SSE transport (in-process, not network-bound)
  * - Embedded in McpServerActor for actor isolation
- * - User-scoped tool aggregation from multiple sources
+ * - Tool aggregation from multiple sources per user
  *
  * Tool Sources:
  * 1. Default Tools: Built-in tools (echo, system_info, etc.)
@@ -74,7 +89,7 @@ object McpStreamingHttpServer {
  *
  * Lifecycle:
  * 1. start(): Create McpAsyncServer, register default tools
- * 2. refreshDownstreamTools(): Fetch and register namespaced tools from downstream servers
+ * 2. addTool(): Add tools dynamically (default + downstream)
  * 3. Active: Handle MCP protocol requests via HttpHandler
  * 4. stop(): Clean shutdown of MCP server
  *
@@ -87,19 +102,25 @@ object McpStreamingHttpServer {
  *
  * Usage:
  * {{{
- * val mcpServer = TurnstileStreamingHttpMcpServer(userId).start()
- * mcpServer.refreshDownstreamTools()  // Async tool registration
+ * val mcpServer = McpStreamingHttpServer(userId).start()
+ * mcpServer.addTool(toolSpec)  // Add tools dynamically
  *
  * // Get the HTTP handler for request processing
  * val httpHandler = mcpServer.getHttpHandler.get
  * httpHandler.handle(springRequest, springResponse)
  * }}}
  *
+ * @param userId The user identifier (used for logging and future extensibility)
  * @param serverName The MCP server name
  * @param serverVersion The MCP server version
+ * @param mcpEndpoint The MCP endpoint path (currently shared across instances)
  * @param system The actor system (implicit)
+ *
+ * Future Enhancement: The userId parameter may be used for endpoint scoping
+ * (e.g., /mcp/{userId}) or other user-specific configuration.
  */
 class McpStreamingHttpServer(
+  val userId: String,
   val serverName: String,
   val serverVersion: String,
   val mcpEndpoint: String,
@@ -128,11 +149,11 @@ class McpStreamingHttpServer(
   def start(
   ): McpStreamingHttpServer = {
     if (started) {
-      logger.warn(s"MCP server: $serverName v$serverVersion already started; ignoring duplicate start.")
+      logger.warn(s"MCP server for user $userId: $serverName v$serverVersion already started; ignoring duplicate start.")
       return this
     }
     started = true
-    logger.info(s"Creating MCP server: $serverName v$serverVersion")
+    logger.info(s"Creating MCP server for user $userId: $serverName v$serverVersion")
 
     val jsonMapper = McpJsonMapper.getDefault
 
@@ -169,11 +190,11 @@ class McpStreamingHttpServer(
     toolSpec: AsyncToolSpecification
   ): Unit = {
     mcpAsyncServer.foreach { server =>
-      logger.info(s"[$serverName] Adding tool: ${toolSpec.tool().name()}")
+      logger.info(s"[$userId:$serverName] Adding tool: ${toolSpec.tool().name()}")
       server
         .addTool(toolSpec)
-        .doOnSuccess(_ => logger.debug(s"[$serverName] Tool registered: ${toolSpec.tool().name()}"))
-        .doOnError(ex => logger.error(s"[$serverName] Failed to register tool: ${toolSpec.tool().name()}", ex))
+        .doOnSuccess(_ => logger.debug(s"[$userId:$serverName] Tool registered: ${toolSpec.tool().name()}"))
+        .doOnError(ex => logger.error(s"[$userId:$serverName] Failed to register tool: ${toolSpec.tool().name()}", ex))
         .subscribe()
     }
   }
@@ -182,20 +203,20 @@ class McpStreamingHttpServer(
     toolName: String
   ): Unit = {
     mcpAsyncServer.foreach { server =>
-      logger.info(s"[$serverName] Removing tool: $toolName")
+      logger.info(s"[$userId:$serverName] Removing tool: $toolName")
       server
         .removeTool(toolName)
-        .doOnSuccess(_ => logger.debug(s"[$serverName] Tool removed: $toolName"))
-        .doOnError(ex => logger.error(s"[$serverName] Failed to remove tool: $toolName", ex))
+        .doOnSuccess(_ => logger.debug(s"[$userId:$serverName] Tool removed: $toolName"))
+        .doOnError(ex => logger.error(s"[$userId:$serverName] Failed to remove tool: $toolName", ex))
         .subscribe()
     }
   }
 
   def stop(): Unit = {
     mcpAsyncServer.foreach { server =>
-      logger.info(s"Stopping MCP server: $serverName v$serverVersion")
+      logger.info(s"Stopping MCP server for user $userId: $serverName v$serverVersion")
       server.close()
-      logger.info(s"✓ Stopped MCP server: $serverName v$serverVersion")
+      logger.info(s"✓ Stopped MCP server for user $userId: $serverName v$serverVersion")
     }
   }
 
