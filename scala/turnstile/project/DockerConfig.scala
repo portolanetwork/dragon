@@ -41,9 +41,9 @@ object DockerConfig {
 
   // Exposed ports
   val exposedPorts = Seq(
-    "8080",  // gRPC server
-    "8081",  // grpc-web server
-    "8082",  // MCP Server - Streaming endpoint
+    "9090",  // gRPC server
+    "9091",  // grpc-web server
+    "9092",  // MCP Server - Streaming endpoint
     "8558",  // Pekko Management HTTP
     "9404",  // JMX Prometheus metrics
     "25520"  // Pekko remoting
