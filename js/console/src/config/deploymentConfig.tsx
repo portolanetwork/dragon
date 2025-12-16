@@ -1,0 +1,19 @@
+interface DeploymentConfig {
+    auth0ClientId: string;
+    auth0Domain: string;
+    auth0Audience: string;
+    grpcWebUrl: string;
+}
+
+declare global {
+    interface Window {
+        deploymentConfig?: DeploymentConfig;
+    }
+}
+
+export const getDeploymentConfig = (): DeploymentConfig => {
+    if (!window.deploymentConfig) {
+        throw new Error("Deployment config is not available");
+    }
+    return window.deploymentConfig;
+};

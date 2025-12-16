@@ -20,7 +20,7 @@ Dragon's MCP Gateway includes built-in Auth0 integration with:
 1. Log into your [Auth0 dashboard](https://manage.auth0.com)
 2. Navigate to **Settings** → **Advanced**
 3. Scroll to **OAuth** section
-4. Enable **OIDC Dynamic Application Registration**
+4. Enable **Dynamic Client Registration (DCR)** in Tenant Settings → Advanced
 5. Click **Save Changes**
 
 **Why this matters**: This allows MCP clients (like Claude Desktop) to dynamically register themselves as OAuth2 clients without manual pre-registration.
@@ -50,9 +50,22 @@ Dragon's MCP Gateway includes built-in Auth0 integration with:
 
 You have two options for enabling authentication connections:
 
-### Option A: Promote Google Login to a Domain Connection (Tenant-Wide)
+### Option A: Promote Connections to Domain Level (Tenant-Wide)
 
-This approach makes Google OAuth available to all dynamically registered clients tenant-wide.
+This approach makes authentication connections (e.g., Google, Username-Password) available to all dynamically registered clients tenant-wide.
+
+#### Method 1: Using Auth0 Dashboard (Recommended)
+
+1. Navigate to **Authentication** → **Database** (for Username-Password connections) or **Authentication** → **Social** (for social connections like Google)
+2. Select the connection you want to promote (e.g., **google-oauth2** or **Username-Password-Authentication**)
+3. In the connection settings, find and enable **"Promote Connection to Domain Level"**
+4. Click **Save Changes**
+
+This immediately makes the connection available to all dynamically registered OAuth clients in your tenant.
+
+#### Method 2: Using Management API
+
+If the UI option is not available or you prefer automation:
 
 1. **Grant Management API Permissions**:
    - Go to **Applications** → **Auth0 Management API** → **API** tab

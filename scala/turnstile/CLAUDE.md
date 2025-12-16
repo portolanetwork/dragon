@@ -24,6 +24,7 @@ The project uses sbt with custom build configuration organized across multiple f
 - `TurnstileBuild.scala`: Custom Scala compiler options
 - `BuildInfo.scala`: Build metadata including git commit information
 - `JavaAgents.scala`: JVM agent configuration (JMX Prometheus, Kanela)
+- `DockerConfig.scala`: Docker image configuration and Dockerfile generation
 
 ### Essential Commands
 
@@ -38,6 +39,8 @@ testOnly <ClassName> # Run a specific test class
 run                  # Run the application (AkkaTurnstile main)
 clean                # Clean build artifacts
 reload               # Reload sbt configuration after changes to build files
+Docker/publishLocal  # Build Docker image locally
+Docker/publish       # Push Docker image to registry
 ```
 
 ```bash
@@ -46,6 +49,7 @@ sbt compile          # Compile the project
 sbt test             # Run all tests
 sbt "testOnly app.dragon.turnstile.GreeterServiceImplSpec"  # Run specific test
 sbt run              # Run the application
+sbt Docker/publishLocal  # Build Docker image
 ```
 
 ### gRPC Code Generation

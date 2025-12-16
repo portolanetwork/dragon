@@ -7,16 +7,28 @@ import App from './dashboard/Dashboard';
 import { createBrowserRouter, RouterProvider } from 'react-router';
 import Auth0ProtectedRoute from './dashboard/components/Auth0ProtectedRoute';
 import {Auth0Provider} from "@auth0/auth0-react";
+import { getDeploymentConfig } from './config/deploymentConfig';
+
+const deploymentConfig = getDeploymentConfig();
+const domain = deploymentConfig.auth0Domain || import.meta.env.VITE_AUTH0_DOMAIN;
+const clientId = deploymentConfig.auth0ClientId || import.meta.env.VITE_AUTH0_CLIENT_ID;
+const audience = deploymentConfig.auth0Audience || import.meta.env.VITE_AUTH0_AUDIENCE;
+
+
+console.log("Auth0 Domain:", domain);
+console.log("Auth0 Client ID:", clientId);
+console.log("Auth0 Audience:", audience);
 
 const router = createBrowserRouter([
     {
         path: '/',
         element: (
             <Auth0Provider
-                domain={import.meta.env.VITE_AUTH0_DOMAIN}
-                clientId={import.meta.env.VITE_AUTH0_CLIENT_ID}
+                domain={domain}
+                clientId={clientId}
                 authorizationParams={{
                     redirect_uri: window.location.origin,
+                    audience: audience,
                 }}
             >
                 <Auth0ProtectedRoute>

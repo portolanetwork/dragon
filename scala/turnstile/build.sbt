@@ -1,7 +1,6 @@
-import app.dragon.turnstile.{BuildInfo, TurnstileBuild}
-import com.typesafe.sbt.packager.docker.*
+import app.dragon.turnstile.{BuildInfo, DockerConfig, TurnstileBuild}
 
-ThisBuild / scalaVersion := "3.7.3"
+ThisBuild / scalaVersion := "3.7.4"
 ThisBuild / organization := "app.dragon.turnstile"
 ThisBuild / organizationName := "Turnstile"
 ThisBuild / dynverSeparator := "-"
@@ -36,3 +35,18 @@ lazy val root = (project in file("."))
       BuildInfoOption.ToJson,
     ),
   )
+
+// ================================================================================================
+// Docker Configuration
+// ================================================================================================
+
+Docker / packageName := packageName.value
+Docker / version := version.value
+Docker / defaultLinuxInstallLocation := DockerConfig.installLocation
+Docker / dockerGroupLayers := PartialFunction.empty
+Docker / mappings ++= DockerConfig.resourceMappings
+
+dockerRepository := DockerConfig.registryUrl
+dockerUsername := DockerConfig.registryUsername
+dockerUpdateLatest := true
+dockerCommands := DockerConfig.dockerCommands
