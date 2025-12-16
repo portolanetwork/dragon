@@ -1,3 +1,10 @@
+# [0.5.0](https://github.com/portolanetwork/dragon/compare/v0.4.1...v0.5.0) (2025-12-16)
+
+
+### Features
+
+* **kubernetes-artifacts:** Feature/kubernetes artifacts ([#26](https://github.com/portolanetwork/dragon/issues/26)) ([97af5c3](https://github.com/portolanetwork/dragon/commit/97af5c367fc53ca0a9b62669490f442906635c99))
+
 ## [0.4.1](https://github.com/portolanetwork/dragon/compare/v0.4.0...v0.4.1) (2025-11-25)
 
 
