@@ -42,8 +42,6 @@ object Dependencies {
   val hikariCPVersion = "6.2.1"
   val flywayVersion = "11.1.0"
   val springVersion = "6.2.1"
-  val openAiVersion = "3.1.2"
-  val googleCloudStorageVersion = "2.58.1"
 
   val dependencies = Seq(
     "org.apache.pekko" %% "pekko-actor" % pekkoVersion,
