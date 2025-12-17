@@ -217,13 +217,13 @@ class ListToolsForMcpServer(
             scala.concurrent.Future.failed(new RuntimeException(s"Database error: ${error.message}"))
         }
 
-        // Step 3: Request the list of tools
+        // Step 2: Request the list of tools
         clientActor = ActorLookup.getMcpClientActor(userId, mcpServerRow.uuid.toString)
         actorResult <- clientActor.ask[Either[McpClientActor.McpClientError, McpSchema.ListToolsResult]](
           replyTo => McpClientActor.McpListTools(replyTo)
         )
 
-        // Step 4: Process the result and convert to JSON
+        // Step 3: Process the result and convert to JSON
         jsonResult <- actorResult match {
           case Right(listResult) =>
             logger.debug(s"ListMcpTools: successfully listed ${listResult.tools().size()} tools from server '${mcpServerRow.name}' (UUID: $serverUuid)")
