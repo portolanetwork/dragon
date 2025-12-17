@@ -41,7 +41,6 @@ import io.modelcontextprotocol.json.McpJsonMapper
 import scala.jdk.CollectionConverters.*
 import java.util.UUID
 import scala.util.{Try, Success, Failure}
-import scala.util.matching.Regex
 
 /**
  * List MCP tools - lists all available tools from a specific MCP server.
