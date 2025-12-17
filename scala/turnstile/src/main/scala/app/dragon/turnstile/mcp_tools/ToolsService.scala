@@ -21,7 +21,7 @@ package app.dragon.turnstile.mcp_tools
 import app.dragon.turnstile.db.{DbInterface, DbNotFound, McpServerRow}
 import app.dragon.turnstile.mcp_client.McpClientActor
 import app.dragon.turnstile.mcp_client.McpClientActor.McpClientError
-import app.dragon.turnstile.mcp_tools.impl.{EchoTool, NamespacedTool, StreamingDemoTool, SystemInfoTool}
+import app.dragon.turnstile.mcp_tools.impl.*
 import app.dragon.turnstile.utils.ActorLookup
 import io.modelcontextprotocol.common.McpTransportContext
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification
@@ -106,10 +106,13 @@ class ToolsService(
   private val logger: Logger = LoggerFactory.getLogger(classOf[ToolsService])
   // Default tools (built-in)
   private val defaultTools: List[McpTool] = List(
-    EchoTool("echo1"),
-    EchoTool("echo2"),
-    SystemInfoTool,
-    StreamingDemoTool
+    //Echo("echo1"),
+    //Echo("echo2"),
+    //StreamingExample,
+    SystemInfo,
+    ExecTool(userId, "default"),
+    ListMcpServers(userId, "default"),
+    ListToolsForMcpServer(userId, "default")
   )
 
   logger.info(s"ToolsService initialized for user=$userId with ${defaultTools.size} default tools: ${defaultTools.map(_.getName()).mkString(", ")}")
@@ -117,7 +120,13 @@ class ToolsService(
   def getDefaultToolsSpec(): List[AsyncToolSpecification] =
     convertToAsyncToolSpec(defaultTools, true)
 
-  def getAllDownstreamToolsSpec(
+  def getAllDownstreamToolsSpecStub(
+    tenant: String = "default"
+  ): Future[Either[McpClientError, List[AsyncToolSpecification]]] = {
+    Future.successful(Right(List.empty))
+  }
+
+    def getAllDownstreamToolsSpec(
     tenant: String = "default"
   ): Future[Either[McpClientError, List[AsyncToolSpecification]]] = {
     logger.info(s"Fetching all downstream tools for user=$userId, tenant=$tenant")
@@ -164,8 +173,6 @@ class ToolsService(
 
     logger.info(s"Fetching namespaced tools from MCP client actor: ${mcpServerRow.uuid} (${mcpServerRow.name}) for user=$userId")
 
-    ActorLookup.getMcpClientActor(userId, mcpServerRow.uuid.toString) ! McpClientActor.Initialize(mcpServerRow)
-
     // Query the actor for its tools
     ActorLookup.getMcpClientActor(userId, mcpServerRow.uuid.toString)
       .ask[Either[McpClientActor.McpClientError, McpSchema.ListToolsResult]](
@@ -186,7 +193,7 @@ class ToolsService(
               .annotations(downstreamToolSchema.annotations())
               .build()
 
-            NamespacedTool(turnstileToolSchema, downstreamToolSchema, userId, mcpServerRow.uuid.toString)
+            NamespacedToolExample(turnstileToolSchema, downstreamToolSchema, userId, mcpServerRow.uuid.toString)
           }
 
           Right(downstreamTools)

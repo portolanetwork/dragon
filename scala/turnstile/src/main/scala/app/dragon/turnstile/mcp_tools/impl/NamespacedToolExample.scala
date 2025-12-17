@@ -40,7 +40,7 @@ import scala.jdk.FutureConverters.*
  * @param mcpServerUuid The ID of the MCP client actor to forward calls to
  * @param system The actor system (implicit)
  */
-class NamespacedTool(
+class NamespacedToolExample(
   fromSchema: McpSchema.Tool,
   toSchema: McpSchema.Tool,
   userId: String,
@@ -87,7 +87,7 @@ class NamespacedTool(
   }
 }
 
-object NamespacedTool {
+object NamespacedToolExample {
   /**
    * Create a namespaced tool from a remote tool schema.
    *
@@ -101,7 +101,7 @@ object NamespacedTool {
     toSchema: McpSchema.Tool,
     userId: String,
     mcpServerUuid: String
-  )(implicit system: ActorSystem[?]): NamespacedTool = {
-    new NamespacedTool(fromSchema, toSchema,  userId, mcpServerUuid)
+  )(implicit system: ActorSystem[?]): NamespacedToolExample = {
+    new NamespacedToolExample(fromSchema, toSchema,  userId, mcpServerUuid)
   }
 }

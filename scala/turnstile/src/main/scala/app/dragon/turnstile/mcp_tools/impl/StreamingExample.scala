@@ -62,11 +62,11 @@ import java.time.Duration
  *       composition with delays/timeouts, and backpressure handling.
  *       For true multi-message streaming, use Server-Sent Events (SSE) via the streamable transport.
  */
-object StreamingDemoTool extends McpTool {
+object StreamingExample extends McpTool {
 
   override def getSchema(): McpSchema.Tool = {
     McpUtils.createToolSchemaBuilder(
-        name = "streaming_demo_tool",
+        name = "streaming_example",
         description = "Demonstrates streaming/async capabilities with progress notifications"
       )
       .inputSchema(McpUtils.createObjectSchema(

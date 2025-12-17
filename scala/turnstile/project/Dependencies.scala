@@ -42,6 +42,8 @@ object Dependencies {
   val hikariCPVersion = "6.2.1"
   val flywayVersion = "11.1.0"
   val springVersion = "6.2.1"
+  val openAiVersion = "3.1.2"
+  val googleCloudStorageVersion = "2.58.1"
 
   val dependencies = Seq(
     "org.apache.pekko" %% "pekko-actor" % pekkoVersion,
@@ -87,6 +89,7 @@ object Dependencies {
     "io.circe" %% "circe-core" % circeVersion,
     "io.circe" %% "circe-parser" % circeVersion,
     "io.circe" %% "circe-generic" % circeVersion,
+    "io.circe" %% "circe-jackson29" % "0.14.2",
     // sttp client for HTTP calls used by ClientAuthService
     "com.softwaremill.sttp.client4" %% "core" % "4.0.13",
     "com.softwaremill.sttp.client4" %% "circe" % "4.0.13",
@@ -119,6 +122,10 @@ object Dependencies {
 
     // Ensure Spring Context is present for classes such as org.springframework.context.i18n.LocaleContext
     "org.springframework" % "spring-context" % springVersion,
+
+    "com.openai" % "openai-java" % openAiVersion,
+
+    "com.google.cloud" % "google-cloud-storage" % googleCloudStorageVersion,
   )
 
   val dependencyOverrides = Seq()

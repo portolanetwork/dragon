@@ -19,7 +19,7 @@
 package app.dragon.turnstile.mcp_client
 
 import app.dragon.turnstile.auth.ClientAuthService
-import app.dragon.turnstile.db.McpServerRow
+import app.dragon.turnstile.db.{DbInterface, McpServerRow}
 import app.dragon.turnstile.mcp_client.McpStreamingHttpAsyncClient
 import app.dragon.turnstile.serializer.TurnstileSerializable
 import io.modelcontextprotocol.spec.McpSchema
@@ -28,6 +28,7 @@ import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityTypeKey}
 import slick.jdbc.JdbcBackend.Database
 
+import java.util.UUID
 import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
 
@@ -66,7 +67,7 @@ object McpClientActorId {
 /**
  * MCP Client Actor - manages a connection to a downstream MCP server.
  *
- * This actor wraps a TurnstileStreamingHttpAsyncMcpClient and provides actor-based
+ * This actor wraps a McpStreamingHttpAsyncClient and provides actor-based
  * access to downstream MCP servers. It handles tool calls, resource access, and
  * notifications from the remote server.
  *
@@ -77,13 +78,11 @@ object McpClientActorId {
  * - Lazy initialization on first Initialize message
  *
  * Lifecycle States:
- * 1. initWaitState: Waiting for Initialize message with server URL
+ * 1. initWaitState: Waiting for client initialization
  *    - Actor starts in this state
+ *    - Initiates MCP handshake with downstream server
  *    - Stashes all messages until initialized
- * 2. initializingState: Connecting to downstream server
- *    - MCP handshake in progress
- *    - Messages still stashed
- * 3. activeState: Connected and ready
+ * 2. activeState: Connected and ready
  *    - Handles tool calls, list operations, notifications
  *    - Full MCP protocol support
  *
@@ -91,7 +90,7 @@ object McpClientActorId {
  * {{{
  * ToolsService → McpClientActor.McpListTools
  *   ↓
- * TurnstileStreamingHttpAsyncMcpClient.listTools()
+ * McpStreamingHttpAsyncClient.listTools()
  *   ↓
  * HTTP/SSE to downstream MCP server
  *   ↓
@@ -127,12 +126,6 @@ object McpClientActor {
 
   sealed trait Message extends TurnstileSerializable
 
-  final case class Initialize(
-    //mcpServerUuid: String,
-    //mcpServerUrl: String
-    mcpServerRow: McpServerRow
-  ) extends Message
-
   final case class McpToolCallRequest(
     request: McpSchema.CallToolRequest,
     replyTo: ActorRef[Either[McpClientError,
@@ -161,8 +154,7 @@ object McpClientActor {
 
   // Internal wrapper messages
   private final case class InitializeStatus(
-    status: Either[McpClientError,
-      McpSchema.InitializeResult])
+    status: Either[McpClientError, McpStreamingHttpAsyncClient])
     extends Message
 
   private final case class PingResponse(
@@ -183,6 +175,7 @@ object McpClientActor {
   ) extends Message
 
   sealed trait McpClientError extends TurnstileSerializable
+  final case class DbError(message: String) extends McpClientError
   final case class ConnectionError(message: String) extends McpClientError
   final case class ProcessingError(message: String) extends McpClientError
   final case class NotInitializedError(message: String) extends McpClientError
@@ -217,24 +210,25 @@ class McpClientActor(
   implicit val database: Database = db
   implicit val system: ActorSystem[Nothing] = context.system
 
+  val logger: org.slf4j.Logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
+
   /**
    * State while waiting for client initialization.
    * Stashes incoming requests until the client is ready.
    */
   def initWaitState(
   ): Behavior[Message] = {
-    Behaviors.receiveMessagePartial(
-      handleInitialize()
-    )
+    context.pipeToSelf(initializeMcpClient(mcpClientActorId.mcpServerUuid)) {
+      case Success(mcpClient: McpStreamingHttpAsyncClient) =>
+        InitializeStatus(Right(mcpClient))
+      case Failure(exception) =>
+        context.log.error(s"Failed to initialize MCP client: ${exception.getMessage}")
+        InitializeStatus(Left(ConnectionError(exception.getMessage)))
+    }
+
+    Behaviors.receiveMessagePartial(handleInitializeStatus())
   }
 
-  def initializingState(
-    mcpClient: McpStreamingHttpAsyncClient
-  ): Behavior[Message] = {
-    Behaviors.receiveMessagePartial(
-      handleInitializeStatus(mcpClient)
-    )
-  }
   /**
    * Active state - handles all MCP client operations.
    */
@@ -257,47 +251,21 @@ class McpClientActor(
     }
   }
 
-  def handleInitialize(
-  ): PartialFunction[Message, Behavior[Message]] = {
-    case Initialize(mcpServerRow) =>
-      val authTokenProvider: Option[() => Future[String]] = mcpServerRow.authType match {
-        case "none" => None
-        case "discover" => getAccessToken(mcpServerRow.uuid.toString)
-        case "static_auth_header" => None // Note: static auth header support not yet implemented
-        case other => None
-      }
-
-      context.log.info(s"Received Initialize message for MCP client actor $mcpClientActorId mcpServerUuid=$mcpServerRow.uuid")
-
-      val authInfo = if (authTokenProvider.isDefined) "with authentication" else "without authentication"
-      context.log.info(s"Initializing MCP client actor $mcpClientActorId with server URL $mcpServerRow.url $authInfo")
-
-      val mcpClient = McpStreamingHttpAsyncClient(
-        serverUrl = mcpServerRow.url,
-        authTokenProvider = authTokenProvider
-      )
-
-      context.pipeToSelf(mcpClient.initialize()) {
-        case Success(initResult) =>
-          context.log.info(s"MCP client initialized: ${initResult.serverInfo().name()}")
-          InitializeStatus(Right(initResult))
-        case Failure(exception) =>
-          context.log.error(s"Failed to initialize MCP client: ${exception.getMessage}")
-          InitializeStatus(Left(ConnectionError(exception.getMessage)))
-      }
-
-      initializingState(mcpClient)
-  }
 
   /**
-   * Handles the initialization of the MCP client and pipes the result to self.
+   * Handle initialization status responses.
+   * On success, transitions to active state and unstashes pending messages.
+   * On failure, remains in init wait state (could add retry logic here).
    */
   def handleInitializeStatus(
-    mcpClient: McpStreamingHttpAsyncClient
   ): PartialFunction[Message, Behavior[Message]] = {
-    case InitializeStatus(status) =>
+    case InitializeStatus(Right(mcpClient)) =>
       context.log.info(s"MCP client actor $mcpClientActorId initialized successfully")
       buffer.unstashAll(activeState(mcpClient))
+    case InitializeStatus(Left(error)) =>
+      context.log.error(s"MCP client actor $mcpClientActorId failed to initialize: $error")
+      // TODO: Could implement retry logic here
+      Behaviors.same
     case other =>
       context.log.debug(s"Stashing message while initializing: ${other.getClass.getSimpleName}")
       buffer.stash(other)
@@ -311,11 +279,9 @@ class McpClientActor(
     mcpClient: McpStreamingHttpAsyncClient
   ): PartialFunction[Message, Behavior[Message]] = {
     case McpPing(replyTo) =>
-      // reply with Unit to indicate liveness
       context.pipeToSelf(mcpClient.ping()) {
         case Success(_) =>
           context.log.info(s"Ping succeeded")
-          // wrap a successful Unit result
           PingResponse(Success(()), replyTo)
         case Failure(exception) =>
           context.log.error(s"Ping failed: ${exception.getMessage}")
@@ -334,11 +300,9 @@ class McpClientActor(
     case PingResponse(result, replyTo) =>
       result match {
         case Success(_) =>
-          // Notify caller that ping succeeded
           replyTo ! ()
         case Failure(exception) =>
-          // On failure, still reply Unit but log the error
-          context.log.error(s"Ping operation failed when responding: ${exception.getMessage}")
+          context.log.error(s"Ping operation failed: ${exception.getMessage}")
           replyTo ! ()
       }
 
@@ -347,12 +311,17 @@ class McpClientActor(
 
   /**
    * Handle tool call requests.
+   * Ensures progress token is set before forwarding to the MCP client.
    */
   def handleToolCallRequest(
     mcpClient: McpStreamingHttpAsyncClient
   ): PartialFunction[Message, Behavior[Message]] = {
-    case McpToolCallRequest(request, replyTo) =>
-      context.log.info(s"MCP Client Actor $mcpClientActorId calling tool: ${request.name()}")
+    case McpToolCallRequest(request: McpSchema.CallToolRequest, replyTo) =>
+      context.log.info(s"Calling tool '${request.name()}' with arguments: ${request.arguments()}")
+
+      // Ensure progress token is set - some servers require non-null tokens
+      if (request.progressToken() == null)
+        request.meta().put("progressToken", UUID.randomUUID().toString)
 
       context.pipeToSelf(mcpClient.callTool(request)) {
         case Success(result) => ToolCallResponse(Success(result), replyTo)
@@ -447,20 +416,63 @@ class McpClientActor(
       activeState(mcpClient)
   }
 
+  /**
+   * Create an access token provider for authentication with the MCP server.
+   * Returns a function that fetches auth tokens on-demand via ClientAuthService.
+   *
+   * @param mcpServerUuid The MCP server UUID for which to fetch tokens
+   * @return Optional token provider function
+   */
   private def getAccessToken(
     mcpServerUuid: String
   ): Option[() => Future[String]] = {
     Some(() => {
-      //context.log.info(s"Setting up access token provider for MCP server UUID $mcpServerUuid")
-
       ClientAuthService.getAuthTokenCached(mcpServerUuid).map {
         case Left(error) =>
-          // Log error and throw exception
-          // The asyncHttpRequestCustomizer will catch this and log it
           throw new RuntimeException(s"Failed to get access token: ${error.toString}")
         case Right(authToken) =>
           authToken.accessToken
       }
     })
+  }
+
+  /**
+   * Initialize the MCP client connection.
+   *
+   * Performs the following:
+   * 1. Fetches server configuration from database
+   * 2. Sets up authentication provider based on auth type
+   * 3. Creates HTTP streaming client
+   * 4. Executes MCP initialize handshake
+   *
+   * @param mcpServerUuid The UUID of the MCP server to connect to
+   * @return Future containing the initialized MCP client
+   */
+  private def initializeMcpClient(
+    mcpServerUuid: String,
+  ): Future[McpStreamingHttpAsyncClient] = {
+    for {
+      mcpServerRow: McpServerRow <- DbInterface.findMcpServerByUuid(UUID.fromString(mcpServerUuid)).flatMap {
+        case Right(row) => Future.successful(row)
+        case Left(dbError) => Future.failed(new RuntimeException(s"Database error: ${dbError.message}"))
+      }
+      authTokenProvider: Option[() => Future[String]] = mcpServerRow.authType match {
+        case "none" => None
+        case "discover" => getAccessToken(mcpServerRow.uuid.toString)
+        case "static_auth_header" => None // Note: static auth header support not yet implemented
+        case other => None
+      }
+
+      _ = logger.info(s"Initializing MCP client actor $mcpClientActorId with server URL $mcpServerRow.url")
+      _ = logger.info(s"Auth token provider is ${if (authTokenProvider.isDefined) "defined" else "not defined"}")
+
+      mcpClient = McpStreamingHttpAsyncClient(
+        serverUrl = mcpServerRow.url,
+        authTokenProvider = authTokenProvider
+      )
+      initResult: McpSchema.InitializeResult <- mcpClient.initialize()
+      _ = logger.info(s"MCP client initialized: ${initResult}")
+    } yield mcpClient
+
   }
 }

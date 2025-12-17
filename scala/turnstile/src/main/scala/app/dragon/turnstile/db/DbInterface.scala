@@ -168,6 +168,34 @@ object DbInterface {
   }
 
   /**
+   * Finds an MCP server by name for a given tenant and user.
+   * @param tenant The tenant identifier
+   * @param userId The user identifier
+   * @param name The server name
+   * @param db The database instance
+   * @param ec ExecutionContext
+   * @return `Future[Either[DbError, McpServerRow]]` with the server or DbNotFound/DbError
+   */
+  def findMcpServerByName(
+    tenant: String,
+    userId: String,
+    name: String
+  )(
+    implicit db: Database, ec: ExecutionContext
+  ): Future[Either[DbError, McpServerRow]] = {
+    val query = Tables.mcpServers
+      .filter(s => s.tenant === tenant && s.userId === userId && s.name === name)
+      .result
+      .headOption
+    db.run(query).map {
+      case Some(row) => Right(row)
+      case None => Left(DbNotFound)
+    }.recover {
+      case NonFatal(t) => Left(mapDbError(t))
+    }
+  }
+
+  /**
    * Updates OAuth credentials (clientId, clientSecret, refreshToken, tokenEndpoint) for an MCP server by UUID.
    * @param uuid The UUID of the server to update
    * @param clientId The OAuth client ID

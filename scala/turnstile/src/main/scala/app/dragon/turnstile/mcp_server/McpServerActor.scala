@@ -199,8 +199,8 @@ class McpServerActor(
       turnstileMcpServer.addTool(toolSpec)
     }
 
-    // Pipe the result to self
-    context.pipeToSelf(ToolsService.getInstance(mcpServerActorId.userId).getAllDownstreamToolsSpec()) {
+    // TODO: Fetch downstream tools from registered MCP servers on loading. Not used at the moment.
+    context.pipeToSelf(ToolsService.getInstance(mcpServerActorId.userId).getAllDownstreamToolsSpecStub()) {
       case Success(Right(toolSpecSeq)) => DownstreamRefreshStatus(Right((toolSpecSeq)))
       case Success(Left(error)) => DownstreamRefreshStatus(Left(ProcessingError(error.toString)))
       case Failure(error) => DownstreamRefreshStatus(Left(ProcessingError(error.getMessage)))
