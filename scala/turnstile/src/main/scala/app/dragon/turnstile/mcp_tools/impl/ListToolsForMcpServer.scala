@@ -38,7 +38,7 @@ import scala.jdk.FutureConverters.*
 import io.circe.jackson.jacksonToCirce
 import io.modelcontextprotocol.json.McpJsonMapper
 
-import scala.collection.JavaConverters.collectionAsScalaIterableConverter
+import scala.jdk.CollectionConverters.*
 import java.util.UUID
 import scala.util.{Try, Success, Failure}
 import scala.util.matching.Regex
