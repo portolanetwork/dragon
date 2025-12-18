@@ -110,53 +110,55 @@ class ExecTool(
             "message" -> "Required parameters are missing"
           ).asJava)
           .build())
-      }
+      } else {
 
-      logger.debug(s"ExecTool: dispatching tool '$toolName' to server UUID '$mcpServerUuid'")
 
-      val meta = request.meta() match {
-        case null => java.util.Collections.singletonMap("progressToken", java.util.UUID.randomUUID().toString)
-        case m if !m.containsKey("progressToken") =>
-          val updatedMeta = new java.util.HashMap[String, Any](m)
-          updatedMeta.put("progressToken", java.util.UUID.randomUUID().toString)
-          updatedMeta
-        case m => m
-      }
+        logger.debug(s"ExecTool: dispatching tool '$toolName' to server UUID '$mcpServerUuid'")
 
-      // Create the tool call request
-      val toolCallRequest = McpSchema.CallToolRequest.builder()
-        .name(toolName)
-        .arguments(arguments.get)
-        .meta(meta)
-        .build()
-
-      val futureResult = for {
-        dbEither <- DbInterface.findMcpServerByUuid(tenant, userId, UUID.fromString(mcpServerUuid))
-        res <- dbEither match {
-          case Left(DbNotFound) =>
-            Future.successful(McpUtils.createTextResult(s"MCP server not found: $mcpServerUuid", isError = true))
-          case Left(other) =>
-            Future.successful(McpUtils.createTextResult(s"Database error: ${other}", isError = true))
-          case Right(_) =>
-            ActorLookup.getMcpClientActor(userId, mcpServerUuid)
-              .ask[Either[McpClientActor.McpClientError, McpSchema.CallToolResult]](
-                replyTo => McpClientActor.McpToolCallRequest(toolCallRequest, replyTo)
-              )
-              .map {
-                case Right(result) =>
-                  logger.debug(s"ExecTool: tool call succeeded for '$toolName' on server UUID '$mcpServerUuid'")
-                  result
-                case Left(error) =>
-                  logger.error(s"ExecTool: tool call failed for '$toolName' on server UUID '$mcpServerUuid': $error")
-                  McpUtils.createTextResult(error.toString, true)
-              }
-              //.map(_.fold(err => McpUtils.createTextResult(err.toString, isError = true), identity))
+        val meta = request.meta() match {
+          case null => java.util.Collections.singletonMap("progressToken", java.util.UUID.randomUUID().toString)
+          case m if !m.containsKey("progressToken") =>
+            val updatedMeta = new java.util.HashMap[String, Any](m)
+            updatedMeta.put("progressToken", java.util.UUID.randomUUID().toString)
+            updatedMeta
+          case m => m
         }
-      } yield res
+
+        // Create the tool call request
+        val toolCallRequest = McpSchema.CallToolRequest.builder()
+          .name(toolName)
+          .arguments(arguments.get)
+          .meta(meta)
+          .build()
+
+        val futureResult = for {
+          dbEither <- DbInterface.findMcpServerByUuid(tenant, userId, UUID.fromString(mcpServerUuid))
+          res <- dbEither match {
+            case Left(DbNotFound) =>
+              Future.successful(McpUtils.createTextResult(s"MCP server not found: $mcpServerUuid", isError = true))
+            case Left(other) =>
+              Future.successful(McpUtils.createTextResult(s"Database error: ${other}", isError = true))
+            case Right(_) =>
+              ActorLookup.getMcpClientActor(userId, mcpServerUuid)
+                .ask[Either[McpClientActor.McpClientError, McpSchema.CallToolResult]](
+                  replyTo => McpClientActor.McpToolCallRequest(toolCallRequest, replyTo)
+                )
+                .map {
+                  case Right(result) =>
+                    logger.debug(s"ExecTool: tool call succeeded for '$toolName' on server UUID '$mcpServerUuid'")
+                    result
+                  case Left(error) =>
+                    logger.error(s"ExecTool: tool call failed for '$toolName' on server UUID '$mcpServerUuid': $error")
+                    McpUtils.createTextResult(error.toString, true)
+                }
+            //.map(_.fold(err => McpUtils.createTextResult(err.toString, isError = true), identity))
+          }
+        } yield res
 
 
-      // Convert Future to Mono
-      Mono.fromCompletionStage(futureResult.asJava.toCompletableFuture)
+        // Convert Future to Mono
+        Mono.fromCompletionStage(futureResult.asJava.toCompletableFuture)
+      }
     }
   }
 }
