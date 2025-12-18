@@ -42,6 +42,7 @@ object Dependencies {
   val hikariCPVersion = "6.2.1"
   val flywayVersion = "11.1.0"
   val springVersion = "6.2.1"
+  val openAiVersion = "4.12.0"
 
   val dependencies = Seq(
     "org.apache.pekko" %% "pekko-actor" % pekkoVersion,
@@ -122,8 +123,6 @@ object Dependencies {
     "org.springframework" % "spring-context" % springVersion,
 
     "com.openai" % "openai-java" % openAiVersion,
-
-    "com.google.cloud" % "google-cloud-storage" % googleCloudStorageVersion,
   )
 
   val dependencyOverrides = Seq()

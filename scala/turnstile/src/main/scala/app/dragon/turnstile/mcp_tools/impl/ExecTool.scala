@@ -21,7 +21,7 @@ package app.dragon.turnstile.mcp_tools.impl
 import app.dragon.turnstile.mcp_client.McpClientActor
 import app.dragon.turnstile.mcp_tools.{AsyncToolHandler, McpTool, McpUtils}
 import app.dragon.turnstile.utils.ActorLookup
-import io.modelcontextprotocol.spec.McpSchema
+import io.modelcontextprotocol.spec.{McpError, McpSchema}
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
 import org.apache.pekko.util.Timeout
@@ -30,6 +30,7 @@ import slick.jdbc.JdbcBackend.Database
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.*
+import scala.jdk.CollectionConverters.*
 import scala.jdk.FutureConverters.*
 
 /**
@@ -38,12 +39,12 @@ import scala.jdk.FutureConverters.*
  * This tool accepts a server UUID, tool name, and arguments, and forwards
  * the tool call to the appropriate McpClientActor.
  *
- * @param userId The user identifier
- * @param tenant The tenant identifier (default: "default")
- * @param system The actor system (implicit)
+ * @param userId   The user identifier
+ * @param tenant   The tenant identifier (default: "default")
+ * @param system   The actor system (implicit)
  * @param sharding The cluster sharding (implicit)
- * @param ec The execution context (implicit)
- * @param db The database instance (implicit)
+ * @param ec       The execution context (implicit)
+ * @param db       The database instance (implicit)
  */
 class ExecTool(
   userId: String,
@@ -59,9 +60,9 @@ class ExecTool(
 
   override def getSchema(): McpSchema.Tool = {
     McpUtils.createToolSchemaBuilder(
-      "exec_tool",
-      "Execute a tool on a downstream MCP server by UUID"
-    )
+        "exec_tool",
+        "Execute a tool on a downstream MCP server by UUID"
+      )
       .inputSchema(
         McpUtils.createObjectSchema(
           properties = Map(
@@ -78,7 +79,7 @@ class ExecTool(
               "description" -> "The arguments to pass to the tool, matching that tool's schema."
             )
           ),
-          required = Seq("mcpServerUuid", "toolName")
+          required = Seq("mcpServerUuid", "toolName", "arguments")
         )
       )
       .build()
@@ -91,24 +92,40 @@ class ExecTool(
       val toolName = McpUtils.getStringArg(request, "toolName")
       val arguments = McpUtils.getObjectArg(request, "arguments")
 
+      // Validate required parameters
+      val validationErrors = Seq(
+        if (mcpServerUuid.isEmpty) Some("mcpServerUuid") else None,
+        if (toolName.isEmpty) Some("toolName") else None,
+        if (arguments.isEmpty) Some("arguments") else None
+      ).flatten
+
+      if (validationErrors.nonEmpty) {
+        logger.warn(s"ExecTool: validation errors for tool call to '$toolName' on server UUID '$mcpServerUuid': ${validationErrors.mkString(", ")}")
+        Mono.error(McpError.builder(McpSchema.ErrorCodes.INVALID_PARAMS)
+          .message(s"Missing required parameters: ${validationErrors.mkString(", ")}")
+          .data(Map(
+            "missing_fields" -> validationErrors.asJava,
+            "message" -> "Required parameters are missing"
+          ).asJava)
+          .build())
+      }
+
       logger.debug(s"ExecTool: dispatching tool '$toolName' to server UUID '$mcpServerUuid'")
 
-      // Convert arguments Map[String, Any] to Java Map for CallToolRequest
-      val javaArguments: java.util.Map[String, Any] = arguments match {
-        case Some(args) =>
-          val javaMap = new java.util.HashMap[String, Any]()
-          args.foreach { case (k, v) => javaMap.put(k, v) }
-          javaMap
-        case None =>
-          new java.util.HashMap[String, Any]()
+      val meta = request.meta() match {
+        case null => java.util.Collections.singletonMap("progressToken", java.util.UUID.randomUUID().toString)
+        case m if !m.containsKey("progressToken") =>
+          val updatedMeta = new java.util.HashMap[String, Any](m)
+          updatedMeta.put("progressToken", java.util.UUID.randomUUID().toString)
+          updatedMeta
+        case m => m
       }
 
       // Create the tool call request
       val toolCallRequest = McpSchema.CallToolRequest.builder()
         .name(toolName)
-        .arguments(javaArguments)
-        .meta(request.meta())
-        .progressToken(request.progressToken())
+        .arguments(arguments.get)
+        .meta(meta)
         .build()
 
       // Forward to McpClientActor using the provided UUID
@@ -119,18 +136,18 @@ class ExecTool(
         .map {
           case Right(result) =>
             logger.debug(s"ExecTool: tool call succeeded for '$toolName' on server UUID '$mcpServerUuid'")
-            Right(result)
+            result
           case Left(error) =>
             logger.error(s"ExecTool: tool call failed for '$toolName' on server UUID '$mcpServerUuid': $error")
-            Left(error)
+
+            McpUtils.createTextResult(
+              error.toString,
+              isError = true
+            )
         }
 
       // Convert Future to Mono
       Mono.fromCompletionStage(futureResult.asJava.toCompletableFuture)
-        .flatMap {
-          case Right(result) => Mono.just(result)
-          case Left(error) => Mono.error(new RuntimeException(s"ExecTool error: $error"))
-        }
     }
   }
 }
@@ -139,12 +156,12 @@ object ExecTool {
   /**
    * Create an ExecTool instance.
    *
-   * @param userId The user identifier
-   * @param tenant The tenant identifier (default: "default")
-   * @param system The actor system
+   * @param userId   The user identifier
+   * @param tenant   The tenant identifier (default: "default")
+   * @param system   The actor system
    * @param sharding The cluster sharding
-   * @param ec The execution context
-   * @param db The database instance
+   * @param ec       The execution context
+   * @param db       The database instance
    * @return A new ExecTool instance
    */
   def apply(

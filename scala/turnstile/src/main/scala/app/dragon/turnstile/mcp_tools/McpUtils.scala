@@ -159,14 +159,12 @@ object McpUtils {
   def getObjectArg(
     request: McpSchema.CallToolRequest,
     argName: String
-  ): Option[Map[String, Any]] = {
+  ): Option[java.util.Map[String, Any]] = {
     Option(request.arguments())
       .flatMap(args => Option(args.get(argName)))
       .flatMap {
-        case javaMap: java.util.Map[?, ?] =>
-          scala.util.Try {
-            javaMap.asScala.toMap.asInstanceOf[Map[String, Any]]
-          }.toOption
+        case javaMap: java.util.Map[?, ?] => 
+          Some(javaMap.asInstanceOf[java.util.Map[String, Any]])
         case _ => None
       }
   }
