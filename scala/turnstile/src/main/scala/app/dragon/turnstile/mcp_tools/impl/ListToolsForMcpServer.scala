@@ -127,7 +127,9 @@ class ListToolsForMcpServer(
   db: Database
 ) extends McpTool {
 
-  implicit val timeout: Timeout = 120.seconds
+  // Ask timeout for listing tools from a downstream MCP server.
+  // Kept reasonably low to avoid long-hanging requests while still allowing for slow backends.
+  implicit val timeout: Timeout = 60.seconds
 
   /**
    * Validate a regex pattern by attempting to compile it.
