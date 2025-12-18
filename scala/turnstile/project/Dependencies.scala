@@ -42,7 +42,6 @@ object Dependencies {
   val hikariCPVersion = "6.2.1"
   val flywayVersion = "11.1.0"
   val springVersion = "6.2.1"
-  val openAiVersion = "4.12.0"
 
   val dependencies = Seq(
     "org.apache.pekko" %% "pekko-actor" % pekkoVersion,
@@ -117,8 +116,6 @@ object Dependencies {
 
     // Ensure Spring Context is present for classes such as org.springframework.context.i18n.LocaleContext
     "org.springframework" % "spring-context" % springVersion,
-
-    "com.openai" % "openai-java" % openAiVersion,
   )
 
   val dependencyOverrides = Seq()
