@@ -24,7 +24,9 @@ import app.dragon.turnstile.mcp_tools.{AsyncToolHandler, McpTool, McpUtils}
 import app.dragon.turnstile.utils.ActorLookup
 import com.fasterxml.jackson.databind.JsonNode
 import io.circe.Json
+import io.circe.jackson.jacksonToCirce
 import io.circe.syntax.*
+import io.modelcontextprotocol.json.McpJsonMapper
 import io.modelcontextprotocol.spec.McpSchema
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
@@ -32,15 +34,12 @@ import org.apache.pekko.util.Timeout
 import reactor.core.publisher.Mono
 import slick.jdbc.JdbcBackend.Database
 
-import scala.concurrent.ExecutionContext
-import scala.concurrent.duration.*
-import scala.jdk.FutureConverters.*
-import io.circe.jackson.jacksonToCirce
-import io.modelcontextprotocol.json.McpJsonMapper
-
-import scala.jdk.CollectionConverters.*
 import java.util.UUID
-import scala.util.{Try, Success, Failure}
+import scala.concurrent.duration.*
+import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters.*
+import scala.jdk.FutureConverters.*
+import scala.util.{Failure, Success, Try}
 
 /**
  * List MCP tools - lists all available tools from a specific MCP server.
@@ -109,12 +108,12 @@ import scala.util.{Try, Success, Failure}
  * }
  * }}}
  *
- * @param userId The user identifier
- * @param tenant The tenant identifier (default: "default")
- * @param system The actor system (implicit)
+ * @param userId   The user identifier
+ * @param tenant   The tenant identifier (default: "default")
+ * @param system   The actor system (implicit)
  * @param sharding The cluster sharding (implicit)
- * @param ec The execution context (implicit)
- * @param db The database instance (implicit)
+ * @param ec       The execution context (implicit)
+ * @param db       The database instance (implicit)
  */
 
 
@@ -151,7 +150,7 @@ class ListToolsForMcpServer(
    * Supports exact matching and regex patterns with 'regex:' prefix.
    *
    * @param toolName The tool name to match
-   * @param pattern The pattern (exact string or regex with prefix)
+   * @param pattern  The pattern (exact string or regex with prefix)
    * @return Try[Boolean] - Success(true) if matched, Success(false) if not matched, Failure if invalid regex
    */
   private def matchPattern(toolName: String, pattern: String): Try[Boolean] = Try {
@@ -163,6 +162,49 @@ class ListToolsForMcpServer(
       // Exact match
       toolName == pattern
     }
+  }
+
+  /**
+   * Filter a sequence of MCP tools by the provided pattern set.
+   * Supports the wildcard "*" to return all tools, exact matches, and regex
+   * patterns prefixed with "regex:". Any regex failures during matching are
+   * logged and treated as non-matches so they don't break the entire request.
+   */
+  private def filterToolsByPatterns(tools: Seq[McpSchema.Tool], patterns: Set[String]): Seq[McpSchema.Tool] = {
+    if (patterns.contains("*")) {
+      tools
+    } else {
+      tools.filter { tool =>
+        patterns.exists { pattern =>
+          matchPattern(tool.name(), pattern) match {
+            case Success(matched) => matched
+            case Failure(e) =>
+              logger.warn(s"ListMcpTools: pattern match failure for pattern '$pattern' on tool '${tool.name()}': ${e.getMessage}")
+              false
+          }
+        }
+      }
+    }
+  }
+
+  // New helper: build the JSON result for the tools list
+  private def buildToolsResultJson(serverName: String, serverUuid: String, tools: Seq[McpSchema.Tool]): Json = {
+    val toolsJson = tools.map { tool =>
+      Json.obj(
+        "name" -> tool.name().asJson,
+        "description" -> Option(tool.description()).asJson,
+        "inputSchema" -> jacksonToCirce(
+          McpJsonMapper.getDefault.convertValue(tool.inputSchema(), classOf[JsonNode])
+        )
+      )
+    }
+
+    Json.obj(
+      "server" -> serverName.asJson,
+      "serverUuid" -> serverUuid.asJson,
+      "tools" -> toolsJson.asJson,
+      "count" -> toolsJson.size.asJson
+    )
   }
 
   override def getSchema(): McpSchema.Tool = {
@@ -190,21 +232,21 @@ class ListToolsForMcpServer(
       java.util.List.of("mcpServerUuid"),
       null, // additionalProperties
       null, // defs
-      null  // definitions
+      null // definitions
     )
 
     McpUtils.createToolSchemaBuilder(
-      name = "list_tools_for_mcp_server",
-      description = "Lists all available tools from a specific MCP server by UUID, optionally filtered by tool names"
-    )
+        name = "list_tools_for_mcp_server",
+        description = "Lists all available tools from a specific MCP server by UUID, optionally filtered by tool names"
+      )
       .inputSchema(schema)
       .build()
   }
 
   override def getAsyncHandler(): AsyncToolHandler = {
     (exchange, request) => {
-      val serverUuidStr = McpUtils.getStringArg(request, "mcpServerUuid")
-      val serverUuid = UUID.fromString(serverUuidStr)
+      val mcpServerUuidStr = McpUtils.getStringArg(request, "mcpServerUuid")
+      val mcpServerUuid = UUID.fromString(mcpServerUuidStr)
 
       // Extract toolNames parameter, defaulting to Set("*") if not provided
       val toolNamesFilter = Option(request.arguments())
@@ -215,7 +257,7 @@ class ListToolsForMcpServer(
         }
         .getOrElse(Set("*"))
 
-      logger.debug(s"ListMcpTools: listing tools from server UUID '$serverUuid' with filter: $toolNamesFilter")
+      logger.debug(s"ListMcpTools: listing tools from server UUID '$mcpServerUuid' with filter: $toolNamesFilter")
 
       // Validate all regex patterns upfront
       val invalidPatterns = toolNamesFilter.filterNot(_ == "*").flatMap { pattern =>
@@ -230,107 +272,60 @@ class ListToolsForMcpServer(
           "error" -> s"Invalid regex pattern(s): $errorMessages".asJson
         )
         logger.error(s"ListMcpTools: invalid regex patterns provided: $errorMessages")
-        return Mono.just(McpUtils.createTextResult(errorJson.spaces2, isError = true))
-      }
+        Mono.just(McpUtils.createTextResult(errorJson.spaces2, isError = true))
+      } else {
 
-      // Query the MCP server for tools
-      val futureResult = for {
-        // Step 1: Look up the MCP server by UUID
-        dbResult <- DbInterface.findMcpServerByUuid(tenant, userId, serverUuid)
-        mcpServerRow <- dbResult match {
-          case Right(row) =>
-            logger.debug(s"ListMcpTools: found server '${row.name}' with UUID ${row.uuid}")
-            scala.concurrent.Future.successful(row)
-          case Left(DbNotFound) =>
-            logger.error(s"ListMcpTools: server with UUID '$serverUuid' not found")
-            scala.concurrent.Future.failed(new RuntimeException(s"MCP server with UUID '$serverUuid' not found"))
-          case Left(error) =>
-            logger.error(s"ListMcpTools: database error: ${error.message}")
-            scala.concurrent.Future.failed(new RuntimeException(s"Database error: ${error.message}"))
-        }
+        // Query the MCP server for tools
+        val futureResult = for {
+          // Step 1: Look up the MCP server by UUID
+          dbResult <- DbInterface.findMcpServerByUuid(tenant, userId, mcpServerUuid)
+          mcpServerRow <- dbResult match {
+            case Right(row) =>
+              logger.debug(s"ListMcpTools: found server '${row.name}' with UUID ${row.uuid}")
+              Future.successful(row)
+            case Left(DbNotFound) =>
+              logger.error(s"ListMcpTools: server with UUID '$mcpServerUuid' not found")
+              Future.failed(new RuntimeException(s"MCP server with UUID '$mcpServerUuid' not found"))
+            case Left(error) =>
+              logger.error(s"ListMcpTools: database error: ${error.message}")
+              Future.failed(new RuntimeException(s"Database error: ${error.message}"))
+          }
 
-        // Step 2: Request the list of tools
-        clientActor = ActorLookup.getMcpClientActor(userId, mcpServerRow.uuid.toString)
-        actorResult <- clientActor.ask[Either[McpClientActor.McpClientError, McpSchema.ListToolsResult]](
-          replyTo => McpClientActor.McpListTools(replyTo)
-        )
-
-        // Step 3: Process the result and convert to JSON
-        jsonResult <- actorResult match {
-          case Right(listResult) =>
-            logger.debug(s"ListMcpTools: successfully listed ${listResult.tools().size()} tools from server '${mcpServerRow.name}' (UUID: $serverUuid)")
-
-            // Convert Java List to Scala Seq
-            val allTools = listResult.tools().asScala.toSeq
-
-            // Apply filter: if toolNamesFilter contains "*", return all tools; otherwise filter by pattern
-            val filteredTools = if (toolNamesFilter.contains("*")) {
-              allTools
-            } else {
-              allTools.filter { tool =>
-                toolNamesFilter.exists { pattern =>
-                  // All patterns have been validated upfront, so matchPattern should not throw.
-                  // If it does fail, we log and skip the pattern to avoid breaking the entire request.
-                  matchPattern(tool.name(), pattern) match {
-                    case Success(matched) =>
-                      if (matched) {
-                        logger.debug(s"ListMcpTools: tool '${tool.name()}' matched pattern '$pattern'")
-                      }
-                      matched
-                    case Failure(e) =>
-                      // This should never happen since patterns are pre-validated,
-                      // but we handle it defensively just in case.
-                      logger.error(s"ListMcpTools: unexpected error matching pattern '$pattern' against tool '${tool.name()}': ${e.getMessage}")
-                      false
-                  }
-                }
-              }
-            }
-
-            // Build JSON for filtered tools
-            val toolsJson = filteredTools.map { tool =>
-                Json.obj(
-                  "name" -> tool.name().asJson,
-                  "description" -> Option(tool.description()).asJson,
-                  "inputSchema" -> jacksonToCirce(
-                    McpJsonMapper.getDefault.convertValue(tool.inputSchema(), classOf[JsonNode])
-                  )
-                )
-              }
-
-            logger.debug(s"ListMcpTools: returning ${toolsJson.size} tools after filtering (filter: $toolNamesFilter)")
-
-            val result = Json.obj(
-              "server" -> mcpServerRow.name.asJson,
-              "serverUuid" -> mcpServerRow.uuid.toString.asJson,
-              "tools" -> toolsJson.asJson,
-              "count" -> toolsJson.size.asJson
-            )
-
-            scala.concurrent.Future.successful(Right(result.spaces2))
-
-          case Left(error) =>
-            logger.error(s"ListMcpTools: MCP client error: $error")
-            val errorJson = Json.obj(
-              "error" -> s"MCP client error: $error".asJson
-            )
-            scala.concurrent.Future.successful(Left(errorJson.spaces2))
-        }
-      } yield jsonResult
-
-      // Convert Future to Mono
-      Mono.fromCompletionStage(futureResult.asJava.toCompletableFuture)
-        .flatMap {
-          case Right(jsonText) => Mono.just(McpUtils.createTextResult(jsonText))
-          case Left(errorJson) => Mono.just(McpUtils.createTextResult(errorJson, isError = true))
-        }
-        .onErrorResume { error =>
-          logger.error(s"ListMcpTools: unexpected error: ${error.getMessage}", error)
-          val errorJson = Json.obj(
-            "error" -> error.getMessage.asJson
+          // Step 2: Request the list of tools
+          actorResult <- ActorLookup.getMcpClientActor(userId, mcpServerRow.uuid.toString)
+            .ask[Either[McpClientActor.McpClientError, McpSchema.ListToolsResult]](
+            replyTo => McpClientActor.McpListTools(replyTo)
           )
-          Mono.just(McpUtils.createTextResult(errorJson.spaces2, isError = true))
-        }
+
+          // Step 3: Process the result and convert to JSON
+          callToolResult <- actorResult match {
+            case Right(listResult) =>
+              logger.debug(s"ListMcpTools: successfully listed ${listResult.tools().size()} tools from server '${mcpServerRow.name}' (UUID: $mcpServerUuid)")
+
+              // Apply filter: if toolNamesFilter contains "*", return all tools; otherwise filter by pattern
+              val filteredTools = filterToolsByPatterns(listResult.tools().asScala.toSeq, toolNamesFilter)
+
+              // Build JSON for filtered tools using helper
+              val resultJson = buildToolsResultJson(mcpServerRow.name, mcpServerRow.uuid.toString, filteredTools)
+
+              logger.debug(s"ListMcpTools: returning ${filteredTools.size} tools after filtering (filter: $toolNamesFilter)")
+
+              Future.successful(McpUtils.createTextResult(resultJson.spaces2, isError = false))
+
+            case Left(error) =>
+              logger.error(s"ListMcpTools: MCP client error: $error")
+              val errorJson = Json.obj(
+                "error" -> s"MCP client error: $error".asJson
+              )
+              Future.successful(McpUtils.createTextResult(errorJson.spaces2, isError = true))
+          }
+
+        } yield callToolResult
+
+        // Convert Future to Mono
+        Mono.fromCompletionStage(futureResult.asJava.toCompletableFuture)
+
+      }
     }
   }
 }
@@ -339,12 +334,12 @@ object ListToolsForMcpServer {
   /**
    * Create a ListToolsForMcpServer instance.
    *
-   * @param userId The user identifier
-   * @param tenant The tenant identifier (default: "default")
-   * @param system The actor system
+   * @param userId   The user identifier
+   * @param tenant   The tenant identifier (default: "default")
+   * @param system   The actor system
    * @param sharding The cluster sharding
-   * @param ec The execution context
-   * @param db The database instance
+   * @param ec       The execution context
+   * @param db       The database instance
    * @return A new ListToolsForMcpServer instance
    */
   def apply(

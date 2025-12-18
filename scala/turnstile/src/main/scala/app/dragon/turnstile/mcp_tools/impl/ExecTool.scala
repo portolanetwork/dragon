@@ -133,7 +133,7 @@ class ExecTool(
 
         val futureResult = for {
           dbEither <- DbInterface.findMcpServerByUuid(tenant, userId, UUID.fromString(mcpServerUuid))
-          res <- dbEither match {
+          callToolResult <- dbEither match {
             case Left(DbNotFound) =>
               Future.successful(McpUtils.createTextResult(s"MCP server not found: $mcpServerUuid", isError = true))
             case Left(other) =>
@@ -153,7 +153,7 @@ class ExecTool(
                 }
             //.map(_.fold(err => McpUtils.createTextResult(err.toString, isError = true), identity))
           }
-        } yield res
+        } yield callToolResult
 
 
         // Convert Future to Mono
