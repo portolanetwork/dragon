@@ -131,14 +131,6 @@ class ListToolsForMcpServer(
   implicit val timeout: Timeout = 120.seconds
 
   /**
-   * Match a tool name against a pattern.
-   * Supports exact matching and regex patterns with 'regex:' prefix.
-   *
-   * @param toolName The tool name to match
-   * @param pattern The pattern (exact string or regex with prefix)
-   * @return Try[Boolean] - Success(true) if matched, Success(false) if not matched, Failure if invalid regex
-   */
-  /**
    * Validate a regex pattern by attempting to compile it.
    * Returns None if valid, Some(error message) if invalid.
    */
@@ -154,6 +146,14 @@ class ListToolsForMcpServer(
     }
   }
 
+  /**
+   * Match a tool name against a pattern.
+   * Supports exact matching and regex patterns with 'regex:' prefix.
+   *
+   * @param toolName The tool name to match
+   * @param pattern The pattern (exact string or regex with prefix)
+   * @return Try[Boolean] - Success(true) if matched, Success(false) if not matched, Failure if invalid regex
+   */
   private def matchPattern(toolName: String, pattern: String): Try[Boolean] = Try {
     if (pattern.startsWith("regex:")) {
       val regexPattern = pattern.stripPrefix("regex:")
@@ -270,12 +270,19 @@ class ListToolsForMcpServer(
               allTools.filter { tool =>
                 toolNamesFilter.exists { pattern =>
                   // All patterns have been validated upfront, so matchPattern should not throw.
-                  // We use .get instead of .getOrElse to catch any unexpected failures during development.
-                  val matched = matchPattern(tool.name(), pattern).get
-                  if (matched) {
-                    logger.debug(s"ListMcpTools: tool '${tool.name()}' matched pattern '$pattern'")
+                  // If it does fail, we log and skip the pattern to avoid breaking the entire request.
+                  matchPattern(tool.name(), pattern) match {
+                    case Success(matched) =>
+                      if (matched) {
+                        logger.debug(s"ListMcpTools: tool '${tool.name()}' matched pattern '$pattern'")
+                      }
+                      matched
+                    case Failure(e) =>
+                      // This should never happen since patterns are pre-validated,
+                      // but we handle it defensively just in case.
+                      logger.error(s"ListMcpTools: unexpected error matching pattern '$pattern' against tool '${tool.name()}': ${e.getMessage}")
+                      false
                   }
-                  matched
                 }
               }
             }
