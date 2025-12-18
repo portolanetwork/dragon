@@ -21,7 +21,7 @@ package app.dragon.turnstile.mcp_tools
 import app.dragon.turnstile.db.{DbInterface, DbNotFound, McpServerRow}
 import app.dragon.turnstile.mcp_client.McpClientActor
 import app.dragon.turnstile.mcp_client.McpClientActor.McpClientError
-import app.dragon.turnstile.mcp_tools.impl.{EchoTool, NamespacedTool, StreamingDemoTool, SystemInfoTool}
+import app.dragon.turnstile.mcp_tools.impl.*
 import app.dragon.turnstile.utils.ActorLookup
 import io.modelcontextprotocol.common.McpTransportContext
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification
@@ -106,16 +106,25 @@ class ToolsService(
   private val logger: Logger = LoggerFactory.getLogger(classOf[ToolsService])
   // Default tools (built-in)
   private val defaultTools: List[McpTool] = List(
-    EchoTool("echo1"),
-    EchoTool("echo2"),
-    SystemInfoTool,
-    StreamingDemoTool
+    //Echo("echo1"),
+    //Echo("echo2"),
+    //StreamingExample,
+    SystemInfo,
+    ExecTool(userId, "default"),
+    ListMcpServers(userId, "default"),
+    ListToolsForMcpServer(userId, "default")
   )
 
   logger.info(s"ToolsService initialized for user=$userId with ${defaultTools.size} default tools: ${defaultTools.map(_.getName()).mkString(", ")}")
 
   def getDefaultToolsSpec(): List[AsyncToolSpecification] =
     convertToAsyncToolSpec(defaultTools, true)
+
+  def getAllDownstreamToolsSpecStub(
+    tenant: String = "default"
+  ): Future[Either[McpClientError, List[AsyncToolSpecification]]] = {
+    Future.successful(Right(List.empty))
+  }
 
   def getAllDownstreamToolsSpec(
     tenant: String = "default"
@@ -164,8 +173,6 @@ class ToolsService(
 
     logger.info(s"Fetching namespaced tools from MCP client actor: ${mcpServerRow.uuid} (${mcpServerRow.name}) for user=$userId")
 
-    ActorLookup.getMcpClientActor(userId, mcpServerRow.uuid.toString) ! McpClientActor.Initialize(mcpServerRow)
-
     // Query the actor for its tools
     ActorLookup.getMcpClientActor(userId, mcpServerRow.uuid.toString)
       .ask[Either[McpClientActor.McpClientError, McpSchema.ListToolsResult]](
@@ -186,7 +193,7 @@ class ToolsService(
               .annotations(downstreamToolSchema.annotations())
               .build()
 
-            NamespacedTool(turnstileToolSchema, downstreamToolSchema, userId, mcpServerRow.uuid.toString)
+            NamespacedToolExample(turnstileToolSchema, downstreamToolSchema, userId, mcpServerRow.uuid.toString)
           }
 
           Right(downstreamTools)
@@ -204,14 +211,16 @@ class ToolsService(
    * then fetches the tools from that server and returns them as AsyncToolSpecification instances.
    *
    * @param uuid The UUID string of the MCP server
+   * @param tenant The tenant identifier (default: "default")
    * @return A Future containing either an error or a list of tool specifications
    */
   def getDownstreamToolsSpec(
-    uuid: String
+    uuid: String,
+    tenant: String = "default"
   ): Future[Either[McpClientError, List[AsyncToolSpecification]]] = {
     logger.info(s"Fetching downstream tools for MCP server UUID: $uuid for user=$userId")
 
-    DbInterface.findMcpServerByUuid(UUID.fromString(uuid)).flatMap {
+    DbInterface.findMcpServerByUuid(tenant, userId, UUID.fromString(uuid)).flatMap {
       case Right(mcpServerRow) =>
         logger.info(s"Found MCP server ${mcpServerRow.name} (${mcpServerRow.uuid}) for user=$userId")
         getDownstreamToolsSpec(mcpServerRow)

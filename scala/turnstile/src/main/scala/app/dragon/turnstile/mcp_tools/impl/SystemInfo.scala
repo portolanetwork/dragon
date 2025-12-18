@@ -52,7 +52,7 @@ import reactor.core.publisher.Mono
  * @param serverName The name of the server (from config)
  * @param serverVersion The version of the server (from config)
  */
-object SystemInfoTool extends McpTool {
+object SystemInfo extends McpTool {
   override def getSchema(): McpSchema.Tool = {
     McpUtils.createToolSchemaBuilder(
       name = "system_info",

@@ -72,6 +72,8 @@ object ClientAuthService {
   private case class AuthFlowFailed(message: String) extends AuthError
 
   def initiateAuthCodeFlow(
+    tenant: String,
+    userId: String,
     mcpServerUuid: String
   )(
     implicit db: Database,
@@ -84,7 +86,7 @@ object ClientAuthService {
     val serverUuid = UUID.fromString(mcpServerUuid)
 
     for {
-      mcpServerRowEither <- DbInterface.findMcpServerByUuid(serverUuid)
+      mcpServerRowEither <- DbInterface.findMcpServerByUuid(tenant, userId, serverUuid)
       loginUrl <- mcpServerRowEither match {
         case Right(serverRow) =>
           val flowId = UUID.randomUUID().toString
@@ -168,10 +170,14 @@ object ClientAuthService {
    * Retrieves an authentication token for an MCP server, using a shared cache to minimize token refreshes.
    * The cache is node-local and shared across all requests on this node.
    *
+   * @param tenant The tenant identifier
+   * @param userId The user identifier
    * @param mcpServerUuid The UUID of the MCP server
    * @return Either[AuthError, AuthToken] containing the cached or newly fetched token
    */
   def getAuthTokenCached(
+    tenant: String,
+    userId: String,
     mcpServerUuid: String
   )(
     implicit db: Database,
@@ -196,7 +202,7 @@ object ClientAuthService {
         logger.debug(s"------------- ClientAuthService: Cache miss for MCP server $mcpServerUuid")
 
         // Cache miss or expired token - fetch new token
-        getAuthToken(mcpServerUuid).map {
+        getAuthToken(tenant, userId, mcpServerUuid).map {
           case Right(tokenResponse) =>
             // Calculate expiry time with 60 second buffer for safety
             val expiresInSeconds = tokenResponse.expires_in.getOrElse(3600)
@@ -223,6 +229,8 @@ object ClientAuthService {
   }
 
   private def getAuthToken(
+    tenant: String,
+    userId: String,
     mcpServerUuid: String
   )(
     implicit db: Database,
@@ -232,7 +240,7 @@ object ClientAuthService {
     val now = Instant.now()
 
     for {
-      mcpServerRowEither <- DbInterface.findMcpServerByUuid(UUID.fromString(mcpServerUuid))
+      mcpServerRowEither <- DbInterface.findMcpServerByUuid(tenant, userId, UUID.fromString(mcpServerUuid))
       authToken <- mcpServerRowEither match {
         case Right(serverRow) =>
           serverRow.refreshToken match {
@@ -279,10 +287,14 @@ object ClientAuthService {
   /**
    * Get the login status for an MCP server.
    *
+   * @param tenant The tenant identifier
+   * @param userId The user identifier
    * @param mcpServerUuid The UUID of the MCP server
    * @return Either[AuthError, LoginStatusInfo] containing the login status information
    */
   def getMcpServerLoginStatus(
+    tenant: String,
+    userId: String,
     mcpServerUuid: String
   )(
     implicit db: Database,
@@ -293,7 +305,7 @@ object ClientAuthService {
     val serverUuid = UUID.fromString(mcpServerUuid)
 
     for {
-      mcpServerRowEither <- DbInterface.findMcpServerByUuid(serverUuid)
+      mcpServerRowEither <- DbInterface.findMcpServerByUuid(tenant, userId, serverUuid)
       statusInfo <- mcpServerRowEither match {
         case Right(serverRow) =>
           val authType = serverRow.authType.toLowerCase

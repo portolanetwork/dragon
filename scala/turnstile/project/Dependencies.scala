@@ -87,10 +87,8 @@ object Dependencies {
     "io.circe" %% "circe-core" % circeVersion,
     "io.circe" %% "circe-parser" % circeVersion,
     "io.circe" %% "circe-generic" % circeVersion,
-    // sttp client for HTTP calls used by ClientAuthService
-    "com.softwaremill.sttp.client4" %% "core" % "4.0.13",
-    "com.softwaremill.sttp.client4" %% "circe" % "4.0.13",
-    "com.softwaremill.sttp.client4" %% "okhttp-backend" % "4.0.13",
+    "io.circe" %% "circe-jackson29" % "0.14.2",
+
     // (using io.circe.generic.auto._ instead of circe-generic-extras)
     "ch.qos.logback" % "logback-classic" % logbackVersion,
     "com.github.jwt-scala" %% "jwt-play-json" % jwtScalaVersion,
@@ -115,7 +113,6 @@ object Dependencies {
     "org.apache.pekko" %% "pekko-actor-testkit-typed" % pekkoVersion % Test,
     "org.scalamock" %% "scalamock" % scalaMockVersion % Test,
     "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-    "com.h2database" % "h2" % "2.3.232" % Test,  // H2 for testing
 
     // Ensure Spring Context is present for classes such as org.springframework.context.i18n.LocaleContext
     "org.springframework" % "spring-context" % springVersion,

@@ -148,4 +148,24 @@ object McpUtils {
       .flatMap(v => scala.util.Try(v.toString.toBoolean).toOption)
       .getOrElse(default)
   }
+
+  /**
+   * Helper to extract an object (Map) argument from the request
+   *
+   * @param request The CallToolRequest
+   * @param argName The argument name to extract
+   * @return Option containing the argument as a Scala Map, or None if missing or invalid
+   */
+  def getObjectArg(
+    request: McpSchema.CallToolRequest,
+    argName: String
+  ): Option[java.util.Map[String, Any]] = {
+    Option(request.arguments())
+      .flatMap(args => Option(args.get(argName)))
+      .flatMap {
+        case javaMap: java.util.Map[?, ?] => 
+          Some(javaMap.asInstanceOf[java.util.Map[String, Any]])
+        case _ => None
+      }
+  }
 }

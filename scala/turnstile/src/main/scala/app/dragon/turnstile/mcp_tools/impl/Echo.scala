@@ -44,11 +44,11 @@ import reactor.core.publisher.Mono
  * Returns: "Echo: Hello, World!"
  */
 
-object EchoTool {
-  def apply(name: String): EchoTool = new EchoTool(name)
+object Echo {
+  def apply(name: String): Echo = new Echo(name)
 }
 
-class EchoTool(
+class Echo(
   name: String
 ) extends McpTool {
   override def getSchema(): McpSchema.Tool = {

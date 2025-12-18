@@ -164,7 +164,7 @@ class MgmtServiceImpl(authEnabled: Boolean)(
       uuid <- Future.fromTry(scala.util.Try(UUID.fromString(in.uuid)))
         .recoverWith(_ => Future.failed(new GrpcServiceException(Status.INVALID_ARGUMENT,
           MetadataBuilder().addText("INVALID_UUID", s"Invalid UUID format: ${in.uuid}").build())))
-      deleteResult <- DbInterface.deleteMcpServerByUuid(uuid)
+      deleteResult <- DbInterface.deleteMcpServerByUuid(authContext.tenant, authContext.userId, uuid)
     } yield {
       deleteResult match {
         case Left(DbAlreadyExists) =>
@@ -204,7 +204,7 @@ class MgmtServiceImpl(authEnabled: Boolean)(
       authContext <- ServerAuthService.authenticate(metadata, authEnabled)
       _ = logger.info(s"Received LoginToMcpServer request for uuid: ${in.uuid} from userId: ${authContext.userId}")
       _ <- validateNotEmpty(in.uuid, "uuid")
-      loginUrlResult <- ClientAuthService.initiateAuthCodeFlow(in.uuid)
+      loginUrlResult <- ClientAuthService.initiateAuthCodeFlow(authContext.tenant, authContext.userId, in.uuid)
     } yield {
       loginUrlResult match {
         case Right(loginUrl) =>
@@ -239,7 +239,7 @@ class MgmtServiceImpl(authEnabled: Boolean)(
       authContext <- ServerAuthService.authenticate(metadata, authEnabled)
       _ = logger.info(s"Received GetLoginStatusForMcpServer request for uuid: ${in.uuid} from userId: ${authContext.userId}")
       _ <- validateNotEmpty(in.uuid, "uuid")
-      loginStatusResult <- ClientAuthService.getMcpServerLoginStatus(in.uuid)(db, ec, system)
+      loginStatusResult <- ClientAuthService.getMcpServerLoginStatus(authContext.tenant, authContext.userId, in.uuid)(db, ec, system)
     } yield {
       loginStatusResult match {
         case Right(statusInfo: ClientAuthService.LoginStatusInfo) =>

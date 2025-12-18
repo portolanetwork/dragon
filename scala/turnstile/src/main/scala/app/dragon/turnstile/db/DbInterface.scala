@@ -104,12 +104,14 @@ object DbInterface {
    * @return `Future[Either[DbError, Int]]` number of rows deleted or DbError
    */
   def deleteMcpServerByUuid(
+    tenant: String,
+    userId: String,
     uuid: UUID
   )(
     implicit db: Database, ec: ExecutionContext
   ): Future[Either[DbError, Int]] = {
     val deleteAction = Tables.mcpServers
-      .filter(_.uuid === uuid).delete
+      .filter(s => s.tenant === tenant && s.userId === userId && s.uuid === uuid).delete
     db.run(deleteAction).map(Right(_): Either[DbError, Int]).recover {
       case NonFatal(t) => Left(mapDbError(t))
     }
@@ -123,12 +125,14 @@ object DbInterface {
    * @return `Future[Either[DbError, McpServerRow]]` with the server or DbNotFound/DbError
    */
   def findMcpServerByUuid(
+    tenant: String,
+    userId: String,
     uuid: UUID
   )(
     implicit db: Database, ec: ExecutionContext
   ): Future[Either[DbError, McpServerRow]] = {
     val query = Tables.mcpServers
-      .filter(_.uuid === uuid)
+      .filter(s => s.tenant === tenant && s.userId === userId && s.uuid === uuid)
       .result
       .headOption
     db.run(query).map {
