@@ -151,7 +151,6 @@ class ExecTool(
                     logger.error(s"ExecTool: tool call failed for '$toolName' on server UUID '$mcpServerUuid': $error")
                     McpUtils.createTextResult(error.toString, true)
                 }
-            //.map(_.fold(err => McpUtils.createTextResult(err.toString, isError = true), identity))
           }
         } yield callToolResult
 
