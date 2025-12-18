@@ -138,6 +138,22 @@ class ListToolsForMcpServer(
    * @param pattern The pattern (exact string or regex with prefix)
    * @return Try[Boolean] - Success(true) if matched, Success(false) if not matched, Failure if invalid regex
    */
+  /**
+   * Validate a regex pattern by attempting to compile it.
+   * Returns None if valid, Some(error message) if invalid.
+   */
+  private def validateRegexPattern(pattern: String): Option[String] = {
+    if (pattern.startsWith("regex:")) {
+      val regexPattern = pattern.stripPrefix("regex:")
+      Try(regexPattern.r) match {
+        case Failure(e) => Some(e.getMessage)
+        case Success(_) => None
+      }
+    } else {
+      None // Non-regex patterns are always valid
+    }
+  }
+
   private def matchPattern(toolName: String, pattern: String): Try[Boolean] = Try {
     if (pattern.startsWith("regex:")) {
       val regexPattern = pattern.stripPrefix("regex:")
@@ -203,15 +219,7 @@ class ListToolsForMcpServer(
 
       // Validate all regex patterns upfront
       val invalidPatterns = toolNamesFilter.filterNot(_ == "*").flatMap { pattern =>
-        if (pattern.startsWith("regex:")) {
-          val regexPattern = pattern.stripPrefix("regex:")
-          Try(regexPattern.r) match {
-            case Failure(e) => Some((pattern, e.getMessage))
-            case Success(_) => None
-          }
-        } else {
-          None
-        }
+        validateRegexPattern(pattern).map(errorMsg => (pattern, errorMsg))
       }
 
       if (invalidPatterns.nonEmpty) {
@@ -261,8 +269,9 @@ class ListToolsForMcpServer(
             } else {
               allTools.filter { tool =>
                 toolNamesFilter.exists { pattern =>
-                  // Patterns are already validated, so this should never fail
-                  val matched = matchPattern(tool.name(), pattern).getOrElse(false)
+                  // All patterns have been validated upfront, so matchPattern should not throw.
+                  // We use .get instead of .getOrElse to catch any unexpected failures during development.
+                  val matched = matchPattern(tool.name(), pattern).get
                   if (matched) {
                     logger.debug(s"ListMcpTools: tool '${tool.name()}' matched pattern '$pattern'")
                   }
