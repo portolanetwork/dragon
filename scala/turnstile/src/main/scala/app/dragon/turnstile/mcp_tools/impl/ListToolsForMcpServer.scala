@@ -201,6 +201,30 @@ class ListToolsForMcpServer(
 
       logger.debug(s"ListMcpTools: listing tools from server UUID '$serverUuid' with filter: $toolNamesFilter")
 
+      // Validate all regex patterns upfront
+      val invalidPatterns = toolNamesFilter.filterNot(_ == "*").flatMap { pattern =>
+        if (pattern.startsWith("regex:")) {
+          val regexPattern = pattern.stripPrefix("regex:")
+          Try(regexPattern.r) match {
+            case Failure(e) => Some((pattern, e.getMessage))
+            case Success(_) => None
+          }
+        } else {
+          None
+        }
+      }
+
+      if (invalidPatterns.nonEmpty) {
+        val errorMessages = invalidPatterns.map { case (pattern, msg) =>
+          s"'$pattern': $msg"
+        }.mkString(", ")
+        val errorJson = Json.obj(
+          "error" -> s"Invalid regex pattern(s): $errorMessages".asJson
+        )
+        logger.error(s"ListMcpTools: invalid regex patterns provided: $errorMessages")
+        return Mono.just(McpUtils.createTextResult(errorJson.spaces2, isError = true))
+      }
+
       // Query the MCP server for tools
       val futureResult = for {
         // Step 1: Look up the MCP server by UUID
@@ -237,16 +261,12 @@ class ListToolsForMcpServer(
             } else {
               allTools.filter { tool =>
                 toolNamesFilter.exists { pattern =>
-                  matchPattern(tool.name(), pattern) match {
-                    case Success(matched) =>
-                      if (matched) {
-                        logger.debug(s"ListMcpTools: tool '${tool.name()}' matched pattern '$pattern'")
-                      }
-                      matched
-                    case Failure(e) =>
-                      logger.warn(s"ListMcpTools: invalid regex pattern '$pattern': ${e.getMessage}")
-                      false
+                  // Patterns are already validated, so this should never fail
+                  val matched = matchPattern(tool.name(), pattern).getOrElse(false)
+                  if (matched) {
+                    logger.debug(s"ListMcpTools: tool '${tool.name()}' matched pattern '$pattern'")
                   }
+                  matched
                 }
               }
             }
