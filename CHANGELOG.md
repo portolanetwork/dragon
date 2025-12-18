@@ -1,3 +1,10 @@
+# [0.6.0](https://github.com/portolanetwork/dragon/compare/v0.5.1...v0.6.0) (2025-12-18)
+
+
+### Features
+
+* Meta tool support ([#29](https://github.com/portolanetwork/dragon/issues/29)) ([998d20b](https://github.com/portolanetwork/dragon/commit/998d20b6db7e571fe9b2e96b675183144dc3cf87))
+
 ## [0.5.1](https://github.com/portolanetwork/dragon/compare/v0.5.0...v0.5.1) (2025-12-16)
 
 
