@@ -18,6 +18,7 @@
 
 package app.dragon.turnstile.mcp_tools.impl
 
+import app.dragon.turnstile.db.{DbInterface, DbNotFound}
 import app.dragon.turnstile.mcp_client.McpClientActor
 import app.dragon.turnstile.mcp_tools.{AsyncToolHandler, McpTool, McpUtils}
 import app.dragon.turnstile.utils.ActorLookup
@@ -28,8 +29,9 @@ import org.apache.pekko.util.Timeout
 import reactor.core.publisher.Mono
 import slick.jdbc.JdbcBackend.Database
 
-import scala.concurrent.ExecutionContext
+import java.util.UUID
 import scala.concurrent.duration.*
+import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.FutureConverters.*
 
@@ -128,23 +130,30 @@ class ExecTool(
         .meta(meta)
         .build()
 
-      // Forward to McpClientActor using the provided UUID
-      val futureResult = ActorLookup.getMcpClientActor(userId, mcpServerUuid)
-        .ask[Either[McpClientActor.McpClientError, McpSchema.CallToolResult]](
-          replyTo => McpClientActor.McpToolCallRequest(toolCallRequest, replyTo)
-        )
-        .map {
-          case Right(result) =>
-            logger.debug(s"ExecTool: tool call succeeded for '$toolName' on server UUID '$mcpServerUuid'")
-            result
-          case Left(error) =>
-            logger.error(s"ExecTool: tool call failed for '$toolName' on server UUID '$mcpServerUuid': $error")
-
-            McpUtils.createTextResult(
-              error.toString,
-              isError = true
-            )
+      val futureResult = for {
+        dbEither <- DbInterface.findMcpServerByUuid(tenant, userId, UUID.fromString(mcpServerUuid))
+        res <- dbEither match {
+          case Left(DbNotFound) =>
+            Future.successful(McpUtils.createTextResult(s"MCP server not found: $mcpServerUuid", isError = true))
+          case Left(other) =>
+            Future.successful(McpUtils.createTextResult(s"Database error: ${other}", isError = true))
+          case Right(_) =>
+            ActorLookup.getMcpClientActor(userId, mcpServerUuid)
+              .ask[Either[McpClientActor.McpClientError, McpSchema.CallToolResult]](
+                replyTo => McpClientActor.McpToolCallRequest(toolCallRequest, replyTo)
+              )
+              .map {
+                case Right(result) =>
+                  logger.debug(s"ExecTool: tool call succeeded for '$toolName' on server UUID '$mcpServerUuid'")
+                  result
+                case Left(error) =>
+                  logger.error(s"ExecTool: tool call failed for '$toolName' on server UUID '$mcpServerUuid': $error")
+                  McpUtils.createTextResult(error.toString, true)
+              }
+              //.map(_.fold(err => McpUtils.createTextResult(err.toString, isError = true), identity))
         }
+      } yield res
+
 
       // Convert Future to Mono
       Mono.fromCompletionStage(futureResult.asJava.toCompletableFuture)
