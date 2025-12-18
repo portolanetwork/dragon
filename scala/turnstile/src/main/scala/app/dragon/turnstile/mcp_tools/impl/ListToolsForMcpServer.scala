@@ -301,7 +301,7 @@ class ListToolsForMcpServer(
 
 object ListToolsForMcpServer {
   /**
-   * Create a ListMcpTools instance.
+   * Create a ListToolsForMcpServer instance.
    *
    * @param userId The user identifier
    * @param tenant The tenant identifier (default: "default")
@@ -309,7 +309,7 @@ object ListToolsForMcpServer {
    * @param sharding The cluster sharding
    * @param ec The execution context
    * @param db The database instance
-   * @return A new ListMcpTools instance
+   * @return A new ListToolsForMcpServer instance
    */
   def apply(
     userId: String,
