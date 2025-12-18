@@ -227,7 +227,7 @@ class McpGatewayServiceImpl(
                     logger.info(s"Login request for UUID: $uuid from user: ${authContext.userId}")
 
                     // Initiate the auth code flow
-                    val responseFuture = ClientAuthService.initiateAuthCodeFlow(uuid.toString).map {
+                    val responseFuture = ClientAuthService.initiateAuthCodeFlow(authContext.tenant, authContext.userId, uuid.toString).map {
                       case Right(loginUrl) =>
                         logger.info(s"OAuth flow initiated successfully, redirecting to: $loginUrl")
                         HttpResponse(

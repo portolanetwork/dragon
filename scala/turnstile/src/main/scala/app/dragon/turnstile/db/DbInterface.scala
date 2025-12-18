@@ -104,12 +104,14 @@ object DbInterface {
    * @return `Future[Either[DbError, Int]]` number of rows deleted or DbError
    */
   def deleteMcpServerByUuid(
+    tenant: String,
+    userId: String,
     uuid: UUID
   )(
     implicit db: Database, ec: ExecutionContext
   ): Future[Either[DbError, Int]] = {
     val deleteAction = Tables.mcpServers
-      .filter(_.uuid === uuid).delete
+      .filter(s => s.tenant === tenant && s.userId === userId && s.uuid === uuid).delete
     db.run(deleteAction).map(Right(_): Either[DbError, Int]).recover {
       case NonFatal(t) => Left(mapDbError(t))
     }
@@ -123,12 +125,14 @@ object DbInterface {
    * @return `Future[Either[DbError, McpServerRow]]` with the server or DbNotFound/DbError
    */
   def findMcpServerByUuid(
+    tenant: String,
+    userId: String,
     uuid: UUID
   )(
     implicit db: Database, ec: ExecutionContext
   ): Future[Either[DbError, McpServerRow]] = {
     val query = Tables.mcpServers
-      .filter(_.uuid === uuid)
+      .filter(s => s.tenant === tenant && s.userId === userId && s.uuid === uuid)
       .result
       .headOption
     db.run(query).map {
@@ -157,34 +161,6 @@ object DbInterface {
   ): Future[Either[DbError, McpServerRow]] = {
     val query = Tables.mcpServers
       .filter(s => s.tenant === tenant && s.userId === userId && s.url === url)
-      .result
-      .headOption
-    db.run(query).map {
-      case Some(row) => Right(row)
-      case None => Left(DbNotFound)
-    }.recover {
-      case NonFatal(t) => Left(mapDbError(t))
-    }
-  }
-
-  /**
-   * Finds an MCP server by name for a given tenant and user.
-   * @param tenant The tenant identifier
-   * @param userId The user identifier
-   * @param name The server name
-   * @param db The database instance
-   * @param ec ExecutionContext
-   * @return `Future[Either[DbError, McpServerRow]]` with the server or DbNotFound/DbError
-   */
-  def findMcpServerByName(
-    tenant: String,
-    userId: String,
-    name: String
-  )(
-    implicit db: Database, ec: ExecutionContext
-  ): Future[Either[DbError, McpServerRow]] = {
-    val query = Tables.mcpServers
-      .filter(s => s.tenant === tenant && s.userId === userId && s.name === name)
       .result
       .headOption
     db.run(query).map {

@@ -211,14 +211,16 @@ class ToolsService(
    * then fetches the tools from that server and returns them as AsyncToolSpecification instances.
    *
    * @param uuid The UUID string of the MCP server
+   * @param tenant The tenant identifier (default: "default")
    * @return A Future containing either an error or a list of tool specifications
    */
   def getDownstreamToolsSpec(
-    uuid: String
+    uuid: String,
+    tenant: String = "default"
   ): Future[Either[McpClientError, List[AsyncToolSpecification]]] = {
     logger.info(s"Fetching downstream tools for MCP server UUID: $uuid for user=$userId")
 
-    DbInterface.findMcpServerByUuid(UUID.fromString(uuid)).flatMap {
+    DbInterface.findMcpServerByUuid(tenant, userId, UUID.fromString(uuid)).flatMap {
       case Right(mcpServerRow) =>
         logger.info(s"Found MCP server ${mcpServerRow.name} (${mcpServerRow.uuid}) for user=$userId")
         getDownstreamToolsSpec(mcpServerRow)

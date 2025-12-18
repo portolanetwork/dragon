@@ -182,7 +182,8 @@ object McpClientActor {
 
   def apply(
     mcpClientActorId: McpClientActorId,
-    db: Database
+    db: Database,
+    tenant: String = "default"
   ): Behavior[Message] = {
     Behaviors.withStash(100) { buffer =>
       Behaviors.setup { context =>
@@ -191,7 +192,7 @@ object McpClientActor {
 
         context.log.info(s"Creating MCP client actor for user ${mcpClientActorId.userId} connecting to server UUID ${mcpClientActorId.mcpServerUuid}")
 
-        new McpClientActor(context, buffer, mcpClientActorId, db).initWaitState()
+        new McpClientActor(context, buffer, mcpClientActorId, db, tenant).initWaitState()
       }
     }
   }
@@ -201,7 +202,8 @@ class McpClientActor(
   context: ActorContext[McpClientActor.Message],
   buffer: StashBuffer[McpClientActor.Message],
   mcpClientActorId: McpClientActorId,
-  db: Database
+  db: Database,
+  tenant: String = "default"
 ) {
 
   import McpClientActor.*
@@ -427,7 +429,7 @@ class McpClientActor(
     mcpServerUuid: String
   ): Option[() => Future[String]] = {
     Some(() => {
-      ClientAuthService.getAuthTokenCached(mcpServerUuid).map {
+      ClientAuthService.getAuthTokenCached(tenant, mcpClientActorId.userId, mcpServerUuid).map {
         case Left(error) =>
           throw new RuntimeException(s"Failed to get access token: ${error.toString}")
         case Right(authToken) =>
@@ -452,7 +454,7 @@ class McpClientActor(
     mcpServerUuid: String,
   ): Future[McpStreamingHttpAsyncClient] = {
     for {
-      mcpServerRow: McpServerRow <- DbInterface.findMcpServerByUuid(UUID.fromString(mcpServerUuid)).flatMap {
+      mcpServerRow: McpServerRow <- DbInterface.findMcpServerByUuid(tenant, mcpClientActorId.userId, UUID.fromString(mcpServerUuid)).flatMap {
         case Right(row) => Future.successful(row)
         case Left(dbError) => Future.failed(new RuntimeException(s"Database error: ${dbError.message}"))
       }

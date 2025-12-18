@@ -204,7 +204,7 @@ class ListToolsForMcpServer(
       // Query the MCP server for tools
       val futureResult = for {
         // Step 1: Look up the MCP server by UUID
-        dbResult <- DbInterface.findMcpServerByUuid(serverUuid)
+        dbResult <- DbInterface.findMcpServerByUuid(tenant, userId, serverUuid)
         mcpServerRow <- dbResult match {
           case Right(row) =>
             logger.debug(s"ListMcpTools: found server '${row.name}' with UUID ${row.uuid}")
