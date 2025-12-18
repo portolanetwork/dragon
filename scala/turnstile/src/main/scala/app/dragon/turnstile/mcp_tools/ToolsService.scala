@@ -126,7 +126,7 @@ class ToolsService(
     Future.successful(Right(List.empty))
   }
 
-    def getAllDownstreamToolsSpec(
+  def getAllDownstreamToolsSpec(
     tenant: String = "default"
   ): Future[Either[McpClientError, List[AsyncToolSpecification]]] = {
     logger.info(s"Fetching all downstream tools for user=$userId, tenant=$tenant")
