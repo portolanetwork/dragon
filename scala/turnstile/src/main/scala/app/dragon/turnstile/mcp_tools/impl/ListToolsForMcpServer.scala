@@ -22,11 +22,11 @@ import app.dragon.turnstile.db.{DbInterface, DbNotFound}
 import app.dragon.turnstile.mcp_client.McpClientActor
 import app.dragon.turnstile.mcp_tools.{AsyncToolHandler, McpTool, McpUtils}
 import app.dragon.turnstile.utils.ActorLookup
-import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import io.circe.Json
 import io.circe.jackson.jacksonToCirce
 import io.circe.syntax.*
-import io.modelcontextprotocol.json.McpJsonMapper
+import io.modelcontextprotocol.json.McpJsonDefaults
 import io.modelcontextprotocol.spec.McpSchema
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
@@ -127,9 +127,12 @@ class ListToolsForMcpServer(
   db: Database
 ) extends McpTool {
 
-  // Ask timeout for listing tools from a downstream MCP server.
-  // Kept reasonably low to avoid long-hanging requests while still allowing for slow backends.
   implicit val timeout: Timeout = 60.seconds
+
+  // Jackson 2 ObjectMapper for converting McpSchema.JsonSchema to Circe Json.
+  // McpJsonDefaults.getMapper() wraps Jackson 3 (tools.jackson), which cannot produce
+  // com.fasterxml.jackson.databind.JsonNode (Jackson 2). We bridge via a JSON string.
+  private val jackson2 = new ObjectMapper()
 
   /**
    * Validate a regex pattern by attempting to compile it.
@@ -196,7 +199,7 @@ class ListToolsForMcpServer(
         "name" -> tool.name().asJson,
         "description" -> Option(tool.description()).asJson,
         "inputSchema" -> jacksonToCirce(
-          McpJsonMapper.getDefault.convertValue(tool.inputSchema(), classOf[JsonNode])
+          jackson2.readTree(McpJsonDefaults.getMapper().writeValueAsString(tool.inputSchema()))
         )
       )
     }

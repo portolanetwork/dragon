@@ -19,7 +19,7 @@
 package app.dragon.turnstile.mcp_server
 
 import app.dragon.turnstile.config.ApplicationConfig
-import io.modelcontextprotocol.json.McpJsonMapper
+import io.modelcontextprotocol.json.McpJsonDefaults
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification
 import io.modelcontextprotocol.server.transport.WebFluxStreamableServerTransportProvider
 import io.modelcontextprotocol.server.{McpAsyncServer, McpServer}
@@ -155,7 +155,7 @@ class McpStreamingHttpServer(
     started = true
     logger.info(s"Creating MCP server for user $userId: $serverName v$serverVersion")
 
-    val jsonMapper = McpJsonMapper.getDefault
+    val jsonMapper = McpJsonDefaults.getMapper()
 
     // Create WebFlux transport provider
     val transportProvider = WebFluxStreamableServerTransportProvider.builder()

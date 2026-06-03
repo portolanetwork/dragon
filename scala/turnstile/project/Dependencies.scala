@@ -19,12 +19,13 @@
 import sbt.*
 
 object Dependencies {
-  val pekkoVersion = "1.3.0"
+  val pekkoVersion = "1.6.0"
   val pekkoHttpVersion = "1.2.0"
   val pekkoGrpcVersion = "1.1.1"
   val akkaManagementVersion = "1.1.1"
   val json4sJacksonVersion = "4.0.7"
   val circeVersion = "0.14.6"
+  val circeJackson29Version = "0.14.2"
   val logbackVersion = "1.5.15"
   val scalaLoggingVersion = "3.9.5"
   val scalaMockVersion = "6.1.1"
@@ -35,13 +36,16 @@ object Dependencies {
   val jwtScalaVersion = "10.0.1"
   val auth0JwksRsaVersion = "0.22.1"
   val protobufJavaUtilVersion = "3.25.6"
-  val mcpSdkVersion = "0.16.0"
+  val mcpSdkVersion = "1.1.3"
+  val springAiVersion = "1.1.7"
   val slickVersion = "3.5.2"
   val slickPgVersion = "0.22.2"
   val postgresqlVersion = "42.7.4"
   val hikariCPVersion = "6.2.1"
   val flywayVersion = "11.1.0"
   val springVersion = "6.2.1"
+  val openAiVersion = "4.12.0"
+  val googleCloudStorageVersion = "2.58.1"
 
   val dependencies = Seq(
     "org.apache.pekko" %% "pekko-actor" % pekkoVersion,
@@ -87,7 +91,7 @@ object Dependencies {
     "io.circe" %% "circe-core" % circeVersion,
     "io.circe" %% "circe-parser" % circeVersion,
     "io.circe" %% "circe-generic" % circeVersion,
-    "io.circe" %% "circe-jackson29" % "0.14.2",
+    "io.circe" %% "circe-jackson29" % circeJackson29Version,
 
     // (using io.circe.generic.auto._ instead of circe-generic-extras)
     "ch.qos.logback" % "logback-classic" % logbackVersion,
@@ -99,7 +103,8 @@ object Dependencies {
     // MCP (Model Context Protocol)
     "io.modelcontextprotocol.sdk" % "mcp" % mcpSdkVersion,
     "io.modelcontextprotocol.sdk" % "mcp-core" % mcpSdkVersion,
-    "io.modelcontextprotocol.sdk" % "mcp-spring-webflux" % mcpSdkVersion,
+    "org.springframework.ai" % "spring-ai-starter-mcp-server-webflux" % springAiVersion,
+
     // Database - Slick ORM with PostgreSQL
     "com.typesafe.slick" %% "slick" % slickVersion,
     "com.typesafe.slick" %% "slick-hikaricp" % slickVersion,
@@ -116,6 +121,10 @@ object Dependencies {
 
     // Ensure Spring Context is present for classes such as org.springframework.context.i18n.LocaleContext
     "org.springframework" % "spring-context" % springVersion,
+
+    "com.openai" % "openai-java" % openAiVersion,
+
+    "com.google.cloud" % "google-cloud-storage" % googleCloudStorageVersion,
   )
 
   val dependencyOverrides = Seq()
