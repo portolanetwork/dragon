@@ -110,7 +110,7 @@ class ToolsService(
     //Echo("echo2"),
     //StreamingExample,
     //SystemInfo,
-    SearchTools(userId, "default"),
+    //SearchTools(userId, "default"),
     ExecTool(userId, "default"),
     ListMcpServers(userId, "default"),
     ListToolsForMcpServer(userId, "default")
