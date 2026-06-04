@@ -176,6 +176,7 @@ class McpStreamingHttpAsyncClient(
       .endpoint(endpoint)
       .connectTimeout(java.time.Duration.ofSeconds(10))
       .resumableStreams(true)
+      .jsonMapper(new PermissiveJsonSchemaMcpJsonMapper())
 
     // Add auth header customizer if token provider is available
     val transportWithAuth = authTokenProvider match {

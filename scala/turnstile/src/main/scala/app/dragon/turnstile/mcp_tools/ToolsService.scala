@@ -109,7 +109,8 @@ class ToolsService(
     //Echo("echo1"),
     //Echo("echo2"),
     //StreamingExample,
-    SystemInfo,
+    //SystemInfo,
+    //SearchTools(userId, "default"),
     ExecTool(userId, "default"),
     ListMcpServers(userId, "default"),
     ListToolsForMcpServer(userId, "default")
@@ -167,6 +168,11 @@ class ToolsService(
    * @param mcpServerRow The MCP server row from the database
    * @return A Future containing either an error or a list of namespaced tools
    */
+  private def namespacedToolName(serverName: String, toolName: String): String = {
+    val sanitize = (s: String) => s.replaceAll("[^a-zA-Z0-9_-]", "_")
+    s"${sanitize(serverName)}__${sanitize(toolName)}".take(64)
+  }
+
   private[mcp_tools] def getDownstreamTools(
     mcpServerRow: McpServerRow
   ): Future[Either[McpClientError, List[McpTool]]] = {
@@ -186,7 +192,7 @@ class ToolsService(
           // Convert each tool schema to a NamespacedTool
           val downstreamTools = tools.map { downstreamToolSchema =>
             val turnstileToolSchema = McpSchema.Tool.builder()
-              .name(s"${mcpServerRow.name}.${downstreamToolSchema.name()}")
+              .name(namespacedToolName(mcpServerRow.name, downstreamToolSchema.name()))
               .description(downstreamToolSchema.description())
               .inputSchema(downstreamToolSchema.inputSchema())
               .outputSchema(downstreamToolSchema.outputSchema())
