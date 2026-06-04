@@ -198,9 +198,9 @@ class ListToolsForMcpServer(
       Json.obj(
         "name" -> tool.name().asJson,
         "description" -> Option(tool.description()).asJson,
-        "inputSchema" -> jacksonToCirce(
-          jackson2.readTree(McpJsonDefaults.getMapper().writeValueAsString(tool.inputSchema()))
-        )
+        "inputSchema" -> (Try(jackson2.readTree(McpJsonDefaults.getMapper().writeValueAsString(tool.inputSchema()))) match
+          case Success(node) => jacksonToCirce(node)
+          case Failure(e)    => logger.warn(s"Failed to parse inputSchema for ${tool.name()}: ${e.getMessage}"); Json.Null)
       )
     }
 
